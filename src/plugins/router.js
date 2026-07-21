@@ -32,6 +32,7 @@ const routes = [
     },
     {
         path: '/',
+        name: 'main-layout', // MOD-API: named so mods can router.addRoute() child views
         component: MainLayout,
         meta: { requiresAuth: true },
         children: [
