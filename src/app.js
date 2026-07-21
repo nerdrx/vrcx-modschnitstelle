@@ -10,6 +10,7 @@ import {
 } from './plugins';
 import { initPiniaPlugins, pinia } from './stores';
 import { queryClient } from './queries';
+import { initMods } from './mods'; // MOD-API
 
 import App from './App.vue';
 
@@ -24,5 +25,6 @@ app.use(pinia).use(i18n).use(VueQueryPlugin, { queryClient });
 initComponents(app);
 initRouter(app);
 await initSentry(app);
+await initMods({ app }); // MOD-API
 
 app.mount('#root');
