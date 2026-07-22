@@ -11,15 +11,15 @@ export async function getTopWorlds(ctx, days = 30, limit = 5) {
     // 'location' is usually the world ID or name in VRCX depending on the log type, 
     // but typically it contains the World Name as a string in standard GPS feed.
     const query = `
-        SELECT location as worldName, COUNT(*) as visitCount
+        SELECT world_name as worldName, COUNT(*) as visitCount
         FROM ${ctx.db.corePrefix()}_feed_gps
-        WHERE created_at >= ?
-        GROUP BY location
+        WHERE created_at >= @timeThreshold AND world_name IS NOT NULL AND world_name != '' AND location != 'private'
+        GROUP BY world_name
         ORDER BY visitCount DESC
-        LIMIT ?
+        LIMIT @limit
     `;
     
-    const rows = await ctx.db.query(query, [timeThreshold, limit]);
+    const rows = await ctx.db.query(query, { '@timeThreshold': timeThreshold, '@limit': limit });
     return rows.map(row => ({
         worldName: row[0],
         visitCount: row[1]
@@ -34,15 +34,15 @@ export async function getTopAvatars(ctx, days = 30, limit = 5) {
     
     // _feed_avatar tracks avatar changes
     const query = `
-        SELECT avatar_name as avatarName, avatar_image_url as imageUrl, COUNT(*) as switchCount
+        SELECT avatar_name as avatarName, current_avatar_image_url as imageUrl, COUNT(*) as switchCount
         FROM ${ctx.db.corePrefix()}_feed_avatar
-        WHERE created_at >= ?
-        GROUP BY avatar_id
+        WHERE created_at >= @timeThreshold AND avatar_name IS NOT NULL AND avatar_name != '' AND avatar_name != 'Loading...'
+        GROUP BY avatar_name
         ORDER BY switchCount DESC
-        LIMIT ?
+        LIMIT @limit
     `;
     
-    const rows = await ctx.db.query(query, [timeThreshold, limit]);
+    const rows = await ctx.db.query(query, { '@timeThreshold': timeThreshold, '@limit': limit });
     return rows.map(row => ({
         avatarName: row[0],
         imageUrl: row[1],
@@ -62,13 +62,13 @@ export async function getTopFriends(ctx, days = 30, limit = 5) {
     const query = `
         SELECT display_name as displayName, user_id as userId, COUNT(*) as interactionScore
         FROM ${ctx.db.corePrefix()}_feed_online_offline
-        WHERE created_at >= ?
+        WHERE created_at >= @timeThreshold
         GROUP BY user_id
         ORDER BY interactionScore DESC
-        LIMIT ?
+        LIMIT @limit
     `;
     
-    const rows = await ctx.db.query(query, [timeThreshold, limit]);
+    const rows = await ctx.db.query(query, { '@timeThreshold': timeThreshold, '@limit': limit });
     return rows.map(row => ({
         displayName: row[0],
         userId: row[1],
@@ -86,12 +86,12 @@ export async function getActivityHeatmap(ctx, days = 365) {
     const query = `
         SELECT substr(created_at, 1, 10) as day, COUNT(*) as count
         FROM ${ctx.db.corePrefix()}_feed_gps
-        WHERE created_at >= ?
+        WHERE created_at >= @timeThreshold
         GROUP BY day
         ORDER BY day ASC
     `;
     
-    const rows = await ctx.db.query(query, [timeThreshold]);
+    const rows = await ctx.db.query(query, { '@timeThreshold': timeThreshold });
     return rows.map(row => ({
         day: row[0],
         count: row[1]
@@ -104,13 +104,14 @@ export async function getActivityHeatmap(ctx, days = 365) {
 export async function getSummaryMetrics(ctx, days = 30) {
     const timeThreshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     
-    const uniqueWorldsQuery = `SELECT COUNT(DISTINCT location) FROM ${ctx.db.corePrefix()}_feed_gps WHERE created_at >= ?`;
-    const uniqueAvatarsQuery = `SELECT COUNT(DISTINCT avatar_id) FROM ${ctx.db.corePrefix()}_feed_avatar WHERE created_at >= ?`;
-    const interactionsQuery = `SELECT COUNT(*) FROM ${ctx.db.corePrefix()}_feed_online_offline WHERE created_at >= ?`;
+    const uniqueWorldsQuery = `SELECT COUNT(DISTINCT world_name) FROM ${ctx.db.corePrefix()}_feed_gps WHERE created_at >= @timeThreshold AND world_name IS NOT NULL AND world_name != ''`;
+    const uniqueAvatarsQuery = `SELECT COUNT(DISTINCT avatar_name) FROM ${ctx.db.corePrefix()}_feed_avatar WHERE created_at >= @timeThreshold AND avatar_name IS NOT NULL AND avatar_name != '' AND avatar_name != 'Loading...'`;
+    const interactionsQuery = `SELECT COUNT(*) FROM ${ctx.db.corePrefix()}_feed_online_offline WHERE created_at >= @timeThreshold`;
 
-    const [worldsRow] = await ctx.db.query(uniqueWorldsQuery, [timeThreshold]);
-    const [avatarsRow] = await ctx.db.query(uniqueAvatarsQuery, [timeThreshold]);
-    const [interactionsRow] = await ctx.db.query(interactionsQuery, [timeThreshold]);
+    const args = { '@timeThreshold': timeThreshold };
+    const [worldsRow] = await ctx.db.query(uniqueWorldsQuery, args);
+    const [avatarsRow] = await ctx.db.query(uniqueAvatarsQuery, args);
+    const [interactionsRow] = await ctx.db.query(interactionsQuery, args);
 
     return {
         uniqueWorlds: worldsRow ? worldsRow[0] : 0,

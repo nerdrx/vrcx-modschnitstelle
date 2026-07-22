@@ -558,7 +558,11 @@ function createTray() {
             click: function () {
                 appIsQuitting = true;
                 destroyTray();
-                app.quit();
+                if (process.platform === 'linux') {
+                    app.exit(0);
+                } else {
+                    app.quit();
+                }
             }
         }
     ]);
@@ -963,7 +967,9 @@ app.on('before-quit', function () {
 app.on('window-all-closed', function () {
     disposeOverlay();
 
-    if (process.platform !== 'darwin') {
+    if (process.platform === 'linux') {
+        app.exit(0);
+    } else if (process.platform !== 'darwin') {
         app.quit();
     }
 });
