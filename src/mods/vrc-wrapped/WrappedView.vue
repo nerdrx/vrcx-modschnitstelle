@@ -1,25 +1,29 @@
 <template>
     <div class="wrapped-dashboard-container">
         <WidgetHeader icon="ri-medal-line" title="VRChat Wrapped" />
-
-        <div class="wrapped-controls">
-            <el-select v-model="timeframe" placeholder="Select Timeframe" @change="loadData" class="timeframe-select">
-                <el-option label="Last 7 Days" :value="7"></el-option>
-                <el-option label="Last 30 Days" :value="30"></el-option>
-                <el-option label="Last 90 Days" :value="90"></el-option>
-                <el-option label="All Time (365 Days)" :value="365"></el-option>
-            </el-select>
-            <el-button @click="loadData" type="primary" :loading="loading" plain>
-                <i class="ri-refresh-line"></i> Refresh
-            </el-button>
-        </div>
-
         <div v-if="loading" class="loading-overlay">
-            <el-spinner />
-            <span>Calculating your VRChat journey...</span>
+            <i class="ri-loader-4-line ri-spin ri-3x"></i>
+            <span>Crunching your VRChat data...</span>
         </div>
+        
+        <div v-else class="wrapped-content fade-in">
+            <div class="wrapped-header">
+                <h1>VRChat <span class="gradient-text">Wrapped</span></h1>
+                <p>Your personal journey in the metaverse</p>
+            </div>
 
-        <div v-else>
+            <div class="wrapped-controls">
+                <el-select v-model="timeframe" placeholder="Select Timeframe" @change="loadData" class="timeframe-select">
+                    <el-option label="Last 7 Days" :value="7"></el-option>
+                    <el-option label="Last 30 Days" :value="30"></el-option>
+                    <el-option label="Last 90 Days" :value="90"></el-option>
+                    <el-option label="All Time (365 Days)" :value="365"></el-option>
+                </el-select>
+                <el-button @click="loadData" type="primary" :loading="loading" plain>
+                    <i class="ri-refresh-line"></i> Refresh
+                </el-button>
+            </div>
+
             <!-- Summary Metrics -->
             <div class="summary-metrics">
                 <div class="metric-card glass">
@@ -245,11 +249,38 @@ onBeforeUnmount(() => {
     color: #e0e0e0;
 }
 
+.wrapped-header {
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.wrapped-header h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin: 0;
+    color: #fff;
+    letter-spacing: -0.5px;
+}
+
+.gradient-text {
+    background: linear-gradient(90deg, #9d4edd, #ff007f);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.wrapped-header p {
+    font-size: 1.1rem;
+    color: #a0a0b0;
+    margin-top: 5px;
+}
+
 .wrapped-controls {
     display: flex;
     gap: 15px;
     margin-bottom: 25px;
     align-items: center;
+    justify-content: center;
 }
 
 .timeframe-select {
@@ -285,14 +316,27 @@ onBeforeUnmount(() => {
     align-items: center;
     padding: 20px;
     gap: 15px;
+    background: linear-gradient(135deg, rgba(157, 78, 221, 0.05), rgba(0, 0, 0, 0.3));
+    border: 1px solid rgba(157, 78, 221, 0.15);
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, #7b2cbf, #e0aaff);
+    opacity: 0.7;
 }
 
 .metric-icon {
-    font-size: 2.5rem;
+    font-size: 2.8rem;
     color: #c77dff;
     background: rgba(199, 125, 255, 0.1);
-    padding: 10px;
-    border-radius: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    box-shadow: inset 0 0 10px rgba(199, 125, 255, 0.05);
 }
 
 .metric-info {
@@ -301,16 +345,18 @@ onBeforeUnmount(() => {
 }
 
 .metric-value {
-    font-size: 1.8rem;
-    font-weight: 700;
+    font-size: 2.2rem;
+    font-weight: 800;
     color: #ffffff;
+    line-height: 1.1;
 }
 
 .metric-label {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: #a0a0b0;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    margin-top: 4px;
 }
 
 .full-width {
@@ -335,8 +381,8 @@ onBeforeUnmount(() => {
 }
 
 .wrapped-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 12px 40px 0 rgba(157, 78, 221, 0.2);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px 0 rgba(157, 78, 221, 0.15);
     border-color: rgba(157, 78, 221, 0.3);
 }
 
@@ -349,7 +395,7 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    padding-bottom: 10px;
+    padding-bottom: 12px;
 }
 
 .wrapped-card h3 i {
@@ -363,83 +409,101 @@ onBeforeUnmount(() => {
     gap: 12px;
 }
 
-.list-item {
+.list-item, .avatar-item {
     display: flex;
     align-items: center;
     padding: 10px 15px;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 10px;
     gap: 15px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.list-item:hover, .avatar-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateX(4px);
+    border-color: rgba(157, 78, 221, 0.2);
 }
 
 .list-item .rank {
-    font-weight: bold;
+    font-weight: 800;
     color: #e0aaff;
-    font-size: 1.1rem;
-    min-width: 30px;
+    font-size: 1.2rem;
+    min-width: 35px;
+    text-shadow: 0 0 5px rgba(224, 170, 255, 0.3);
 }
 
-.list-item .name {
+/* Special rank colors */
+.list-item:nth-child(1) .rank { color: #ffd700; text-shadow: 0 0 10px rgba(255,215,0,0.5); }
+.list-item:nth-child(2) .rank { color: #c0c0c0; text-shadow: 0 0 10px rgba(192,192,192,0.5); }
+.list-item:nth-child(3) .rank { color: #cd7f32; text-shadow: 0 0 10px rgba(205,127,50,0.5); }
+
+.list-item .name, .avatar-info .name {
     flex: 1;
-    font-weight: 500;
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 1.05rem;
+    color: #f8f8f8;
 }
 
 .list-item .stat {
-    font-size: 0.9rem;
-    color: #a0a0b0;
-    background: rgba(157, 78, 221, 0.15);
-    padding: 4px 8px;
-    border-radius: 4px;
-}
-
-.avatar-item {
-    display: flex;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
-    padding: 10px;
-    gap: 15px;
+    font-size: 0.85rem;
+    color: #e0aaff;
+    background: rgba(157, 78, 221, 0.2);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: 500;
 }
 
 .avatar-img {
-    width: 50px;
-    height: 50px;
-    border-radius: 8px;
+    width: 55px;
+    height: 55px;
+    border-radius: 10px;
     object-fit: cover;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(157, 78, 221, 0.3);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
 }
 
 .avatar-info {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 6px;
     overflow: hidden;
-}
-
-.avatar-info .name {
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: 1;
 }
 
 .avatar-info .stat {
     font-size: 0.85rem;
-    color: #c77dff;
+    color: #e0aaff;
+    background: rgba(157, 78, 221, 0.15);
+    padding: 3px 8px;
+    border-radius: 4px;
+    align-self: flex-start;
 }
 
 .empty-state {
     color: #a0a0b0;
     text-align: center;
-    padding: 20px 0;
+    padding: 30px 0;
     font-style: italic;
+    opacity: 0.7;
 }
 
 .chart-container {
     width: 100%;
     height: 250px;
+}
+
+/* Simple fade in animation */
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 </style>
