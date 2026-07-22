@@ -3,5 +3,6 @@
 // ============================================================================
 
 import statusTracker from './status-tracker';
+import friendCare from './friend-care';
 
-export const mods = [statusTracker];
+export const mods = [statusTracker, friendCare];

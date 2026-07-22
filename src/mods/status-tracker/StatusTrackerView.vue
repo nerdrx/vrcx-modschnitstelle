@@ -22,10 +22,20 @@
             <span v-if="loading" style="font-size: 12px; opacity: 0.6">…</span>
         </div>
 
-        <div style="display: flex; gap: 16px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap">
-            <span v-for="s in legend" :key="s.key" style="display: inline-flex; align-items: center; gap: 5px">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
+            <button
+                v-for="s in legend"
+                :key="s.key"
+                class="st-chip"
+                :class="{ 'st-chip--active': selectedKeys.has(s.key) }"
+                type="button"
+                title="Klicken: nach diesem Status sortieren (Mehrfachauswahl möglich)"
+                @click="toggleStatus(s.key)">
                 <span :style="{ background: s.color }" class="st-dot"></span>{{ s.label }}
-            </span>
+            </button>
+            <button v-if="selectedKeys.size" class="st-chip st-chip--clear" type="button" @click="clearSelection">
+                ✕ Zurücksetzen
+            </button>
         </div>
 
         <table class="st-table">
@@ -33,14 +43,29 @@
                 <tr>
                     <th style="text-align: left; min-width: 160px">Friend</th>
                     <th style="text-align: left; width: 40%">Verteilung</th>
-                    <th v-for="s in legend" :key="s.key" style="text-align: right">
-                        <span :style="{ background: s.color }" class="st-dot"></span>
+                    <th
+                        v-for="s in legend"
+                        :key="s.key"
+                        class="st-th-sort"
+                        :class="{ 'st-th-sort--active': sortKey === s.key }"
+                        style="text-align: right"
+                        :title="'Sortieren nach ' + s.label"
+                        @click="setSort(s.key)">
+                        <span :style="{ background: s.color }" class="st-dot"></span
+                        ><span v-if="sortKey === s.key" class="st-sort-arrow">▼</span>
                     </th>
-                    <th style="text-align: right">Online gesamt</th>
+                    <th
+                        class="st-th-sort"
+                        :class="{ 'st-th-sort--active': sortKey === 'total' }"
+                        style="text-align: right"
+                        title="Sortieren nach Online gesamt"
+                        @click="setSort('total')">
+                        Online gesamt<span v-if="sortKey === 'total'" class="st-sort-arrow">▼</span>
+                    </th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="row in visibleRows" :key="row.userId">
+                <tr v-for="row in visibleRows" :key="row.userId" :class="{ 'st-row--dim': isDimmed(row) }">
                     <td>{{ row.displayName }}</td>
                     <td>
                         <div class="st-bar">
@@ -156,12 +181,61 @@
         }
     }
 
+    const selectedKeys = ref(new Set());
+
+    function toggleStatus(key) {
+        const next = new Set(selectedKeys.value);
+        if (next.has(key)) {
+            next.delete(key);
+        } else {
+            next.add(key);
+        }
+        selectedKeys.value = next;
+    }
+
+    function clearSelection() {
+        selectedKeys.value = new Set();
+    }
+
+    function selectedTotal(row) {
+        let sum = 0;
+        for (const key of selectedKeys.value) {
+            sum += row.totals[key] || 0;
+        }
+        return sum;
+    }
+
+    function isDimmed(row) {
+        return selectedKeys.value.size > 0 && selectedTotal(row) === 0;
+    }
+
+    const sortKey = ref('total');
+
+    function setSort(key) {
+        sortKey.value = key;
+    }
+
     const visibleRows = computed(() => {
         const q = search.value.trim().toLowerCase();
-        if (!q) {
-            return rows.value;
+        let list = rows.value;
+        if (q) {
+            list = list.filter((row) => row.displayName.toLowerCase().includes(q));
         }
-        return rows.value.filter((row) => row.displayName.toLowerCase().includes(q));
+        if (sortKey.value !== 'total') {
+            const key = sortKey.value;
+            list = [...list].sort(
+                (a, b) =>
+                    (b.totals[key] || 0) - (a.totals[key] || 0) ||
+                    b.totals.totalOnlineMs - a.totals.totalOnlineMs
+            );
+        } else if (selectedKeys.value.size > 0) {
+            list = [...list].sort(
+                (a, b) =>
+                    selectedTotal(b) - selectedTotal(a) ||
+                    b.totals.totalOnlineMs - a.totals.totalOnlineMs
+            );
+        }
+        return list;
     });
 
     function setRange(days) {
@@ -202,6 +276,40 @@
         width: 10px;
         height: 10px;
         border-radius: 50%;
+    }
+    .st-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 12px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 12px;
+    }
+    .st-chip--active {
+        border-color: var(--primary, #409eff);
+        background: color-mix(in srgb, var(--primary, #409eff) 18%, transparent);
+    }
+    .st-chip--clear {
+        opacity: 0.7;
+    }
+    .st-row--dim {
+        opacity: 0.35;
+    }
+    .st-th-sort {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+    .st-th-sort--active {
+        color: var(--primary, #409eff);
+    }
+    .st-sort-arrow {
+        font-size: 9px;
+        margin-left: 3px;
     }
     .st-table {
         width: 100%;

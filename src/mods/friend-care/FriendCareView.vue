@@ -1,0 +1,403 @@
+<template>
+    <div class="x-container" style="padding: 16px; overflow-y: auto; height: 100%">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap">
+            <h2 style="margin: 0; font-size: 18px; font-weight: 600">
+                {{ t('mods.friendcare.nav.mod-friend-care') }}
+            </h2>
+            <div style="display: flex; gap: 4px">
+                <button
+                    class="fc-tab-btn"
+                    :class="{ 'fc-tab-btn--active': tab === 'seen' }"
+                    @click="setTab('seen')">
+                    Zuletzt getroffen
+                </button>
+                <button
+                    class="fc-tab-btn"
+                    :class="{ 'fc-tab-btn--active': tab === 'inactivity' }"
+                    @click="setTab('inactivity')">
+                    Inaktivität
+                </button>
+            </div>
+            <input v-model="search" placeholder="Suche…" class="fc-search" type="text" />
+            <span style="font-size: 12px; opacity: 0.65">{{ visibleRows.length }} / {{ rows.length }}</span>
+            <button class="fc-tool-btn" title="Neu laden" @click="refresh">↻</button>
+            <button class="fc-tool-btn" title="Sichtbare Liste als CSV exportieren" @click="exportCsv">CSV</button>
+            <span v-if="loading" style="font-size: 12px; opacity: 0.6">…</span>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
+            <button
+                class="fc-chip"
+                :class="{ 'fc-chip--active': filterCat === null }"
+                @click="filterCat = null">
+                Alle
+            </button>
+            <button
+                v-for="c in categories"
+                :key="c.key"
+                class="fc-chip"
+                :class="{ 'fc-chip--active': filterCat === c.key }"
+                :title="c.hint"
+                @click="filterCat = filterCat === c.key ? null : c.key">
+                <span :style="{ background: c.color }" class="fc-dot"></span>
+                {{ c.label }} ({{ countFor(c.key) }})
+            </button>
+        </div>
+
+        <table class="fc-table">
+            <thead>
+                <tr>
+                    <th class="fc-th-sort" style="text-align: left; min-width: 180px" @click="setSort('name')">
+                        Friend<span v-if="sortBy === 'name'" class="fc-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th class="fc-th-sort" style="text-align: left" @click="setSort('date')">
+                        {{ tab === 'seen' ? 'Zuletzt in gemeinsamer Instanz' : 'Letzte Aktivität' }}
+                        <span v-if="sortBy === 'date'" class="fc-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
+                    </th>
+                    <th style="text-align: left">Kategorie</th>
+                    <th v-if="tab === 'seen'" style="text-align: left">Ort (letztes Treffen)</th>
+                    <th v-else style="text-align: left">Quelle</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr
+                    v-for="row in visibleRows"
+                    :key="row.userId"
+                    :style="{ background: rowColor(row) }"
+                    :title="row.userId">
+                    <td style="font-weight: 500">{{ row.displayName }}</td>
+                    <td>
+                        <template v-if="row.tsMs">
+                            {{ formatDate(row.tsMs) }}
+                            <span style="opacity: 0.7">· {{ formatAgo(row.days) }}</span>
+                        </template>
+                        <span v-else style="opacity: 0.6">—</span>
+                    </td>
+                    <td>
+                        <span class="fc-badge" :style="{ borderColor: catMeta(row.category).color }">
+                            {{ catMeta(row.category).label }}
+                        </span>
+                    </td>
+                    <td v-if="tab === 'seen'" class="fc-loc">{{ row.location || '—' }}</td>
+                    <td v-else style="opacity: 0.75">{{ sourceLabel(row.source) }}</td>
+                </tr>
+                <tr v-if="!loading && visibleRows.length === 0">
+                    <td colspan="4" style="text-align: center; opacity: 0.6; padding: 24px">Keine Einträge.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div style="margin-top: 14px; font-size: 11px; opacity: 0.65; display: flex; gap: 14px; flex-wrap: wrap">
+            <span v-for="c in categories" :key="c.key" style="display: inline-flex; align-items: center; gap: 5px">
+                <span :style="{ background: c.color }" class="fc-dot"></span>{{ c.label }}: {{ c.hint }}
+            </span>
+        </div>
+    </div>
+</template>
+
+<script setup>
+    import { computed, onActivated, onMounted, ref } from 'vue';
+    import { useI18n } from 'vue-i18n';
+
+    import {
+        daysBetween,
+        inactivityCategory,
+        matchLastSeen,
+        pickLastActive,
+        seenCategory
+    } from './engine';
+    import { getLastFeedActivity, getLastSeenRows } from './db';
+    import { getCtx } from './runtime';
+
+    const { t } = useI18n();
+
+    const SEEN_META = {
+        green: { color: '#2ECC71', label: 'Frisch', hint: 'unter 1 Monat' },
+        neutral: { color: '#95A5A6', label: 'Okay', hint: '1–3 Monate' },
+        orange: { color: '#E67E22', label: 'Grenzwertig', hint: 'ab 3 Monaten' },
+        red: { color: '#E74C3C', label: 'Überfällig', hint: 'ab 6 Monaten' },
+        never: { color: '#7F8C8D', label: 'Nie gesehen', hint: 'kein gemeinsamer Instanz-Besuch protokolliert' }
+    };
+    const INACT_META = {
+        active: { color: '#95A5A6', label: 'Aktiv', hint: 'unter 6 Monaten' },
+        green: { color: '#2ECC71', label: 'Ruhig', hint: 'ab 6 Monaten inaktiv' },
+        orange: { color: '#E67E22', label: 'Lange weg', hint: 'ab 9 Monaten inaktiv' },
+        red: { color: '#E74C3C', label: 'Verschollen', hint: 'ab 12 Monaten inaktiv' },
+        nodata: { color: '#7F8C8D', label: 'Keine Daten', hint: 'weder API- noch Feed-Daten vorhanden' }
+    };
+
+    const tab = ref('seen');
+    const loading = ref(false);
+    const search = ref('');
+    const filterCat = ref(null);
+    const sortBy = ref('date');
+    const sortDir = ref(-1); // date: -1 = am längsten her zuerst
+    const seenRows = ref([]);
+    const inactRows = ref([]);
+
+    const rows = computed(() => (tab.value === 'seen' ? seenRows.value : inactRows.value));
+    const metaMap = computed(() => (tab.value === 'seen' ? SEEN_META : INACT_META));
+    const categories = computed(() =>
+        Object.entries(metaMap.value).map(([key, m]) => ({ key, ...m }))
+    );
+
+    function catMeta(key) {
+        return metaMap.value[key] || { color: '#888', label: key, hint: '' };
+    }
+
+    function rowColor(row) {
+        return catMeta(row.category).color + '38'; // ~22 % Alpha
+    }
+
+    function countFor(key) {
+        return rows.value.reduce((n, row) => (row.category === key ? n + 1 : n), 0);
+    }
+
+    function sourceLabel(source) {
+        if (source === 'api') {
+            return 'VRChat-API (live)';
+        }
+        if (source === 'none') {
+            return '—';
+        }
+        return `Feed (${source})`;
+    }
+
+    function formatDate(tsMs) {
+        return new Date(tsMs).toLocaleDateString('de-AT', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        });
+    }
+
+    function formatAgo(days) {
+        if (days == null) {
+            return '';
+        }
+        if (days < 1) {
+            return 'heute';
+        }
+        if (days < 60) {
+            return `vor ${Math.floor(days)} Tagen`;
+        }
+        return `vor ${(days / 30.44).toFixed(1)} Monaten`;
+    }
+
+    async function refresh() {
+        const ctx = getCtx();
+        loading.value = true;
+        try {
+            const nowMs = Date.now();
+            const friendStore = ctx.stores.friends;
+            const friends = [];
+            for (const [userId, friend] of friendStore.friends) {
+                friends.push({
+                    userId,
+                    displayName: friend?.ref?.displayName || friend?.name || userId,
+                    ref: friend?.ref || null
+                });
+            }
+
+            // ---- Tab 1: last seen in shared instance -----------------------
+            const gamelogRows = await getLastSeenRows(ctx);
+            const seenHits = matchLastSeen(friends, gamelogRows);
+            seenRows.value = friends.map((friend) => {
+                const hit = seenHits.get(friend.userId);
+                const tsMs = hit ? new Date(hit.lastDt).getTime() : null;
+                const days = daysBetween(tsMs, nowMs);
+                return {
+                    userId: friend.userId,
+                    displayName: friend.displayName,
+                    tsMs,
+                    days,
+                    category: seenCategory(days),
+                    location: hit?.location || ''
+                };
+            });
+
+            // ---- Tab 2: inactivity ----------------------------------------
+            const feedFallback = await getLastFeedActivity(ctx);
+            inactRows.value = friends.map((friend) => {
+                const { tsMs, source } = pickLastActive({
+                    lastActivityIso: friend.ref?.last_activity,
+                    lastLoginIso: friend.ref?.last_login,
+                    feedFallbackIso: feedFallback.get(friend.userId)?.lastDt
+                });
+                const realSource =
+                    source === 'feed' ? feedFallback.get(friend.userId)?.source : source;
+                const days = daysBetween(tsMs, nowMs);
+                return {
+                    userId: friend.userId,
+                    displayName: friend.displayName,
+                    tsMs,
+                    days,
+                    category: inactivityCategory(days),
+                    source: realSource || 'none'
+                };
+            });
+        } catch (err) {
+            getCtx().error('friend care refresh failed:', err);
+        } finally {
+            loading.value = false;
+        }
+    }
+
+    const visibleRows = computed(() => {
+        const q = search.value.trim().toLowerCase();
+        let list = rows.value;
+        if (q) {
+            list = list.filter((row) => row.displayName.toLowerCase().includes(q));
+        }
+        if (filterCat.value) {
+            list = list.filter((row) => row.category === filterCat.value);
+        }
+        const dir = sortDir.value;
+        return [...list].sort((a, b) => {
+            if (sortBy.value === 'name') {
+                return a.displayName.localeCompare(b.displayName) * dir;
+            }
+            // date sort: rows without data always go to the end
+            if (a.tsMs == null && b.tsMs == null) {
+                return a.displayName.localeCompare(b.displayName);
+            }
+            if (a.tsMs == null) {
+                return 1;
+            }
+            if (b.tsMs == null) {
+                return -1;
+            }
+            return (b.tsMs - a.tsMs) * dir;
+        });
+    });
+
+    function setTab(next) {
+        tab.value = next;
+        filterCat.value = null;
+    }
+
+    function setSort(key) {
+        if (sortBy.value === key) {
+            sortDir.value = -sortDir.value;
+        } else {
+            sortBy.value = key;
+            sortDir.value = key === 'name' ? 1 : -1;
+        }
+    }
+
+    function exportCsv() {
+        const header =
+            tab.value === 'seen'
+                ? 'user_id;display_name;last_seen;days_ago;category;location'
+                : 'user_id;display_name;last_active;days_ago;category;source';
+        const esc = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+        const lines = visibleRows.value.map((row) =>
+            [
+                row.userId,
+                row.displayName,
+                row.tsMs ? new Date(row.tsMs).toJSON() : '',
+                row.days != null ? row.days.toFixed(1) : '',
+                row.category,
+                tab.value === 'seen' ? row.location : row.source
+            ]
+                .map(esc)
+                .join(';')
+        );
+        const blob = new Blob(['﻿' + [header, ...lines].join('\r\n')], {
+            type: 'text/csv;charset=utf-8'
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `friend-care-${tab.value}-${new Date().toJSON().slice(0, 10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    onMounted(refresh);
+    onActivated(refresh);
+</script>
+
+<style scoped>
+    .fc-tab-btn,
+    .fc-tool-btn {
+        padding: 4px 10px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 12px;
+    }
+    .fc-tab-btn--active {
+        background: var(--primary, #409eff);
+        color: #fff;
+        border-color: transparent;
+    }
+    .fc-search {
+        padding: 4px 10px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        font-size: 12px;
+        min-width: 160px;
+    }
+    .fc-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 12px;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        font-size: 12px;
+    }
+    .fc-chip--active {
+        border-color: var(--primary, #409eff);
+        background: color-mix(in srgb, var(--primary, #409eff) 18%, transparent);
+    }
+    .fc-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+    }
+    .fc-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .fc-table th,
+    .fc-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border, #4442);
+        text-align: left;
+    }
+    .fc-th-sort {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+    .fc-sort-arrow {
+        font-size: 9px;
+        margin-left: 3px;
+    }
+    .fc-badge {
+        display: inline-block;
+        padding: 1px 8px;
+        border: 1px solid;
+        border-radius: 10px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    .fc-loc {
+        max-width: 260px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        opacity: 0.75;
+        font-size: 12px;
+    }
+</style>
