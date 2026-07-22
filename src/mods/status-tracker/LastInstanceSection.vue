@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div style="display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0">
         <div style="display: flex; gap: 10px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
             <input v-model="search" placeholder="Suche…" class="st-search" type="text" />
             <span style="opacity: 0.65">{{ visibleEntries.length }} Einträge</span>
@@ -480,7 +480,15 @@
         opacity: 0.7;
     }
     .st-scroll {
-        overflow-x: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+    .st-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--background, #18181b);
     }
     .st-table {
         width: 100%;
