@@ -17,6 +17,8 @@ selected API helpers), so rebasing onto new VRCX releases is usually painless.
 - [`src/plugins/router.js`](src/plugins/router.js) — 1 line: a `name` for the
   main layout route so mods can register views under it
 - Everything else is additive and lives in [`src/mods/`](src/mods/)
+- Plus a few small, clearly marked (`// MOD-FIX`) bugfixes in the Electron
+  launcher (`src-electron/`), proposed upstream as well
 - Full diff against official VRCX:
   [upstream comparison](https://github.com/vrcx-team/VRCX/compare/master...Arikazei:vrcx-modschnitstelle:mod-api)
 
@@ -77,6 +79,8 @@ ein Rebase auf neue VRCX-Releases ist dadurch meist schmerzfrei.
 - [`src/plugins/router.js`](src/plugins/router.js) — 1 Zeile: ein `name` für
   die Hauptlayout-Route, damit Mods dort Views registrieren können
 - Alles andere ist rein additiv und liegt in [`src/mods/`](src/mods/)
+- Dazu wenige klar markierte (`// MOD-FIX`) Bugfixes im Electron-Launcher
+  (`src-electron/`), die auch Upstream vorgeschlagen werden
 - Kompletter Diff gegen das offizielle VRCX:
   [Upstream-Vergleich](https://github.com/vrcx-team/VRCX/compare/master...Arikazei:vrcx-modschnitstelle:mod-api)
 

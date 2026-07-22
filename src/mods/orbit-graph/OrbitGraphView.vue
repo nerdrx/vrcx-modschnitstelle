@@ -404,8 +404,7 @@
         filterGraphData,
         generateMockFriendsNetwork
     } from './engine';
-    import { useFriendStore } from '../../stores/friend';
-    import { useUserStore } from '../../stores/user';
+    import { getCtx } from './runtime';
 
     // State refs
     const containerRef = ref(null);
@@ -435,8 +434,8 @@
     let friendStore = null;
     let userStore = null;
     try {
-        friendStore = useFriendStore();
-        userStore = useUserStore();
+        friendStore = getCtx().stores.friends;
+        userStore = getCtx().stores.user;
     } catch (e) {
         // Pinia not yet initialized or test environment
     }
