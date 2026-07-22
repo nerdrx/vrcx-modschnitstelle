@@ -77,7 +77,11 @@
                     :key="row.userId"
                     :style="{ background: rowColor(row) }"
                     :title="row.userId">
-                    <td style="font-weight: 500">{{ row.displayName }}</td>
+                    <td style="font-weight: 500">
+                        <a class="fc-name-link" title="Profil öffnen" @click.stop="openUser(row.userId)">
+                            {{ row.displayName }}
+                        </a>
+                    </td>
                     <td>
                         <template v-if="row.tsMs">
                             {{ formatDate(row.tsMs) }}
@@ -192,6 +196,14 @@
             getCtx().ui.showWorldDialog(location);
         } catch (err) {
             getCtx().error('showWorldDialog failed:', err);
+        }
+    }
+
+    function openUser(userId) {
+        try {
+            getCtx().ui.showUserDialog(userId);
+        } catch (err) {
+            getCtx().error('showUserDialog failed:', err);
         }
     }
 
@@ -534,11 +546,13 @@
         opacity: 0.75;
         font-size: 12px;
     }
-    .fc-world-link {
+    .fc-world-link,
+    .fc-name-link {
         cursor: pointer;
         text-decoration: none;
     }
-    .fc-world-link:hover {
+    .fc-world-link:hover,
+    .fc-name-link:hover {
         color: var(--foreground, #fafafa);
         text-decoration: underline;
     }

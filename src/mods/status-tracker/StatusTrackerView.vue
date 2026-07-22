@@ -84,7 +84,11 @@
             </thead>
             <tbody>
                 <tr v-for="row in visibleRows" :key="row.userId" :class="{ 'st-row--dim': isDimmed(row) }">
-                    <td>{{ row.displayName }}</td>
+                    <td>
+                        <a class="st-name-link" title="Profil öffnen" @click.stop="openUser(row.userId)">
+                            {{ row.displayName }}
+                        </a>
+                    </td>
                     <td>
                         <div class="st-bar">
                             <div
@@ -195,7 +199,14 @@
                 }));
                 list.push({ userId, displayName, totals, segments });
             }
-            list.sort((a, b) => b.totals.totalOnlineMs - a.totals.totalOnlineMs);
+            // default order: known (non-unknown) time first, so friends whose
+            // whole span is 'unknown' don't clutter the top of the list
+            const knownMs = (totals) => totals.totalOnlineMs - (totals[UNKNOWN_STATUS] || 0);
+            list.sort(
+                (a, b) =>
+                    knownMs(b.totals) - knownMs(a.totals) ||
+                    b.totals.totalOnlineMs - a.totals.totalOnlineMs
+            );
             rows.value = list;
         } catch (err) {
             getCtx().error('refresh failed:', err);
@@ -236,6 +247,14 @@
 
     function setSort(key) {
         sortKey.value = key;
+    }
+
+    function openUser(userId) {
+        try {
+            getCtx().ui.showUserDialog(userId);
+        } catch (err) {
+            getCtx().error('showUserDialog failed:', err);
+        }
     }
 
     const visibleRows = computed(() => {
@@ -332,6 +351,14 @@
     }
     .st-row--dim {
         opacity: 0.35;
+    }
+    .st-name-link {
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .st-name-link:hover {
+        color: var(--foreground, #fafafa);
+        text-decoration: underline;
     }
     .st-th-sort {
         cursor: pointer;
