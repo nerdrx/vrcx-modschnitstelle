@@ -1,22 +1,20 @@
-const localizedStringsUrls = import.meta.glob('./*.json', {
-    eager: true,
-    query: '?url',
-    import: 'default'
-});
+const localizedStringLoaders = import.meta.glob('./*.json');
 
 async function getLocalizedStrings(code) {
-    const fallbackUrl = localizedStringsUrls['./en.json'];
-    const url = localizedStringsUrls[`./${code}.json`] || fallbackUrl;
+    const fallbackLoader = localizedStringLoaders['./en.json'];
+    const loader = localizedStringLoaders[`./${code}.json`] || fallbackLoader;
 
     try {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(res.status);
-        return await res.json();
+        if (loader) {
+            const mod = await loader();
+            return mod.default || mod;
+        }
+        return {};
     } catch {
-        if (url !== fallbackUrl) {
+        if (loader !== fallbackLoader && fallbackLoader) {
             try {
-                const res = await fetch(fallbackUrl);
-                return await res.json();
+                const mod = await fallbackLoader();
+                return mod.default || mod;
             } catch {
                 return {};
             }

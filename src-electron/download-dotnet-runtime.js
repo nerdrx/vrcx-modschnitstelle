@@ -76,9 +76,10 @@ async function downloadDotnetRuntime(arch, platform) {
         throw new Error(`Unsupported platform: ${platform}`);
     }
 
-    if (!fs.existsSync(DOTNET_RUNTIME_DIR)) {
-        fs.mkdirSync(DOTNET_RUNTIME_DIR, { recursive: true });
+    if (fs.existsSync(DOTNET_RUNTIME_DIR)) {
+        fs.rmSync(DOTNET_RUNTIME_DIR, { recursive: true, force: true });
     }
+    fs.mkdirSync(DOTNET_RUNTIME_DIR, { recursive: true });
 
     console.log(
         `Downloading .NET ${DOTNET_VERSION}-${dotnetPlatform}-${arch} runtime...`

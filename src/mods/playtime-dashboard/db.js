@@ -4,11 +4,11 @@
 // ============================================================================
 
 /**
- * Fetch online/offline presence logs from core feed table.
+ * Fetch local game logs (world joins) to build user session timeline.
  *
  * @param {object} ctx Mod context
  * @param {number} limit Max rows to fetch
- * @returns {Promise<Array<{createdAt: string, type: string, userId: string}>>}
+ * @returns {Promise<Array<{createdAt: string, location: string, type: string}>>}
  */
 export async function getOnlineOfflineLogs(ctx, limit = 200000) {
     const table = `${ctx.db.corePrefix()}_feed_online_offline`;
@@ -17,21 +17,17 @@ export async function getOnlineOfflineLogs(ctx, limit = 200000) {
         const rows = await ctx.db.query(sql);
         return rows.map((r) => ({
             createdAt: r[0] || '',
-            type: r[1] || '',
-            userId: r[2] || ''
+            location: r[1] || '',
+            type: 'Location'
         }));
     } catch (err) {
-        ctx.warn('failed to fetch online_offline logs:', err);
+        ctx.warn('failed to fetch gamelog_location:', err);
         return [];
     }
 }
 
 /**
- * Fetch GPS world visit logs from core feed table.
- *
- * @param {object} ctx Mod context
- * @param {number} limit Max rows to fetch
- * @returns {Promise<Array<{createdAt: string, location: string}>>}
+ * Dummy for backwards compatibility in UI, we fetch everything in getOnlineOfflineLogs now
  */
 export async function getGpsLogs(ctx, limit = 200000) {
     const table = `${ctx.db.corePrefix()}_feed_gps`;
