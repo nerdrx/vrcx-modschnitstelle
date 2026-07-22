@@ -71,19 +71,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, inject, markRaw } from 'vue';
+import { ref, onMounted, onBeforeUnmount, markRaw } from 'vue';
 import * as echarts from 'echarts';
-
-// VRCX specific injects if needed, or we rely on the global AppApi/ctx
-// For this mod, we'll assume the mod context has been added to window.ModContext or passed somehow
-// But wait, in our mod API, context is usually available globally if we set it, or we import our db directly.
 import * as db from './db.js';
-
-const $app = inject('$app'); // If using VRCX's dependency injection
-// Actually we can just use the db functions directly and pass the global ctx
-const ctx = window.$modCtx || { db: window.$app.db }; 
-// Note: To make this robust, VRCX mod setup should attach ctx to window.$modCtx
-// Let's assume we can query via db module directly if we pass the right dependencies.
+import { getCtx } from './runtime';
 
 const timeframe = ref(30);
 const loading = ref(false);
@@ -99,11 +90,8 @@ let echartInstance = null;
 const loadData = async () => {
     loading.value = true;
     try {
-        // Retrieve context, in our API the context is stored in the registry or we can use the window hook
-        const context = window.$modCtx || { db: { 
-            query: window.$app.db.query, 
-            corePrefix: () => 'vrcx' 
-        }};
+        const context = getCtx();
+        if (!context) throw new Error('ModContext not found');
 
         // Execute queries in parallel
         const [worlds, friends, avatars, heatmap] = await Promise.all([

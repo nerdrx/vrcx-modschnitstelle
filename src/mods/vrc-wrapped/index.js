@@ -1,4 +1,5 @@
 import WrappedView from './WrappedView.vue';
+import { setCtx } from './runtime';
 
 export default {
     id: 'vrc-wrapped',
@@ -6,13 +7,15 @@ export default {
     description: 'A beautiful dashboard summarizing your VRChat playtime, top friends, and most visited worlds.',
     
     setup(ctx) {
+        setCtx(ctx);
         // Register the view in the UI
         ctx.ui.addNavView({
-            id: 'mod-vrc-wrapped',
+            key: 'mod-vrc-wrapped',
             icon: 'ri-medal-line',
-            label: 'VRC Wrapped',
-            component: WrappedView,
-            order: 95
+            label: {
+                en: 'VRC Wrapped'
+            },
+            component: WrappedView
         });
 
         // Extend the context with our custom database functions
