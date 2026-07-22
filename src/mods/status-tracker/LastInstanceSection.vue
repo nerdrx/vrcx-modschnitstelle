@@ -6,7 +6,7 @@
             <button
                 class="st-tool-btn"
                 :disabled="checking"
-                title="Belegung aller angezeigten Instanzen prüfen (1 Anfrage / 2 s)"
+                title="Belegung aller angezeigten Instanzen prüfen (2 Anfragen / s)"
                 @click="checkOccupancy">
                 Belegung prüfen
             </button>
@@ -97,7 +97,7 @@
 
         <div style="margin-top: 12px; font-size: 11px; opacity: 0.6; max-width: 720px">
             Merkt sich pro Freund die letzte bekannte Instanz (auch nach Statuswechsel auf Orange/Rot oder
-            „Private"). „Belegung prüfen" fragt die Instanzen einzeln mit 2 s Abstand ab — Einträge mit
+            „Private"). „Belegung prüfen" fragt die Instanzen einzeln mit 0,5 s Abstand ab — Einträge mit
             bestätigter Belegung 0 werden automatisch entfernt. Läuft zusätzlich automatisch alle 5 Minuten,
             solange dieser Tab geöffnet ist.
         </div>
@@ -358,7 +358,7 @@
                     occ.value = next;
                 }
                 if (i < locations.length - 1) {
-                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                    await new Promise((resolve) => setTimeout(resolve, 500));
                 }
             }
             lastCheckedAt.value = new Date().toLocaleTimeString('de-AT', {
