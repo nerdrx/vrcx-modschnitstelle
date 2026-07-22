@@ -50,7 +50,7 @@ class SQLiteService {
 
     async execute(callback, sql, args = null) {
         try {
-            if (LINUX || window.isElectron) {
+            if (LINUX) {
                 if (args) {
                     args = new Map(Object.entries(args));
                 }

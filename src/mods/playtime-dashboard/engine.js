@@ -72,7 +72,23 @@ export function groupEventsIntoSessions(events, nowMs = Date.now()) {
     let lastEventMs = null;
 
     for (const e of sorted) {
-        if (e.type === 'Location') {
+        // 'Offline' closes an open session at its exact timestamp.
+        if (e.type === 'Offline') {
+            if (currentStartMs !== null) {
+                sessions.push({
+                    startMs: currentStartMs,
+                    endMs: e.tsMs,
+                    durationMs: e.tsMs - currentStartMs,
+                    isOngoing: false
+                });
+                currentStartMs = null;
+                lastEventMs = null;
+            }
+            continue;
+        }
+        // 'Online' starts a session; 'Location' starts or keeps one alive
+        // (gap-based splitting for data without clean offline events).
+        if (e.type === 'Online' || e.type === 'Location') {
             if (currentStartMs === null) {
                 currentStartMs = e.tsMs;
                 lastEventMs = e.tsMs;

@@ -21,6 +21,7 @@ const bundledDotNetPath = path.join(process.resourcesPath, 'dotnet-runtime');
 if (fs.existsSync(bundledDotNetPath)) {
     // Include bundled .NET runtime
     process.env.DOTNET_ROOT = bundledDotNetPath;
+    // MOD-FIX: platform path delimiter (':' broke Windows)
     process.env.PATH = `${bundledDotNetPath}${path.delimiter}${process.env.PATH}`;
 } else if (process.platform === 'darwin') {
     const dotnetPath = path.join('/usr/local/share/dotnet');
@@ -153,6 +154,7 @@ if (!gotTheLock) {
 } else {
     app.on('second-instance', (event, commandLine, workingDirectory) => {
         if (mainWindow) {
+            // MOD-FIX: focus existing window on second launch
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.show();
             mainWindow.focus();
@@ -397,6 +399,8 @@ function createWindow() {
         if (getCloseToTray() && !appIsQuitting) {
             event.preventDefault();
             mainWindow.hide();
+        } else {
+            app.quit();
         }
     });
 
@@ -828,6 +832,7 @@ function isDotNetInstalled() {
     let dotnetPath;
 
     if (process.env.DOTNET_ROOT) {
+        // MOD-FIX: dotnet binary is dotnet.exe on Windows
         const dotnetExeName = process.platform === 'win32' ? 'dotnet.exe' : 'dotnet';
         dotnetPath = path.join(process.env.DOTNET_ROOT, dotnetExeName);
         if (!fs.existsSync(dotnetPath)) {

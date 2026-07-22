@@ -76,6 +76,7 @@ async function downloadDotnetRuntime(arch, platform) {
         throw new Error(`Unsupported platform: ${platform}`);
     }
 
+    // MOD-FIX: clean stale runtime dir before re-download
     if (fs.existsSync(DOTNET_RUNTIME_DIR)) {
         fs.rmSync(DOTNET_RUNTIME_DIR, { recursive: true, force: true });
     }
