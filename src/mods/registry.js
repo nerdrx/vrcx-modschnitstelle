@@ -7,7 +7,6 @@ import friendCare from './friend-care';
 import playtimeDashboard from './playtime-dashboard';
 import profileArchiver from './profile-archiver';
 import worldHopper from './world-hopper';
+import orbitGraph from './orbit-graph';
 
-export const mods = [statusTracker, friendCare, playtimeDashboard, profileArchiver, worldHopper];
-
-
+export const mods = [statusTracker, friendCare, playtimeDashboard, profileArchiver, worldHopper, orbitGraph];

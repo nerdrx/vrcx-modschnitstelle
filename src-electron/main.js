@@ -21,7 +21,7 @@ const bundledDotNetPath = path.join(process.resourcesPath, 'dotnet-runtime');
 if (fs.existsSync(bundledDotNetPath)) {
     // Include bundled .NET runtime
     process.env.DOTNET_ROOT = bundledDotNetPath;
-    process.env.PATH = `${bundledDotNetPath}:${process.env.PATH}`;
+    process.env.PATH = `${bundledDotNetPath}${path.delimiter}${process.env.PATH}`;
 } else if (process.platform === 'darwin') {
     const dotnetPath = path.join('/usr/local/share/dotnet');
     const dotnetPathArm = path.join('/usr/local/share/dotnet/x64');
@@ -152,17 +152,23 @@ if (!gotTheLock) {
     app.quit();
 } else {
     app.on('second-instance', (event, commandLine, workingDirectory) => {
-        if (mainWindow && commandLine.length >= 2) {
-            try {
-                mainWindow.webContents.send(
-                    'launch-command',
-                    commandLine
-                        .pop()
-                        .trim()
-                        .replace(strip_vrcx_prefix_regex, '')
-                );
-            } catch (err) {
-                console.error('Error processing second-instance command:', err);
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+
+            if (commandLine.length >= 2) {
+                try {
+                    mainWindow.webContents.send(
+                        'launch-command',
+                        commandLine
+                            .pop()
+                            .trim()
+                            .replace(strip_vrcx_prefix_regex, '')
+                    );
+                } catch (err) {
+                    console.error('Error processing second-instance command:', err);
+                }
             }
         }
     });
@@ -391,8 +397,6 @@ function createWindow() {
         if (getCloseToTray() && !appIsQuitting) {
             event.preventDefault();
             mainWindow.hide();
-        } else {
-            app.quit();
         }
     });
 
@@ -824,7 +828,8 @@ function isDotNetInstalled() {
     let dotnetPath;
 
     if (process.env.DOTNET_ROOT) {
-        dotnetPath = path.join(process.env.DOTNET_ROOT, 'dotnet');
+        const dotnetExeName = process.platform === 'win32' ? 'dotnet.exe' : 'dotnet';
+        dotnetPath = path.join(process.env.DOTNET_ROOT, dotnetExeName);
         if (!fs.existsSync(dotnetPath)) {
             // fallback to command
             dotnetPath = 'dotnet';
