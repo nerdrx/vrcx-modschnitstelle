@@ -19,7 +19,7 @@ export async function getTopWorlds(ctx, days = 30, limit = 5) {
     const rows = await ctx.db.query(query, { '@timeThreshold': timeThreshold, '@limit': limit });
     return rows.map(row => ({
         worldName: row[0],
-        visitCount: row[1]
+        visitCount: Number(row[1]).toLocaleString()
     }));
 }
 
@@ -43,7 +43,7 @@ export async function getTopAvatars(ctx, days = 30, limit = 5) {
     return rows.map(row => ({
         avatarName: row[0],
         imageUrl: row[1],
-        switchCount: Math.round((row[2] || 0) / 60) // Converting seconds to minutes for display
+        switchCount: Math.round((row[2] || 0) / 60000).toLocaleString() // time is in milliseconds, convert to minutes
     }));
 }
 
@@ -68,7 +68,7 @@ export async function getTopFriends(ctx, days = 30, limit = 5) {
     return rows.map(row => ({
         displayName: row[0],
         userId: row[1],
-        interactionScore: row[2]
+        interactionScore: Number(row[2]).toLocaleString()
     }));
 }
 
@@ -111,8 +111,8 @@ export async function getSummaryMetrics(ctx, days = 30) {
     const [interactionsRow] = await ctx.db.query(interactionsQuery, args);
 
     return {
-        uniqueWorlds: worldsRow ? worldsRow[0] : 0,
-        uniqueAvatars: avatarsRow ? avatarsRow[0] : 0,
-        interactions: interactionsRow ? interactionsRow[0] : 0
+        uniqueWorlds: (worldsRow ? Number(worldsRow[0]) : 0).toLocaleString(),
+        uniqueAvatars: (avatarsRow ? Number(avatarsRow[0]) : 0).toLocaleString(),
+        interactions: (interactionsRow ? Number(interactionsRow[0]) : 0).toLocaleString()
     };
 }
