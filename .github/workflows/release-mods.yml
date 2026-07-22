@@ -18,6 +18,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Stamp the fork version into the Version file so the built app
+      # identifies as e.g. "VRCX 2026.07.18.m3" (tag v2026.07.18-mods.3).
+      # No dash: VRCX treats 7-char dash suffixes as nightly-hash builds.
+      - name: Stamp fork version
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF_NAME -like 'v*') {
+            $env:GITHUB_REF_NAME -replace '^v','' -replace '-mods\.','.m'
+          } else {
+            (Get-Content Version -Raw).Trim() + '.m0'
+          }
+          Set-Content -NoNewline Version $v
+          "FORK_VERSION=$v" | Out-File -Append $env:GITHUB_ENV
+          Write-Host "Fork version: $v"
+
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -40,6 +55,37 @@ jobs:
       - name: Build Windows app (CEF)
         run: dotnet build Dotnet\VRCX-Cef.csproj -c Release
 
+      # Replace the html junction with real files so NSIS/zip package content
+      - name: Materialize html folder
+        shell: pwsh
+        run: |
+          cmd /c rmdir build\Cef\html
+          robocopy build\html build\Cef\html /E /NFL /NDL /NJH /NJS
+          if ($LASTEXITCODE -ge 8) { exit 1 }
+          exit 0
+
+      # Installer (enables VRCX's built-in auto-updater against this repo)
+      - name: Prepare installer version
+        shell: pwsh
+        run: |
+          $numeric = $env:FORK_VERSION -replace '\.m(\d+)$','.$1'
+          if ($numeric -notmatch '^\d+\.\d+\.\d+\.\d+$') { $numeric = "$numeric.0" }
+          "!define PRODUCT_VERSION_FROM_FILE `"$numeric`"" | Out-File -Encoding ascii Installer/version_define.nsh
+          Get-Content Installer/version_define.nsh
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Create NSIS installer
+        uses: joncloud/makensis-action@v5.0
+        with:
+          script-file: Installer/installer.nsi
+          additional-plugin-paths: Installer/Plugins
+
+      - name: Rename setup
+        shell: pwsh
+        run: Move-Item Installer/VRCX_Setup.exe "VRCX_$($env:FORK_VERSION)_Setup.exe"
+
       - name: Package
         shell: pwsh
         run: |
@@ -58,18 +104,26 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: VRCX-with-Mods
-          path: VRCX-with-Mods-*.zip
+          path: |
+            VRCX-with-Mods-*.zip
+            VRCX_*_Setup.exe
 
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: VRCX-with-Mods-*.zip
+          name: VRCX ${{ env.FORK_VERSION }}
+          files: |
+            VRCX_*_Setup.exe
+            VRCX-with-Mods-*.zip
           generate_release_notes: true
           body: |
-            **VRCX with Mods** — unofficial VRCX fork with a mod API,
-            Status Tracker and Friend Care. Built publicly by GitHub Actions
-            from this repository's source (see the workflow run for this tag).
+            **VRCX with Mods** — unofficial VRCX fork with a mod API and
+            bundled mods. Built publicly by GitHub Actions from this
+            repository's source (see the workflow run for this tag).
+
+            **Downloads:** `VRCX_*_Setup.exe` = installer (used by the
+            built-in auto-updater); `VRCX-with-Mods-*.zip` = portable.
 
             ⚠️ The exe is **unsigned** — Windows SmartScreen will warn on
             first launch ("More info" → "Run anyway").
