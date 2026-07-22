@@ -44,7 +44,7 @@ export function extractWorldId(location) {
 }
 
 /**
- * Process online/offline feed events into play sessions.
+ * Process location events into play sessions.
  *
  * @param {Array<{createdAt: string, type: string}>} events
  * @param {number} [nowMs=Date.now()] Current timestamp for ongoing sessions
@@ -59,51 +59,58 @@ export function groupEventsIntoSessions(events, nowMs = Date.now()) {
     const sorted = [...events]
         .map((e) => ({
             tsMs: new Date(e.createdAt).getTime(),
-            type: e.type
+            type: e.type,
+            location: e.location
         }))
         .filter((e) => Number.isFinite(e.tsMs) && e.tsMs > 0)
         .sort((a, b) => a.tsMs - b.tsMs);
 
     const sessions = [];
+    const MAX_GAP_MS = 120 * 60 * 1000; // 2 hours
+
     let currentStartMs = null;
+    let lastEventMs = null;
 
     for (const e of sorted) {
-        if (e.type === 'Online') {
-            if (currentStartMs !== null) {
-                // Previous session was open without Offline event; close it at this new Online event
-                if (e.tsMs > currentStartMs) {
+        if (e.type === 'Location') {
+            if (currentStartMs === null) {
+                currentStartMs = e.tsMs;
+                lastEventMs = e.tsMs;
+            } else {
+                if (e.tsMs - lastEventMs > MAX_GAP_MS) {
+                    // Gap too large, close previous session 30 mins after last event
+                    const endMs = lastEventMs + (30 * 60 * 1000);
                     sessions.push({
                         startMs: currentStartMs,
-                        endMs: e.tsMs,
-                        durationMs: e.tsMs - currentStartMs,
+                        endMs: endMs,
+                        durationMs: endMs - currentStartMs,
                         isOngoing: false
                     });
+                    currentStartMs = e.tsMs;
                 }
-            }
-            currentStartMs = e.tsMs;
-        } else if (e.type === 'Offline') {
-            if (currentStartMs !== null) {
-                if (e.tsMs > currentStartMs) {
-                    sessions.push({
-                        startMs: currentStartMs,
-                        endMs: e.tsMs,
-                        durationMs: e.tsMs - currentStartMs,
-                        isOngoing: false
-                    });
-                }
-                currentStartMs = null;
+                lastEventMs = e.tsMs;
             }
         }
     }
 
-    // Open tail: player currently online
-    if (currentStartMs !== null && nowMs > currentStartMs) {
-        sessions.push({
-            startMs: currentStartMs,
-            endMs: nowMs,
-            durationMs: nowMs - currentStartMs,
-            isOngoing: true
-        });
+    // Open tail: player currently online if last event was recent
+    if (currentStartMs !== null) {
+        if (nowMs - lastEventMs < MAX_GAP_MS) {
+            sessions.push({
+                startMs: currentStartMs,
+                endMs: nowMs,
+                durationMs: nowMs - currentStartMs,
+                isOngoing: true
+            });
+        } else {
+            const endMs = lastEventMs + (30 * 60 * 1000);
+            sessions.push({
+                startMs: currentStartMs,
+                endMs: endMs,
+                durationMs: endMs - currentStartMs,
+                isOngoing: false
+            });
+        }
     }
 
     return sessions;
