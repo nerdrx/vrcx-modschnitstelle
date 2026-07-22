@@ -31,6 +31,51 @@ export const FEED_EVENTS = ['GPS', 'Online', 'Offline', 'Status', 'Avatar', 'Bio
 const listeners = new Map(); // eventName -> Set<handler>
 let bridgeInstalled = false;
 
+// ---------------------------------------------------------------------------
+// i18n persistence: VRCX (re)loads its locale catalogs via setLocaleMessage()
+// — on startup right after login and on every language change. That call
+// REPLACES the whole catalog for a locale, wiping anything mods merged in
+// earlier (nav labels would then render as raw keys). We therefore keep a
+// registry of every message mods contributed and re-merge it after each
+// catalog load via a one-time wrapper around setLocaleMessage.
+// ---------------------------------------------------------------------------
+const modMessages = new Map(); // locale -> deep message object
+let i18nGuardInstalled = false;
+
+function deepMerge(target, source) {
+    for (const [key, value] of Object.entries(source)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            if (!target[key] || typeof target[key] !== 'object') {
+                target[key] = {};
+            }
+            deepMerge(target[key], value);
+        } else {
+            target[key] = value;
+        }
+    }
+    return target;
+}
+
+function registerModMessages(locale, messages) {
+    if (!modMessages.has(locale)) {
+        modMessages.set(locale, {});
+    }
+    deepMerge(modMessages.get(locale), messages);
+    i18n.global.mergeLocaleMessage(locale, messages);
+
+    if (!i18nGuardInstalled) {
+        i18nGuardInstalled = true;
+        const original = i18n.global.setLocaleMessage.bind(i18n.global);
+        i18n.global.setLocaleMessage = (loc, msgs) => {
+            original(loc, msgs);
+            const own = modMessages.get(loc);
+            if (own) {
+                i18n.global.mergeLocaleMessage(loc, own);
+            }
+        };
+    }
+}
+
 function emit(eventName, payload) {
     const set = listeners.get(eventName);
     if (!set) {
@@ -186,10 +231,10 @@ export function createModContext(mod, host) {
             addNavView({ key, component, icon, label }) {
                 const labelKey = `mods.${modId}.nav.${key}`;
                 for (const [locale, text] of Object.entries(label || {})) {
-                    i18n.global.mergeLocaleMessage(locale, deepSet(labelKey, text));
+                    registerModMessages(locale, deepSet(labelKey, text));
                 }
                 if (!label?.en) {
-                    i18n.global.mergeLocaleMessage('en', deepSet(labelKey, key));
+                    registerModMessages('en', deepSet(labelKey, key));
                 }
 
                 host.router.addRoute('main-layout', {
