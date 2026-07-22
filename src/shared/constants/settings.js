@@ -16,13 +16,20 @@ const VRChatCameraResolutions = [
 const branches = {
     Stable: {
         name: 'Stable',
-        urlReleases: 'https://api0.vrcx.app/releases/stable',
-        urlLatest: 'https://api0.vrcx.app/releases/stable/latest'
+        // MOD-API: updater points at this fork's releases, NOT official VRCX
+        // (otherwise users would "update" back to the unmodded app)
+        urlReleases:
+            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases',
+        urlLatest:
+            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases/latest'
     },
     Nightly: {
         name: 'Nightly',
-        urlReleases: 'https://api0.vrcx.app/releases/nightly',
-        urlLatest: 'https://api0.vrcx.app/releases/nightly/latest'
+        // MOD-API: the fork has no separate nightly channel
+        urlReleases:
+            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases',
+        urlLatest:
+            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases/latest'
     }
     // LinuxTest: {
     //     name: 'LinuxTest',
