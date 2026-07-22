@@ -5,7 +5,7 @@ import vrcxJsonStorage from '../services/jsonStorage.js';
 
 export async function initInteropApi(isVrOverlay = false) {
     if (isVrOverlay) {
-        if (WINDOWS) {
+        if (WINDOWS && typeof CefSharp !== 'undefined') {
             await CefSharp.BindObjectAsync('AppApiVr');
         } else {
             // @ts-ignore
@@ -13,7 +13,7 @@ export async function initInteropApi(isVrOverlay = false) {
         }
     } else {
         // #region | Init Cef C# bindings
-        if (WINDOWS) {
+        if (WINDOWS && typeof CefSharp !== 'undefined') {
             await CefSharp.BindObjectAsync(
                 'AppApi',
                 'WebApi',
@@ -24,6 +24,7 @@ export async function initInteropApi(isVrOverlay = false) {
                 'AssetBundleManager'
             );
         } else {
+            window.isElectron = true;
             window.AppApi = InteropApi.AppApiElectron;
             window.WebApi = InteropApi.WebApi;
             window.VRCXStorage = InteropApi.VRCXStorage;
