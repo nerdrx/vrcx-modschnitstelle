@@ -10,9 +10,9 @@
  * @param {number} limit Max rows to fetch
  * @returns {Promise<Array<{createdAt: string, type: string, userId: string}>>}
  */
-export async function getOnlineOfflineLogs(ctx, limit = 2000) {
+export async function getOnlineOfflineLogs(ctx, limit = 200000) {
     const table = `${ctx.db.corePrefix()}_feed_online_offline`;
-    const sql = `SELECT created_at, type, user_id FROM ${table} ORDER BY created_at ASC LIMIT ${Number(limit)}`;
+    const sql = `SELECT * FROM (SELECT created_at, type, user_id FROM ${table} ORDER BY created_at DESC LIMIT ${Number(limit)}) ORDER BY created_at ASC`;
     try {
         const rows = await ctx.db.query(sql);
         return rows.map((r) => ({
@@ -33,9 +33,9 @@ export async function getOnlineOfflineLogs(ctx, limit = 2000) {
  * @param {number} limit Max rows to fetch
  * @returns {Promise<Array<{createdAt: string, location: string}>>}
  */
-export async function getGpsLogs(ctx, limit = 2000) {
+export async function getGpsLogs(ctx, limit = 200000) {
     const table = `${ctx.db.corePrefix()}_feed_gps`;
-    const sql = `SELECT created_at, location FROM ${table} ORDER BY created_at ASC LIMIT ${Number(limit)}`;
+    const sql = `SELECT * FROM (SELECT created_at, location FROM ${table} ORDER BY created_at DESC LIMIT ${Number(limit)}) ORDER BY created_at ASC`;
     try {
         const rows = await ctx.db.query(sql);
         return rows.map((r) => ({

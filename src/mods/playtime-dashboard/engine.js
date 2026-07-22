@@ -124,10 +124,13 @@ export function calculateDailyTrends(sessions, rangeDays, nowMs = Date.now()) {
     const todayDate = new Date(nowMs);
     todayDate.setHours(0, 0, 0, 0);
 
+    // Key by LOCAL date (toISOString is UTC and shifts the day in non-UTC timezones)
+    const localKey = (d) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
     for (let i = dayCount - 1; i >= 0; i--) {
         const d = new Date(todayDate.getTime() - i * DAY_MS);
-        const isoKey = d.toISOString().slice(0, 10);
-        daysMap.set(isoKey, 0);
+        daysMap.set(localKey(d), 0);
     }
 
     for (const s of sessions) {
