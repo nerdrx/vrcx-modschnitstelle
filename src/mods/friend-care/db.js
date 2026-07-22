@@ -26,6 +26,28 @@ export async function getLastSeenRows(ctx) {
 }
 
 /**
+ * World names known locally: VRCX logs every visited instance into the
+ * global gamelog_location table incl. world_name. Since "last seen" spots
+ * are instances *I* was in, this resolves nearly all locations without a
+ * single API call.
+ *
+ * @returns {Promise<Map<string, string>>} worldId -> world name (newest wins)
+ */
+export async function getWorldNames(ctx) {
+    const rows = await ctx.db.query(
+        `SELECT world_id, world_name, MAX(created_at)
+         FROM gamelog_location
+         WHERE world_id != '' AND world_name != ''
+         GROUP BY world_id`
+    );
+    const names = new Map();
+    for (const [worldId, worldName] of rows) {
+        names.set(worldId, worldName);
+    }
+    return names;
+}
+
+/**
  * Fallback: newest feed event per friend across all per-user feed tables
  * ("last sign of life VRCX has observed"). Only used for friends whose
  * API user object carries no last_activity/last_login.
