@@ -18,6 +18,26 @@
             <span v-if="loading" style="opacity: 0.6">…</span>
         </div>
 
+        <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
+            <button
+                v-for="s in statusFilters"
+                :key="s.key"
+                class="st-chip"
+                :class="{ 'st-chip--active': selectedStatuses.has(s.key) }"
+                type="button"
+                title="Nach aktuellem Status filtern (Mehrfachauswahl möglich)"
+                @click="toggleStatusFilter(s.key)">
+                <span :style="{ background: s.color }" class="st-dot"></span>{{ s.label }} ({{ statusCount(s.key) }})
+            </button>
+            <button
+                v-if="selectedStatuses.size"
+                class="st-chip st-chip--clear"
+                type="button"
+                @click="selectedStatuses = new Set()">
+                ✕ Zurücksetzen
+            </button>
+        </div>
+
         <div class="st-scroll">
             <table class="st-table" style="min-width: 720px">
                 <thead>
@@ -103,8 +123,17 @@
         offline: '#8a8a8a'
     };
 
+    const STATUS_FILTERS = [
+        { key: 'join me', color: '#42caff', label: 'Join Me' },
+        { key: 'active', color: '#51e57e', label: 'Active' },
+        { key: 'ask me', color: '#e8a838', label: 'Ask Me' },
+        { key: 'busy', color: '#e64a4a', label: 'Busy' }
+    ];
+    const statusFilters = STATUS_FILTERS;
+
     const loading = ref(false);
     const search = ref('');
+    const selectedStatuses = ref(new Set());
     const entries = ref(new Map()); // userId -> {userId, displayName, location, worldName, tsMs}
     const occ = ref(new Map()); // location -> {users, capacity, fetchedAt} | {error:true}
     const checking = ref(false);
@@ -176,9 +205,33 @@
         }
     }
 
+    function toggleStatusFilter(key) {
+        const next = new Set(selectedStatuses.value);
+        if (next.has(key)) {
+            next.delete(key);
+        } else {
+            next.add(key);
+        }
+        selectedStatuses.value = next;
+    }
+
+    const baseEntries = computed(() =>
+        [...entries.value.values()].filter((entry) => !isOffline(entry.userId))
+    );
+
+    function statusCount(key) {
+        return baseEntries.value.reduce(
+            (n, entry) => (statusText(entry.userId) === key ? n + 1 : n),
+            0
+        );
+    }
+
     const visibleEntries = computed(() => {
         const q = search.value.trim().toLowerCase();
-        let list = [...entries.value.values()].filter((entry) => !isOffline(entry.userId));
+        let list = baseEntries.value;
+        if (selectedStatuses.value.size > 0) {
+            list = list.filter((entry) => selectedStatuses.value.has(statusText(entry.userId)));
+        }
         if (q) {
             list = list.filter(
                 (entry) =>
@@ -186,7 +239,7 @@
                     (entry.worldName || '').toLowerCase().includes(q)
             );
         }
-        return list.sort((a, b) => b.tsMs - a.tsMs);
+        return [...list].sort((a, b) => b.tsMs - a.tsMs);
     });
 
     function upsertEntry({ userId, displayName, location, worldName, tsMs }) {
@@ -393,6 +446,26 @@
         width: 10px;
         height: 10px;
         border-radius: 50%;
+    }
+    .st-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 10px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 12px;
+        background: transparent;
+        color: var(--muted-foreground, #9f9fa5);
+        cursor: pointer;
+        font-size: 12px;
+    }
+    .st-chip--active {
+        border-color: var(--muted-foreground, #9f9fa5);
+        background: var(--accent, #3f3f46);
+        color: var(--foreground, #fafafa);
+    }
+    .st-chip--clear {
+        opacity: 0.7;
     }
     .st-scroll {
         overflow-x: auto;
