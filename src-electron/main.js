@@ -557,6 +557,7 @@ function createTray() {
             type: 'normal',
             click: function () {
                 appIsQuitting = true;
+                destroyTray();
                 app.quit();
             }
         }

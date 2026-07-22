@@ -19,7 +19,11 @@ export async function getTopWorlds(ctx, days = 30, limit = 5) {
         LIMIT ?
     `;
     
-    return await ctx.db.query(query, [timeThreshold, limit]);
+    const rows = await ctx.db.query(query, [timeThreshold, limit]);
+    return rows.map(row => ({
+        worldName: row[0],
+        visitCount: row[1]
+    }));
 }
 
 /**
@@ -38,7 +42,12 @@ export async function getTopAvatars(ctx, days = 30, limit = 5) {
         LIMIT ?
     `;
     
-    return await ctx.db.query(query, [timeThreshold, limit]);
+    const rows = await ctx.db.query(query, [timeThreshold, limit]);
+    return rows.map(row => ({
+        avatarName: row[0],
+        imageUrl: row[1],
+        switchCount: row[2]
+    }));
 }
 
 /**
@@ -59,7 +68,12 @@ export async function getTopFriends(ctx, days = 30, limit = 5) {
         LIMIT ?
     `;
     
-    return await ctx.db.query(query, [timeThreshold, limit]);
+    const rows = await ctx.db.query(query, [timeThreshold, limit]);
+    return rows.map(row => ({
+        displayName: row[0],
+        userId: row[1],
+        interactionScore: row[2]
+    }));
 }
 
 /**
@@ -77,5 +91,30 @@ export async function getActivityHeatmap(ctx, days = 365) {
         ORDER BY day ASC
     `;
     
-    return await ctx.db.query(query, [timeThreshold]);
+    const rows = await ctx.db.query(query, [timeThreshold]);
+    return rows.map(row => ({
+        day: row[0],
+        count: row[1]
+    }));
+}
+
+/**
+ * Gets aggregated summary metrics for the wrapped dashboard.
+ */
+export async function getSummaryMetrics(ctx, days = 30) {
+    const timeThreshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    
+    const uniqueWorldsQuery = `SELECT COUNT(DISTINCT location) FROM ${ctx.db.corePrefix()}_feed_gps WHERE created_at >= ?`;
+    const uniqueAvatarsQuery = `SELECT COUNT(DISTINCT avatar_id) FROM ${ctx.db.corePrefix()}_feed_avatar WHERE created_at >= ?`;
+    const interactionsQuery = `SELECT COUNT(*) FROM ${ctx.db.corePrefix()}_feed_online_offline WHERE created_at >= ?`;
+
+    const [worldsRow] = await ctx.db.query(uniqueWorldsQuery, [timeThreshold]);
+    const [avatarsRow] = await ctx.db.query(uniqueAvatarsQuery, [timeThreshold]);
+    const [interactionsRow] = await ctx.db.query(interactionsQuery, [timeThreshold]);
+
+    return {
+        uniqueWorlds: worldsRow ? worldsRow[0] : 0,
+        uniqueAvatars: avatarsRow ? avatarsRow[0] : 0,
+        interactions: interactionsRow ? interactionsRow[0] : 0
+    };
 }

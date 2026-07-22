@@ -19,7 +19,33 @@
             <span>Calculating your VRChat journey...</span>
         </div>
 
-        <div v-else class="wrapped-grid">
+        <div v-else>
+            <!-- Summary Metrics -->
+            <div class="summary-metrics">
+                <div class="metric-card glass">
+                    <i class="ri-global-line metric-icon"></i>
+                    <div class="metric-info">
+                        <span class="metric-value">{{ summaryMetrics.uniqueWorlds }}</span>
+                        <span class="metric-label">Worlds Explored</span>
+                    </div>
+                </div>
+                <div class="metric-card glass">
+                    <i class="ri-group-line metric-icon"></i>
+                    <div class="metric-info">
+                        <span class="metric-value">{{ summaryMetrics.interactions }}</span>
+                        <span class="metric-label">Interactions</span>
+                    </div>
+                </div>
+                <div class="metric-card glass">
+                    <i class="ri-user-smile-line metric-icon"></i>
+                    <div class="metric-info">
+                        <span class="metric-value">{{ summaryMetrics.uniqueAvatars }}</span>
+                        <span class="metric-label">Avatars Used</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="wrapped-grid">
             <!-- Top Worlds -->
             <div class="wrapped-card top-worlds glass">
                 <h3><i class="ri-global-line"></i> Top Worlds</h3>
@@ -67,6 +93,7 @@
                 <div class="chart-container" ref="heatmapChart"></div>
             </div>
         </div>
+        </div>
     </div>
 </template>
 
@@ -83,6 +110,11 @@ const topWorlds = ref([]);
 const topFriends = ref([]);
 const topAvatars = ref([]);
 const heatmapDataRaw = ref([]);
+const summaryMetrics = ref({
+    uniqueWorlds: 0,
+    uniqueAvatars: 0,
+    interactions: 0
+});
 
 const heatmapChart = ref(null);
 let echartInstance = null;
@@ -94,19 +126,23 @@ const loadData = async () => {
         if (!context) throw new Error('ModContext not found');
 
         // Execute queries in parallel
-        const [worlds, friends, avatars, heatmap] = await Promise.all([
+        const [worlds, friends, avatars, heatmap, summary] = await Promise.all([
             db.getTopWorlds(context, timeframe.value, 5),
             db.getTopFriends(context, timeframe.value, 5),
-            db.getTopAvatars(context, timeframe.value, 4),
-            db.getActivityHeatmap(context, timeframe.value)
+            db.getTopAvatars(context, timeframe.value, 5),
+            db.getActivityHeatmap(context, timeframe.value),
+            db.getSummaryMetrics(context, timeframe.value)
         ]);
 
-        topWorlds.value = worlds || [];
-        topFriends.value = friends || [];
-        topAvatars.value = avatars || [];
-        heatmapDataRaw.value = heatmap || [];
+        topWorlds.value = worlds;
+        topFriends.value = friends;
+        topAvatars.value = avatars;
+        heatmapDataRaw.value = heatmap;
+        summaryMetrics.value = summary;
 
-        renderHeatmap();
+        setTimeout(() => {
+            renderHeatmap();
+        }, 100);
     } catch (err) {
         console.error('[VRC Wrapped] Error loading data:', err);
     } finally {
@@ -235,6 +271,46 @@ onBeforeUnmount(() => {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 20px;
+}
+
+.summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+.metric-card {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    gap: 15px;
+}
+
+.metric-icon {
+    font-size: 2.5rem;
+    color: #c77dff;
+    background: rgba(199, 125, 255, 0.1);
+    padding: 10px;
+    border-radius: 12px;
+}
+
+.metric-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.metric-label {
+    font-size: 0.9rem;
+    color: #a0a0b0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .full-width {
