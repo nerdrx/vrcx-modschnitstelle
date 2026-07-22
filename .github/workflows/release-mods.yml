@@ -1,0 +1,81 @@
+# Builds the Windows package publicly and attaches it to a GitHub release.
+# Trigger: push a tag like v2026.07.18-mods.1 (or run manually for a test build).
+name: Release (VRCX with Mods)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install dependencies
+        run: |
+          npm ci --include=dev
+          npm rebuild
+
+      - name: Run mod tests
+        run: npx vitest run src/mods
+
+      - name: Build UI
+        run: npm run prod
+
+      - name: Build Windows app (CEF)
+        run: dotnet build Dotnet\VRCX-Cef.csproj -c Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $staging = "VRCX-with-Mods"
+          # robocopy follows the html junction and copies real files
+          robocopy build\Cef $staging /E /NFL /NDL /NJH /NJS
+          if ($LASTEXITCODE -ge 8) { exit 1 }
+          Remove-Item "$staging\debug.log" -ErrorAction SilentlyContinue
+          Get-ChildItem $staging -Filter *.pdb | Remove-Item -ErrorAction SilentlyContinue
+          Copy-Item LICENSE "$staging\LICENSE.txt"
+          $name = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { 'manual' }
+          Compress-Archive -Path $staging -DestinationPath "VRCX-with-Mods-$name.zip"
+          exit 0
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VRCX-with-Mods
+          path: VRCX-with-Mods-*.zip
+
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VRCX-with-Mods-*.zip
+          generate_release_notes: true
+          body: |
+            **VRCX with Mods** — unofficial VRCX fork with a mod API,
+            Status Tracker and Friend Care. Built publicly by GitHub Actions
+            from this repository's source (see the workflow run for this tag).
+
+            ⚠️ The exe is **unsigned** — Windows SmartScreen will warn on
+            first launch ("More info" → "Run anyway").
+            ⚠️ Shares its database with a regular VRCX installation — close
+            one before starting the other; a backup of
+            `%AppData%\VRCX\VRCX.sqlite3` is recommended.
+
+            License: MIT (see LICENSE.txt in the zip). Not affiliated with
+            the VRCX team or VRChat Inc.
