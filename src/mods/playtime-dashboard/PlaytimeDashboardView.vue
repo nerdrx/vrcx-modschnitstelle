@@ -452,8 +452,8 @@
         try {
             const ctx = getCtx();
             const [onlineOffline, gps, worldNamesMap] = await Promise.all([
-                getOnlineOfflineLogs(ctx, 3000),
-                getGpsLogs(ctx, 3000),
+                getOnlineOfflineLogs(ctx, 200000),
+                getGpsLogs(ctx, 200000),
                 getWorldNames(ctx)
             ]);
 
