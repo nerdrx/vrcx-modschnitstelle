@@ -17,6 +17,7 @@ import { i18n } from '../plugins/i18n';
 import { navDefinitions } from '../shared/constants/ui';
 import { getWorldName } from '../shared/utils/world';
 import { showWorldDialog } from '../coordinators/worldCoordinator';
+import { showUserDialog } from '../coordinators/userCoordinator';
 import { instanceRequest } from '../api';
 import { watchState } from '../services/watchState';
 import { database, dbVars } from '../services/database';
@@ -266,6 +267,11 @@ export function createModContext(mod, host) {
              */
             showWorldDialog(location) {
                 showWorldDialog(location);
+            },
+
+            /** Open VRCX's native user dialog (profile) for a user id. */
+            showUserDialog(userId) {
+                showUserDialog(userId);
             },
 
             /**

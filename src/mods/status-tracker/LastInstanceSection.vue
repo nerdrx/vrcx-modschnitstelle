@@ -52,7 +52,11 @@
                 </thead>
                 <tbody>
                     <tr v-for="entry in visibleEntries" :key="entry.userId" :title="entry.userId">
-                        <td style="font-weight: 500">{{ entry.displayName }}</td>
+                        <td style="font-weight: 500">
+                            <a class="st-name-link" title="Profil öffnen" @click.stop="openUser(entry.userId)">
+                                {{ entry.displayName }}
+                            </a>
+                        </td>
                         <td>
                             <span
                                 :style="{ background: statusColor(entry.userId) }"
@@ -202,6 +206,14 @@
             getCtx().ui.showWorldDialog(location);
         } catch (err) {
             getCtx().error('showWorldDialog failed:', err);
+        }
+    }
+
+    function openUser(userId) {
+        try {
+            getCtx().ui.showUserDialog(userId);
+        } catch (err) {
+            getCtx().error('showUserDialog failed:', err);
         }
     }
 
@@ -486,11 +498,13 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    .st-world-link {
+    .st-world-link,
+    .st-name-link {
         cursor: pointer;
         text-decoration: none;
     }
-    .st-world-link:hover {
+    .st-world-link:hover,
+    .st-name-link:hover {
         color: var(--foreground, #fafafa);
         text-decoration: underline;
     }
