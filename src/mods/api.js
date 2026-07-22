@@ -17,11 +17,13 @@ import { i18n } from '../plugins/i18n';
 import { navDefinitions } from '../shared/constants/ui';
 import { getWorldName } from '../shared/utils/world';
 import { showWorldDialog } from '../coordinators/worldCoordinator';
+import { instanceRequest } from '../api';
 import { watchState } from '../services/watchState';
 import { database, dbVars } from '../services/database';
 import sqliteService from '../services/sqlite';
 import { useFeedStore } from '../stores/feed';
 import { useFriendStore } from '../stores/friend';
+import { useInstanceStore } from '../stores/instance';
 import { useUserStore } from '../stores/user';
 
 /**
@@ -217,6 +219,9 @@ export function createModContext(mod, host) {
             },
             get feed() {
                 return useFeedStore(host.pinia);
+            },
+            get instances() {
+                return useInstanceStore(host.pinia);
             }
         },
 
@@ -233,6 +238,23 @@ export function createModContext(mod, host) {
              */
             getWorldName(location) {
                 return getWorldName(location);
+            },
+
+            /**
+             * Fetch live instance data (occupancy etc.) for a full instance
+             * tag like 'wrld_xxx:12345~region(eu)'.
+             * @returns {Promise<object|null>} raw instance JSON or null
+             */
+            async getInstance(location) {
+                const sep = (location || '').indexOf(':');
+                if (sep < 0) {
+                    return null;
+                }
+                const args = await instanceRequest.getInstance({
+                    worldId: location.slice(0, sep),
+                    instanceId: location.slice(sep + 1)
+                });
+                return args?.json || null;
             }
         },
 

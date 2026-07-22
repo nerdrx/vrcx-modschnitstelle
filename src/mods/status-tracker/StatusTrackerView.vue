@@ -4,7 +4,21 @@
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
                 {{ t('mods.statustracker.nav.mod-status-tracker') }}
             </h2>
-            <div style="display: flex; gap: 4px">
+            <div class="st-seg">
+                <button
+                    class="st-range-btn"
+                    :class="{ 'st-range-btn--active': view === 'times' }"
+                    @click="view = 'times'">
+                    Status-Zeiten
+                </button>
+                <button
+                    class="st-range-btn"
+                    :class="{ 'st-range-btn--active': view === 'instances' }"
+                    @click="view = 'instances'">
+                    Letzte Instanz
+                </button>
+            </div>
+            <div v-if="view === 'times'" class="st-seg">
                 <button
                     v-for="option in rangeOptions"
                     :key="option.days"
@@ -15,6 +29,7 @@
                 </button>
             </div>
             <input
+                v-if="view === 'times'"
                 v-model="search"
                 :placeholder="searchPlaceholder"
                 class="st-search"
@@ -22,7 +37,9 @@
             <span v-if="loading" style="font-size: 12px; opacity: 0.6">…</span>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
+        <div
+            v-if="view === 'times'"
+            style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
             <button
                 v-for="s in legend"
                 :key="s.key"
@@ -38,7 +55,8 @@
             </button>
         </div>
 
-        <table class="st-table">
+        <div v-if="view === 'times'" class="st-scroll">
+        <table class="st-table" style="min-width: 760px">
             <thead>
                 <tr>
                     <th style="text-align: left; min-width: 160px">Friend</th>
@@ -88,6 +106,9 @@
                 </tr>
             </tbody>
         </table>
+        </div>
+
+        <LastInstanceSection v-if="view === 'instances'" />
     </div>
 </template>
 
@@ -98,6 +119,7 @@
     import { computeStatusTotals, TRACKED_STATUSES, UNKNOWN_STATUS } from './engine';
     import { loadEvents } from './db';
     import { getCtx } from './runtime';
+    import LastInstanceSection from './LastInstanceSection.vue';
 
     const { t } = useI18n();
 
@@ -119,6 +141,7 @@
         { days: 365, label: '1 Jahr' }
     ];
 
+    const view = ref('times');
     const rangeDays = ref(30);
     const loading = ref(false);
     const search = ref('');
@@ -248,19 +271,29 @@
 </script>
 
 <style scoped>
+    .st-seg {
+        display: inline-flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 8px;
+    }
     .st-range-btn {
         padding: 4px 10px;
-        border: 1px solid var(--border, #4443);
+        border: 1px solid transparent;
         border-radius: 6px;
         background: transparent;
-        color: inherit;
+        color: var(--muted-foreground, #9f9fa5);
         cursor: pointer;
         font-size: 12px;
     }
     .st-range-btn--active {
-        background: var(--primary, #409eff);
-        color: #fff;
-        border-color: transparent;
+        background: var(--accent, #3f3f46);
+        color: var(--foreground, #fafafa);
+        border-color: var(--border, #4443);
+    }
+    .st-scroll {
+        overflow-x: auto;
     }
     .st-search {
         padding: 4px 10px;
@@ -285,13 +318,14 @@
         border: 1px solid var(--border, #4443);
         border-radius: 12px;
         background: transparent;
-        color: inherit;
+        color: var(--muted-foreground, #9f9fa5);
         cursor: pointer;
         font-size: 12px;
     }
     .st-chip--active {
-        border-color: var(--primary, #409eff);
-        background: color-mix(in srgb, var(--primary, #409eff) 18%, transparent);
+        border-color: var(--muted-foreground, #9f9fa5);
+        background: var(--accent, #3f3f46);
+        color: var(--foreground, #fafafa);
     }
     .st-chip--clear {
         opacity: 0.7;
@@ -305,7 +339,8 @@
         white-space: nowrap;
     }
     .st-th-sort--active {
-        color: var(--primary, #409eff);
+        color: var(--foreground, #fafafa);
+        text-decoration: underline;
     }
     .st-sort-arrow {
         font-size: 9px;
