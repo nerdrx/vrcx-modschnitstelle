@@ -10,6 +10,16 @@ else lives in `src/mods/`. Mods never import VRCX internals directly — they co
 against a stable `ModContext` (events, DB access, UI/nav registration, i18n,
 selected API helpers), so rebasing onto new VRCX releases is usually painless.
 
+**Transparency — every change to upstream VRCX code:**
+
+- [`src/app.js`](src/app.js) — 2 lines: import + `initMods({ app })` call
+  (search for `MOD-API`)
+- [`src/plugins/router.js`](src/plugins/router.js) — 1 line: a `name` for the
+  main layout route so mods can register views under it
+- Everything else is additive and lives in [`src/mods/`](src/mods/)
+- Full diff against official VRCX:
+  [upstream comparison](https://github.com/vrcx-team/VRCX/compare/master...Arikazei:vrcx-modschnitstelle:mod-api)
+
 ## Included mods
 
 - **Status Tracker** — records how long each friend spent on which status
@@ -59,6 +69,16 @@ berührt; alles Weitere liegt in `src/mods/`. Mods importieren nie
 VRCX-Interna direkt, sondern programmieren gegen einen stabilen `ModContext`
 (Events, DB-Zugriff, UI-/Nav-Registrierung, i18n, ausgewählte API-Helfer) —
 ein Rebase auf neue VRCX-Releases ist dadurch meist schmerzfrei.
+
+**Transparenz — jede Änderung am Upstream-Code von VRCX:**
+
+- [`src/app.js`](src/app.js) — 2 Zeilen: Import + Aufruf `initMods({ app })`
+  (nach `MOD-API` suchen)
+- [`src/plugins/router.js`](src/plugins/router.js) — 1 Zeile: ein `name` für
+  die Hauptlayout-Route, damit Mods dort Views registrieren können
+- Alles andere ist rein additiv und liegt in [`src/mods/`](src/mods/)
+- Kompletter Diff gegen das offizielle VRCX:
+  [Upstream-Vergleich](https://github.com/vrcx-team/VRCX/compare/master...Arikazei:vrcx-modschnitstelle:mod-api)
 
 ## Enthaltene Mods
 
