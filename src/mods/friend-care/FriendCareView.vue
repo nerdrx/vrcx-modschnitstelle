@@ -4,7 +4,7 @@
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
                 {{ t('mods.friendcare.nav.mod-friend-care') }}
             </h2>
-            <div style="display: flex; gap: 4px">
+            <div class="fc-seg">
                 <button
                     class="fc-tab-btn"
                     :class="{ 'fc-tab-btn--active': tab === 'seen' }"
@@ -55,7 +55,8 @@
             </button>
         </div>
 
-        <table class="fc-table">
+        <div class="fc-scroll">
+        <table class="fc-table" style="min-width: 700px">
             <thead>
                 <tr>
                     <th class="fc-th-sort" style="text-align: left; min-width: 180px" @click="setSort('name')">
@@ -106,6 +107,7 @@
                 </tr>
             </tbody>
         </table>
+        </div>
 
         <div style="margin-top: 14px; font-size: 11px; opacity: 0.65; display: flex; gap: 14px; flex-wrap: wrap">
             <span v-for="c in categories" :key="c.key" style="display: inline-flex; align-items: center; gap: 5px">
@@ -428,20 +430,41 @@
 </script>
 
 <style scoped>
-    .fc-tab-btn,
+    .fc-seg {
+        display: inline-flex;
+        gap: 2px;
+        padding: 2px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 8px;
+    }
+    .fc-tab-btn {
+        padding: 4px 10px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted-foreground, #9f9fa5);
+        cursor: pointer;
+        font-size: 12px;
+    }
+    .fc-tab-btn--active {
+        background: var(--accent, #3f3f46);
+        color: var(--foreground, #fafafa);
+        border-color: var(--border, #4443);
+    }
     .fc-tool-btn {
         padding: 4px 10px;
         border: 1px solid var(--border, #4443);
         border-radius: 6px;
         background: transparent;
-        color: inherit;
+        color: var(--muted-foreground, #9f9fa5);
         cursor: pointer;
         font-size: 12px;
     }
-    .fc-tab-btn--active {
-        background: var(--primary, #409eff);
-        color: #fff;
-        border-color: transparent;
+    .fc-tool-btn:hover {
+        color: var(--foreground, #fafafa);
+    }
+    .fc-scroll {
+        overflow-x: auto;
     }
     .fc-search {
         padding: 4px 10px;
@@ -465,8 +488,9 @@
         font-size: 12px;
     }
     .fc-chip--active {
-        border-color: var(--primary, #409eff);
-        background: color-mix(in srgb, var(--primary, #409eff) 18%, transparent);
+        border-color: var(--muted-foreground, #9f9fa5);
+        background: var(--accent, #3f3f46);
+        color: var(--foreground, #fafafa);
     }
     .fc-dot {
         display: inline-block;
@@ -515,7 +539,7 @@
         text-decoration: none;
     }
     .fc-world-link:hover {
-        color: var(--primary, #409eff);
+        color: var(--foreground, #fafafa);
         text-decoration: underline;
     }
 </style>
