@@ -13,15 +13,15 @@
             </div>
 
             <div class="wrapped-controls">
-                <el-select v-model="timeframe" placeholder="Select Timeframe" @change="loadData" class="timeframe-select">
-                    <el-option label="Last 7 Days" :value="7"></el-option>
-                    <el-option label="Last 30 Days" :value="30"></el-option>
-                    <el-option label="Last 90 Days" :value="90"></el-option>
-                    <el-option label="All Time (365 Days)" :value="365"></el-option>
-                </el-select>
-                <el-button @click="loadData" type="primary" :loading="loading" plain>
-                    <i class="ri-refresh-line"></i> Refresh
-                </el-button>
+                <select v-model="timeframe" @change="loadData" class="custom-select">
+                    <option :value="7">Last 7 Days</option>
+                    <option :value="30">Last 30 Days</option>
+                    <option :value="90">Last 90 Days</option>
+                    <option :value="365">All Time (365 Days)</option>
+                </select>
+                <button @click="loadData" :disabled="loading" class="custom-btn">
+                    <i class="ri-refresh-line" :class="{ 'ri-spin': loading }"></i> Refresh
+                </button>
             </div>
 
             <!-- Summary Metrics -->
@@ -497,13 +497,94 @@ onBeforeUnmount(() => {
     height: 250px;
 }
 
+.custom-select {
+    padding: 10px 15px;
+    background: rgba(30, 30, 45, 0.8);
+    border: 1px solid rgba(157, 78, 221, 0.4);
+    color: white;
+    border-radius: 8px;
+    outline: none;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    backdrop-filter: blur(5px);
+}
+.custom-select:hover {
+    border-color: #c77dff;
+    box-shadow: 0 0 10px rgba(157, 78, 221, 0.3);
+}
+.custom-select option {
+    background: #1e1e2d;
+    color: white;
+}
+
+.custom-btn {
+    padding: 10px 20px;
+    background: linear-gradient(90deg, #9d4edd, #c77dff);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 15px rgba(157, 78, 221, 0.3);
+}
+.custom-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 20px rgba(157, 78, 221, 0.5);
+}
+.custom-btn:active {
+    transform: translateY(0) scale(0.98);
+}
+.custom-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 /* Simple fade in animation */
 .fade-in {
-    animation: fadeIn 0.5s ease-in-out;
+    animation: fadeIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(15px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes pulseGlow {
+    0% { box-shadow: inset 0 0 10px rgba(199, 125, 255, 0.1), 0 0 10px rgba(199, 125, 255, 0.2); }
+    50% { box-shadow: inset 0 0 15px rgba(199, 125, 255, 0.3), 0 0 25px rgba(199, 125, 255, 0.5); }
+    100% { box-shadow: inset 0 0 10px rgba(199, 125, 255, 0.1), 0 0 10px rgba(199, 125, 255, 0.2); }
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+}
+
+.gradient-text {
+    background: linear-gradient(90deg, #9d4edd, #ff007f, #c77dff, #9d4edd);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 4s linear infinite;
+}
+
+.metric-icon {
+    font-size: 2.8rem;
+    color: #c77dff;
+    background: rgba(199, 125, 255, 0.15);
+    padding: 12px;
+    border-radius: 14px;
+    box-shadow: inset 0 0 10px rgba(199, 125, 255, 0.1), 0 0 10px rgba(199, 125, 255, 0.2);
+    animation: pulseGlow 3s infinite alternate;
 }
 </style>
