@@ -6,13 +6,10 @@
 export async function getTopWorlds(ctx, days = 30, limit = 5) {
     const timeThreshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     
-    // _feed_gps tracks location changes. 
-    // We group by location and count. 
-    // 'location' is usually the world ID or name in VRCX depending on the log type, 
-    // but typically it contains the World Name as a string in standard GPS feed.
+    // gamelog_location tracks the current user's location changes parsed from output logs
     const query = `
         SELECT world_name as worldName, COUNT(*) as visitCount
-        FROM ${ctx.db.corePrefix()}_feed_gps
+        FROM gamelog_location
         WHERE created_at >= @timeThreshold AND world_name IS NOT NULL AND world_name != '' AND location != 'private'
         GROUP BY world_name
         ORDER BY visitCount DESC
@@ -32,13 +29,13 @@ export async function getTopWorlds(ctx, days = 30, limit = 5) {
 export async function getTopAvatars(ctx, days = 30, limit = 5) {
     const timeThreshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
     
-    // _feed_avatar tracks avatar changes
+    // avatar_history tracks the current user's time spent in avatars
     const query = `
-        SELECT avatar_name as avatarName, current_avatar_image_url as imageUrl, COUNT(*) as switchCount
-        FROM ${ctx.db.corePrefix()}_feed_avatar
-        WHERE created_at >= @timeThreshold AND avatar_name IS NOT NULL AND avatar_name != '' AND avatar_name != 'Loading...'
-        GROUP BY avatar_name
-        ORDER BY switchCount DESC
+        SELECT cache_avatar.name as avatarName, cache_avatar.thumbnail_image_url as imageUrl, avatar_history.time as timeSpent
+        FROM ${ctx.db.corePrefix()}_avatar_history as avatar_history
+        JOIN cache_avatar ON avatar_history.avatar_id = cache_avatar.id
+        WHERE avatar_history.created_at >= @timeThreshold AND cache_avatar.name IS NOT NULL AND cache_avatar.name != ''
+        ORDER BY timeSpent DESC
         LIMIT @limit
     `;
     
@@ -46,29 +43,28 @@ export async function getTopAvatars(ctx, days = 30, limit = 5) {
     return rows.map(row => ({
         avatarName: row[0],
         imageUrl: row[1],
-        switchCount: row[2]
+        switchCount: Math.round((row[2] || 0) / 60) // Converting seconds to minutes for display
     }));
 }
 
 /**
  * Gets the top friends the user interacts with (based on online/offline overlap or instance joins).
- * For simplicity, we just look at who was seen online the most frequently or joins the same GPS instances.
- * Actually, VRCX has _feed_online_offline.
  */
 export async function getTopFriends(ctx, days = 30, limit = 5) {
     const timeThreshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const currentUserId = ctx.stores.user.currentUser?.id || '';
     
-    // We count how many times a friend triggered an online/location event
+    // gamelog_join_leave tracks users joining/leaving the instance you are in
     const query = `
         SELECT display_name as displayName, user_id as userId, COUNT(*) as interactionScore
-        FROM ${ctx.db.corePrefix()}_feed_online_offline
-        WHERE created_at >= @timeThreshold
+        FROM gamelog_join_leave
+        WHERE created_at >= @timeThreshold AND display_name != '' AND user_id != @currentUserId
         GROUP BY user_id
         ORDER BY interactionScore DESC
         LIMIT @limit
     `;
     
-    const rows = await ctx.db.query(query, { '@timeThreshold': timeThreshold, '@limit': limit });
+    const rows = await ctx.db.query(query, { '@timeThreshold': timeThreshold, '@limit': limit, '@currentUserId': currentUserId });
     return rows.map(row => ({
         displayName: row[0],
         userId: row[1],
@@ -85,7 +81,7 @@ export async function getActivityHeatmap(ctx, days = 365) {
     // SQLite: substr(created_at, 1, 10) extracts 'YYYY-MM-DD'
     const query = `
         SELECT substr(created_at, 1, 10) as day, COUNT(*) as count
-        FROM ${ctx.db.corePrefix()}_feed_gps
+        FROM gamelog_location
         WHERE created_at >= @timeThreshold
         GROUP BY day
         ORDER BY day ASC
@@ -103,12 +99,13 @@ export async function getActivityHeatmap(ctx, days = 365) {
  */
 export async function getSummaryMetrics(ctx, days = 30) {
     const timeThreshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const currentUserId = ctx.stores.user.currentUser?.id || '';
     
-    const uniqueWorldsQuery = `SELECT COUNT(DISTINCT world_name) FROM ${ctx.db.corePrefix()}_feed_gps WHERE created_at >= @timeThreshold AND world_name IS NOT NULL AND world_name != ''`;
-    const uniqueAvatarsQuery = `SELECT COUNT(DISTINCT avatar_name) FROM ${ctx.db.corePrefix()}_feed_avatar WHERE created_at >= @timeThreshold AND avatar_name IS NOT NULL AND avatar_name != '' AND avatar_name != 'Loading...'`;
-    const interactionsQuery = `SELECT COUNT(*) FROM ${ctx.db.corePrefix()}_feed_online_offline WHERE created_at >= @timeThreshold`;
+    const uniqueWorldsQuery = `SELECT COUNT(DISTINCT world_name) FROM gamelog_location WHERE created_at >= @timeThreshold AND world_name IS NOT NULL AND world_name != ''`;
+    const uniqueAvatarsQuery = `SELECT COUNT(DISTINCT avatar_id) FROM ${ctx.db.corePrefix()}_avatar_history WHERE created_at >= @timeThreshold`;
+    const interactionsQuery = `SELECT COUNT(*) FROM gamelog_join_leave WHERE created_at >= @timeThreshold AND user_id != @currentUserId`;
 
-    const args = { '@timeThreshold': timeThreshold };
+    const args = { '@timeThreshold': timeThreshold, '@currentUserId': currentUserId };
     const [worldsRow] = await ctx.db.query(uniqueWorldsQuery, args);
     const [avatarsRow] = await ctx.db.query(uniqueAvatarsQuery, args);
     const [interactionsRow] = await ctx.db.query(interactionsQuery, args);

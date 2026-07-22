@@ -80,7 +80,7 @@
                         <img :src="avatar.imageUrl || 'assets/images/default-avatar.png'" class="avatar-img" @error="handleImageError"/>
                         <div class="avatar-info">
                             <span class="name">{{ avatar.avatarName || 'Unknown Avatar' }}</span>
-                            <span class="stat">{{ avatar.switchCount }} uses</span>
+                            <span class="stat">{{ avatar.switchCount }} minutes used</span>
                         </div>
                     </div>
                     <div v-if="!topAvatars.length" class="empty-state">No avatar data found.</div>
