@@ -114,7 +114,9 @@
         </table>
         </div>
 
-        <LastInstanceSection v-if="view === 'instances'" />
+        <!-- v-show (not v-if) so the section keeps running in the background
+             for its 5-minute occupancy checks -->
+        <LastInstanceSection v-show="view === 'instances'" :active="view === 'instances'" />
     </div>
 </template>
 

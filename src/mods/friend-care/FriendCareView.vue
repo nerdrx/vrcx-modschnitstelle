@@ -25,6 +25,13 @@
             <button class="fc-tool-btn" title="Neu laden" @click="refresh">↻</button>
             <button class="fc-tool-btn" title="Sichtbare Liste als CSV exportieren" @click="exportCsv">CSV</button>
             <button
+                class="fc-tool-btn"
+                :class="{ 'fc-tool-btn--on': showSettings }"
+                title="Farben und Zeiträume einstellen"
+                @click="showSettings = !showSettings">
+                ⚙ Einstellungen
+            </button>
+            <button
                 v-if="tab === 'seen' && missingWorldCount > 0 && !resolving"
                 class="fc-tool-btn"
                 title="Fehlende Weltnamen einzeln über die VRChat-API laden (1 Anfrage / 1,5 s, kein Rate-Limit-Risiko)"
@@ -55,6 +62,57 @@
                 <span :style="{ background: c.color }" class="fc-dot"></span>
                 {{ c.label }} ({{ countFor(c.key) }})
             </button>
+        </div>
+
+        <div v-if="showSettings" class="fc-settings">
+            <template v-if="tab === 'seen'">
+                <div class="fc-settings-row">
+                    <strong>Zeiträume (Monate):</strong>
+                    <label>Frisch bis
+                        <input v-model.number="settings.seen.thresholds.fresh" type="number" min="0.1" step="0.5" class="fc-num" />
+                    </label>
+                    <label>Grenzwertig ab
+                        <input v-model.number="settings.seen.thresholds.borderline" type="number" min="0.1" step="0.5" class="fc-num" />
+                    </label>
+                    <label>Überfällig ab
+                        <input v-model.number="settings.seen.thresholds.overdue" type="number" min="0.1" step="0.5" class="fc-num" />
+                    </label>
+                </div>
+                <div class="fc-settings-row">
+                    <strong>Farben:</strong>
+                    <label>Frisch <input v-model="settings.seen.colors.green" type="color" class="fc-color" /></label>
+                    <label>Okay <input v-model="settings.seen.colors.neutral" type="color" class="fc-color" /></label>
+                    <label>Grenzwertig <input v-model="settings.seen.colors.orange" type="color" class="fc-color" /></label>
+                    <label>Überfällig <input v-model="settings.seen.colors.red" type="color" class="fc-color" /></label>
+                    <label>Nie gesehen <input v-model="settings.seen.colors.never" type="color" class="fc-color" /></label>
+                </div>
+            </template>
+            <template v-else>
+                <div class="fc-settings-row">
+                    <strong>Zeiträume (Monate):</strong>
+                    <label>Inaktiv ab
+                        <input v-model.number="settings.inactivity.thresholds.quiet" type="number" min="0.1" step="0.5" class="fc-num" />
+                    </label>
+                    <label>Lange weg ab
+                        <input v-model.number="settings.inactivity.thresholds.longGone" type="number" min="0.1" step="0.5" class="fc-num" />
+                    </label>
+                    <label>Verschollen ab
+                        <input v-model.number="settings.inactivity.thresholds.lost" type="number" min="0.1" step="0.5" class="fc-num" />
+                    </label>
+                </div>
+                <div class="fc-settings-row">
+                    <strong>Farben:</strong>
+                    <label>Aktiv <input v-model="settings.inactivity.colors.active" type="color" class="fc-color" /></label>
+                    <label>Inaktiv <input v-model="settings.inactivity.colors.green" type="color" class="fc-color" /></label>
+                    <label>Lange weg <input v-model="settings.inactivity.colors.orange" type="color" class="fc-color" /></label>
+                    <label>Verschollen <input v-model="settings.inactivity.colors.red" type="color" class="fc-color" /></label>
+                    <label>Keine Daten <input v-model="settings.inactivity.colors.nodata" type="color" class="fc-color" /></label>
+                </div>
+            </template>
+            <div class="fc-settings-row">
+                <button class="fc-tool-btn" @click="applySettings">Speichern &amp; anwenden</button>
+                <button class="fc-tool-btn" @click="resetSettings">Auf Standard zurücksetzen</button>
+            </div>
         </div>
 
         <div class="fc-scroll">
@@ -135,24 +193,65 @@
         seenCategory
     } from './engine';
     import { getLastFeedActivity, getLastSeenRows, getWorldNames } from './db';
+    import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings';
     import { getCtx } from './runtime';
 
     const { t } = useI18n();
 
-    const SEEN_META = {
-        green: { color: '#2ECC71', label: 'Frisch', hint: 'unter 1 Monat' },
-        neutral: { color: '#95A5A6', label: 'Okay', hint: '1–3 Monate' },
-        orange: { color: '#E67E22', label: 'Grenzwertig', hint: 'ab 3 Monaten' },
-        red: { color: '#E74C3C', label: 'Überfällig', hint: 'ab 6 Monaten' },
-        never: { color: '#7F8C8D', label: 'Nie gesehen', hint: 'kein gemeinsamer Instanz-Besuch protokolliert' }
+    const settings = ref(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+    const showSettings = ref(false);
+
+    const SEEN_LABELS = {
+        green: 'Frisch',
+        neutral: 'Okay',
+        orange: 'Grenzwertig',
+        red: 'Überfällig',
+        never: 'Nie gesehen'
     };
-    const INACT_META = {
-        active: { color: '#95A5A6', label: 'Aktiv', hint: 'unter 6 Monaten' },
-        green: { color: '#2ECC71', label: 'Ruhig', hint: 'ab 6 Monaten inaktiv' },
-        orange: { color: '#E67E22', label: 'Lange weg', hint: 'ab 9 Monaten inaktiv' },
-        red: { color: '#E74C3C', label: 'Verschollen', hint: 'ab 12 Monaten inaktiv' },
-        nodata: { color: '#7F8C8D', label: 'Keine Daten', hint: 'weder API- noch Feed-Daten vorhanden' }
+    const INACT_LABELS = {
+        active: 'Aktiv',
+        green: 'Inaktiv',
+        orange: 'Lange weg',
+        red: 'Verschollen',
+        nodata: 'Keine Daten'
     };
+
+    const seenMeta = computed(() => {
+        const { colors, thresholds } = settings.value.seen;
+        return {
+            green: { color: colors.green, label: SEEN_LABELS.green, hint: `unter ${thresholds.fresh} Mon.` },
+            neutral: {
+                color: colors.neutral,
+                label: SEEN_LABELS.neutral,
+                hint: `${thresholds.fresh}–${thresholds.borderline} Mon.`
+            },
+            orange: { color: colors.orange, label: SEEN_LABELS.orange, hint: `ab ${thresholds.borderline} Mon.` },
+            red: { color: colors.red, label: SEEN_LABELS.red, hint: `ab ${thresholds.overdue} Mon.` },
+            never: {
+                color: colors.never,
+                label: SEEN_LABELS.never,
+                hint: 'kein gemeinsamer Instanz-Besuch protokolliert'
+            }
+        };
+    });
+    const inactMeta = computed(() => {
+        const { colors, thresholds } = settings.value.inactivity;
+        return {
+            active: { color: colors.active, label: INACT_LABELS.active, hint: `unter ${thresholds.quiet} Mon.` },
+            green: { color: colors.green, label: INACT_LABELS.green, hint: `ab ${thresholds.quiet} Mon. inaktiv` },
+            orange: {
+                color: colors.orange,
+                label: INACT_LABELS.orange,
+                hint: `ab ${thresholds.longGone} Mon. inaktiv`
+            },
+            red: { color: colors.red, label: INACT_LABELS.red, hint: `ab ${thresholds.lost} Mon. inaktiv` },
+            nodata: {
+                color: colors.nodata,
+                label: INACT_LABELS.nodata,
+                hint: 'weder API- noch Feed-Daten vorhanden'
+            }
+        };
+    });
 
     const tab = ref('seen');
     const loading = ref(false);
@@ -168,7 +267,7 @@
     const stopResolving = ref(false);
 
     const rows = computed(() => (tab.value === 'seen' ? seenRows.value : inactRows.value));
-    const metaMap = computed(() => (tab.value === 'seen' ? SEEN_META : INACT_META));
+    const metaMap = computed(() => (tab.value === 'seen' ? seenMeta.value : inactMeta.value));
     const categories = computed(() =>
         Object.entries(metaMap.value).map(([key, m]) => ({ key, ...m }))
     );
@@ -301,6 +400,7 @@
         const ctx = getCtx();
         loading.value = true;
         try {
+            settings.value = await loadSettings(ctx);
             const nowMs = Date.now();
             const friendStore = ctx.stores.friends;
             const friends = [];
@@ -334,7 +434,7 @@
                     displayName: friend.displayName,
                     tsMs,
                     days,
-                    category: seenCategory(days),
+                    category: seenCategory(days, settings.value.seen.thresholds),
                     location: hit?.location || ''
                 };
             });
@@ -355,7 +455,7 @@
                     displayName: friend.displayName,
                     tsMs,
                     days,
-                    category: inactivityCategory(days),
+                    category: inactivityCategory(days, settings.value.inactivity.thresholds),
                     source: realSource || 'none'
                 };
             });
@@ -397,6 +497,21 @@
     function setTab(next) {
         tab.value = next;
         filterCat.value = null;
+    }
+
+    async function applySettings() {
+        const ctx = getCtx();
+        try {
+            await saveSettings(ctx, JSON.parse(JSON.stringify(settings.value)));
+        } catch (err) {
+            ctx.error('settings save failed:', err);
+        }
+        await refresh();
+    }
+
+    async function resetSettings() {
+        settings.value = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+        await applySettings();
     }
 
     function setSort(key) {
@@ -476,6 +591,50 @@
     }
     .fc-tool-btn:hover {
         color: var(--foreground, #fafafa);
+    }
+    .fc-tool-btn--on {
+        background: var(--accent, #3f3f46);
+        color: var(--foreground, #fafafa);
+    }
+    .fc-settings {
+        border: 1px solid var(--border, #4443);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 12px;
+    }
+    .fc-settings-row {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .fc-settings-row label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted-foreground, #9f9fa5);
+    }
+    .fc-num {
+        width: 60px;
+        padding: 2px 6px;
+        border: 1px solid var(--border, #4443);
+        border-radius: 5px;
+        background: transparent;
+        color: inherit;
+        font-size: 12px;
+    }
+    .fc-color {
+        width: 28px;
+        height: 20px;
+        padding: 0;
+        border: 1px solid var(--border, #4443);
+        border-radius: 4px;
+        background: transparent;
+        cursor: pointer;
     }
     .fc-scroll {
         flex: 1 1 auto;

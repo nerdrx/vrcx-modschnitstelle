@@ -6,8 +6,8 @@
             <button
                 class="st-tool-btn"
                 :disabled="checking"
-                title="Belegung aller angezeigten Instanzen prüfen (2 Anfragen / s)"
-                @click="checkOccupancy">
+                title="Belegung der angezeigten (gefilterten) Instanzen prüfen (0,5 s pro Eintrag)"
+                @click="checkOccupancy()">
                 Belegung prüfen
             </button>
             <span v-if="checking" style="opacity: 0.7">
@@ -42,11 +42,21 @@
             <table class="st-table" style="min-width: 720px">
                 <thead>
                     <tr>
-                        <th style="text-align: left; min-width: 160px">Friend</th>
-                        <th style="text-align: left">Status</th>
-                        <th style="text-align: left">Welt</th>
-                        <th style="text-align: left">Dort seit</th>
-                        <th style="text-align: right">Belegung</th>
+                        <th class="st-th-sort" style="text-align: left; min-width: 160px" @click="setSort('name')">
+                            Friend<span v-if="sortBy === 'name'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
+                        </th>
+                        <th class="st-th-sort" style="text-align: left" @click="setSort('status')">
+                            Status<span v-if="sortBy === 'status'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
+                        </th>
+                        <th class="st-th-sort" style="text-align: left" @click="setSort('world')">
+                            Welt<span v-if="sortBy === 'world'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
+                        </th>
+                        <th class="st-th-sort" style="text-align: left" @click="setSort('since')">
+                            Dort seit<span v-if="sortBy === 'since'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
+                        </th>
+                        <th class="st-th-sort" style="text-align: right" @click="setSort('occ')">
+                            Belegung<span v-if="sortBy === 'occ'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
+                        </th>
                         <th style="text-align: right"></th>
                     </tr>
                 </thead>
@@ -101,15 +111,16 @@
 
         <div style="margin-top: 12px; font-size: 11px; opacity: 0.6; max-width: 720px">
             Merkt sich pro Freund die letzte bekannte Instanz (auch nach Statuswechsel auf Orange/Rot oder
-            „Private"). „Belegung prüfen" fragt die Instanzen einzeln mit 0,5 s Abstand ab — Einträge mit
-            bestätigter Belegung 0 werden automatisch entfernt. Läuft zusätzlich automatisch alle 5 Minuten,
-            solange dieser Tab geöffnet ist.
+            „Private"). Belegung wird automatisch geprüft: beim Öffnen des Tabs einmal komplett (0,5 s pro
+            Eintrag), danach jede Minute solange der Tab offen ist — dabei nur die sichtbaren/gefilterten
+            Einträge. Im Hintergrund alle 5 Minuten über alle Einträge (gedrosselt, 2 s pro Eintrag).
+            Einträge mit bestätigter Belegung 0 werden automatisch entfernt.
         </div>
     </div>
 </template>
 
 <script setup>
-    import { computed, onActivated, onBeforeUnmount, onMounted, ref } from 'vue';
+    import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 
     import {
         dismissInstance,
@@ -135,9 +146,17 @@
     ];
     const statusFilters = STATUS_FILTERS;
 
+    const props = defineProps({
+        // true while the "Letzte Instanz" sub-tab is the visible one
+        active: { type: Boolean, default: true }
+    });
+
     const loading = ref(false);
     const search = ref('');
     const selectedStatuses = ref(new Set());
+    const sortBy = ref('since');
+    const sortDir = ref(-1); // since: -1 = neueste zuerst
+    const routeActive = ref(true);
     const entries = ref(new Map()); // userId -> {userId, displayName, location, worldName, tsMs}
     const occ = ref(new Map()); // location -> {users, capacity, fetchedAt} | {error:true}
     const checking = ref(false);
@@ -238,6 +257,22 @@
         );
     }
 
+    const STATUS_ORDER = { 'join me': 0, active: 1, 'ask me': 2, busy: 3 };
+
+    function setSort(key) {
+        if (sortBy.value === key) {
+            sortDir.value = -sortDir.value;
+        } else {
+            sortBy.value = key;
+            sortDir.value = key === 'name' || key === 'world' || key === 'status' ? 1 : -1;
+        }
+    }
+
+    function occUsers(entry) {
+        const o = occ.value.get(entry.location);
+        return o && !o.error && typeof o.users === 'number' ? o.users : -1;
+    }
+
     const visibleEntries = computed(() => {
         const q = search.value.trim().toLowerCase();
         let list = baseEntries.value;
@@ -251,7 +286,28 @@
                     (entry.worldName || '').toLowerCase().includes(q)
             );
         }
-        return [...list].sort((a, b) => b.tsMs - a.tsMs);
+        const dir = sortDir.value;
+        return [...list].sort((a, b) => {
+            switch (sortBy.value) {
+                case 'name':
+                    return a.displayName.localeCompare(b.displayName) * dir;
+                case 'status':
+                    return (
+                        ((STATUS_ORDER[statusText(a.userId)] ?? 9) -
+                            (STATUS_ORDER[statusText(b.userId)] ?? 9)) *
+                            dir || a.displayName.localeCompare(b.displayName)
+                    );
+                case 'world':
+                    return (
+                        (a.worldName || a.location).localeCompare(b.worldName || b.location) * dir ||
+                        b.tsMs - a.tsMs
+                    );
+                case 'occ':
+                    return (occUsers(a) - occUsers(b)) * dir || b.tsMs - a.tsMs;
+                default: // 'since'
+                    return (a.tsMs - b.tsMs) * dir;
+            }
+        });
     });
 
     function upsertEntry({ userId, displayName, location, worldName, tsMs }) {
@@ -319,16 +375,18 @@
     }
 
     /**
-     * Query occupancy for all visible instances, one API call per 2 s.
-     * Entries whose instance is confirmed empty (0 users) are auto-removed
-     * (persisted as dismissed).
+     * Query occupancy one instance at a time, throttled by delayMs.
+     * Foreground cycles only touch the currently visible (filtered) entries;
+     * background cycles cover everything. Entries whose instance is confirmed
+     * empty (0 users) are auto-removed (persisted as dismissed).
      */
-    async function checkOccupancy() {
+    async function checkOccupancy({ delayMs = 500, onlyVisible = true } = {}) {
         if (checking.value) {
             return;
         }
         const ctx = getCtx();
-        const locations = [...new Set(visibleEntries.value.map((entry) => entry.location))];
+        const source = onlyVisible ? visibleEntries.value : baseEntries.value;
+        const locations = [...new Set(source.map((entry) => entry.location))];
         if (locations.length === 0) {
             return;
         }
@@ -370,7 +428,7 @@
                     occ.value = next;
                 }
                 if (i < locations.length - 1) {
-                    await new Promise((resolve) => setTimeout(resolve, 500));
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
                 }
             }
             lastCheckedAt.value = new Date().toLocaleTimeString('de-AT', {
@@ -406,16 +464,44 @@
         );
     }
 
-    onMounted(() => {
-        load();
-        installLiveUpdates();
-        autoTimer = setInterval(() => {
-            if (!checking.value) {
-                checkOccupancy();
-            }
-        }, 5 * 60 * 1000);
+    const foreground = computed(() => props.active && routeActive.value);
+
+    // opening the sub-tab → one immediate full cycle at normal speed
+    watch(foreground, (now) => {
+        if (now && !checking.value && entries.value.size > 0) {
+            checkOccupancy({ delayMs: 500, onlyVisible: true });
+        }
     });
-    onActivated(load);
+
+    onMounted(() => {
+        load().then(() => {
+            if (foreground.value && !checking.value) {
+                checkOccupancy({ delayMs: 500, onlyVisible: true });
+            }
+        });
+        installLiveUpdates();
+        let minuteTicks = 0;
+        autoTimer = setInterval(() => {
+            minuteTicks++;
+            if (checking.value) {
+                return;
+            }
+            if (foreground.value) {
+                // tab open: cycle every minute at normal speed, visible entries only
+                checkOccupancy({ delayMs: 500, onlyVisible: true });
+            } else if (minuteTicks % 5 === 0) {
+                // background: every 5 minutes, slower, all entries
+                checkOccupancy({ delayMs: 2000, onlyVisible: false });
+            }
+        }, 60 * 1000);
+    });
+    onActivated(() => {
+        routeActive.value = true;
+        load();
+    });
+    onDeactivated(() => {
+        routeActive.value = false;
+    });
     onBeforeUnmount(() => {
         disposed = true;
         stopChecking.value = true;
@@ -499,6 +585,15 @@
     .st-table td {
         padding: 6px 8px;
         border-bottom: 1px solid var(--border, #4442);
+    }
+    .st-th-sort {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+    }
+    .st-sort-arrow {
+        font-size: 9px;
+        margin-left: 3px;
     }
     .st-loc {
         max-width: 320px;

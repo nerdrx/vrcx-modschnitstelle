@@ -15,38 +15,45 @@ export const DAYS_PER_MONTH = 30.44; // mean month length
 export const SEEN_CATEGORIES = ['green', 'neutral', 'orange', 'red', 'never'];
 export const INACTIVITY_CATEGORIES = ['active', 'green', 'orange', 'red', 'nodata'];
 
-/** Tab 1: last time in the same instance. */
-export function seenCategory(days) {
+// Thresholds in months; user-configurable via the settings panel.
+export const DEFAULT_SEEN_THRESHOLDS = { fresh: 1, borderline: 3, overdue: 6 };
+export const DEFAULT_INACTIVITY_THRESHOLDS = { quiet: 6, longGone: 9, lost: 12 };
+
+/**
+ * Tab 1: last time in the same instance.
+ * Category keys are stable; labels/colors are presentation concerns.
+ */
+export function seenCategory(days, t = DEFAULT_SEEN_THRESHOLDS) {
     if (days == null) {
         return 'never';
     }
-    if (days < 1 * DAYS_PER_MONTH) {
-        return 'green';
+    if (days < t.fresh * DAYS_PER_MONTH) {
+        return 'green'; // "Frisch"
     }
-    if (days >= 6 * DAYS_PER_MONTH) {
-        return 'red';
+    if (days >= t.overdue * DAYS_PER_MONTH) {
+        return 'red'; // "Überfällig"
     }
-    if (days >= 3 * DAYS_PER_MONTH) {
-        return 'orange';
+    if (days >= t.borderline * DAYS_PER_MONTH) {
+        return 'orange'; // "Grenzwertig"
     }
-    return 'neutral'; // 1–3 months
+    return 'neutral'; // "Okay"
 }
 
 /** Tab 2: last VRChat activity (API last_activity/last_login). */
-export function inactivityCategory(days) {
+export function inactivityCategory(days, t = DEFAULT_INACTIVITY_THRESHOLDS) {
     if (days == null) {
         return 'nodata';
     }
-    if (days >= 12 * DAYS_PER_MONTH) {
-        return 'red';
+    if (days >= t.lost * DAYS_PER_MONTH) {
+        return 'red'; // "Verschollen"
     }
-    if (days >= 9 * DAYS_PER_MONTH) {
-        return 'orange';
+    if (days >= t.longGone * DAYS_PER_MONTH) {
+        return 'orange'; // "Lange weg"
     }
-    if (days >= 6 * DAYS_PER_MONTH) {
-        return 'green';
+    if (days >= t.quiet * DAYS_PER_MONTH) {
+        return 'green'; // "Inaktiv"
     }
-    return 'active'; // under 6 months
+    return 'active'; // "Aktiv"
 }
 
 export function daysBetween(tsMs, nowMs) {
