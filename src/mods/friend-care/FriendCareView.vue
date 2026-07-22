@@ -1,5 +1,7 @@
 <template>
-    <div class="x-container" style="padding: 16px; overflow-y: auto; height: 100%">
+    <div
+        class="x-container"
+        style="padding: 16px; height: 100%; display: flex; flex-direction: column; overflow: hidden">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap">
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
                 {{ t('mods.friendcare.nav.mod-friend-care') }}
@@ -476,7 +478,15 @@
         color: var(--foreground, #fafafa);
     }
     .fc-scroll {
-        overflow-x: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+    .fc-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--background, #18181b);
     }
     .fc-search {
         padding: 4px 10px;
