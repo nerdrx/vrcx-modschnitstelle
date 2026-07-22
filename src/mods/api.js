@@ -15,6 +15,8 @@ import { watch } from 'vue';
 
 import { i18n } from '../plugins/i18n';
 import { navDefinitions } from '../shared/constants/ui';
+import { getWorldName } from '../shared/utils/world';
+import { showWorldDialog } from '../coordinators/worldCoordinator';
 import { watchState } from '../services/watchState';
 import { database, dbVars } from '../services/database';
 import sqliteService from '../services/sqlite';
@@ -218,8 +220,32 @@ export function createModContext(mod, host) {
             }
         },
 
+        // ------------------------------------------------------------- api --
+        /**
+         * Selected VRChat-API helpers, routed through VRCX's own request
+         * layer (queueing/caching). Use sparingly — VRChat rate-limits.
+         */
+        api: {
+            /**
+             * Resolve a world/instance tag to the world name via the API.
+             * @param {string} location e.g. 'wrld_xxx' or 'wrld_xxx:1234~...'
+             * @returns {Promise<string>} '' when not resolvable
+             */
+            getWorldName(location) {
+                return getWorldName(location);
+            }
+        },
+
         // -------------------------------------------------------------- ui --
         ui: {
+            /**
+             * Open VRCX's native world dialog for a location tag
+             * ('wrld_xxx' or full instance tag).
+             */
+            showWorldDialog(location) {
+                showWorldDialog(location);
+            },
+
             /**
              * Register a view reachable from the nav menu.
              * @param {object} def

@@ -22,6 +22,17 @@
             <span style="font-size: 12px; opacity: 0.65">{{ visibleRows.length }} / {{ rows.length }}</span>
             <button class="fc-tool-btn" title="Neu laden" @click="refresh">↻</button>
             <button class="fc-tool-btn" title="Sichtbare Liste als CSV exportieren" @click="exportCsv">CSV</button>
+            <button
+                v-if="tab === 'seen' && missingWorldCount > 0 && !resolving"
+                class="fc-tool-btn"
+                title="Fehlende Weltnamen einzeln über die VRChat-API laden (1 Anfrage / 1,5 s, kein Rate-Limit-Risiko)"
+                @click="resolveMissingWorlds">
+                Namen laden ({{ missingWorldCount }})
+            </button>
+            <span v-if="resolving" style="font-size: 12px; opacity: 0.7">
+                lade Weltnamen… {{ resolveProgress }}
+                <button class="fc-tool-btn" style="margin-left: 4px" @click="stopResolving = true">Stopp</button>
+            </span>
             <span v-if="loading" style="font-size: 12px; opacity: 0.6">…</span>
         </div>
 
@@ -78,7 +89,16 @@
                             {{ catMeta(row.category).label }}
                         </span>
                     </td>
-                    <td v-if="tab === 'seen'" class="fc-loc">{{ row.location || '—' }}</td>
+                    <td v-if="tab === 'seen'" class="fc-loc">
+                        <a
+                            v-if="row.location"
+                            class="fc-world-link"
+                            :title="row.location + ' — klicken für World-Dialog'"
+                            @click.stop="openWorld(row.location)">
+                            {{ worldLabel(row.location) }}
+                        </a>
+                        <span v-else>—</span>
+                    </td>
                     <td v-else style="opacity: 0.75">{{ sourceLabel(row.source) }}</td>
                 </tr>
                 <tr v-if="!loading && visibleRows.length === 0">
@@ -106,7 +126,7 @@
         pickLastActive,
         seenCategory
     } from './engine';
-    import { getLastFeedActivity, getLastSeenRows } from './db';
+    import { getLastFeedActivity, getLastSeenRows, getWorldNames } from './db';
     import { getCtx } from './runtime';
 
     const { t } = useI18n();
@@ -134,6 +154,10 @@
     const sortDir = ref(-1); // date: -1 = am längsten her zuerst
     const seenRows = ref([]);
     const inactRows = ref([]);
+    const worldNames = ref(new Map()); // worldId -> name (DB first, API on demand)
+    const resolving = ref(false);
+    const resolveProgress = ref('');
+    const stopResolving = ref(false);
 
     const rows = computed(() => (tab.value === 'seen' ? seenRows.value : inactRows.value));
     const metaMap = computed(() => (tab.value === 'seen' ? SEEN_META : INACT_META));
@@ -151,6 +175,79 @@
 
     function countFor(key) {
         return rows.value.reduce((n, row) => (row.category === key ? n + 1 : n), 0);
+    }
+
+    function worldIdOf(location) {
+        return (location || '').split(':')[0];
+    }
+
+    function worldLabel(location) {
+        return worldNames.value.get(worldIdOf(location)) || location;
+    }
+
+    function openWorld(location) {
+        try {
+            getCtx().ui.showWorldDialog(location);
+        } catch (err) {
+            getCtx().error('showWorldDialog failed:', err);
+        }
+    }
+
+    const missingWorldCount = computed(() => {
+        const missing = new Set();
+        for (const row of seenRows.value) {
+            const id = worldIdOf(row.location);
+            if (id && !worldNames.value.has(id)) {
+                missing.add(id);
+            }
+        }
+        return missing.size;
+    });
+
+    /**
+     * Resolve missing world names one by one through VRCX's request layer,
+     * throttled to one API call per 1.5 s so we never hit rate limits.
+     */
+    async function resolveMissingWorlds() {
+        const ctx = getCtx();
+        const missing = [];
+        const seen = new Set();
+        for (const row of seenRows.value) {
+            const id = worldIdOf(row.location);
+            if (id && !worldNames.value.has(id) && !seen.has(id)) {
+                seen.add(id);
+                missing.push(id);
+            }
+        }
+        if (missing.length === 0) {
+            return;
+        }
+        resolving.value = true;
+        stopResolving.value = false;
+        try {
+            for (let i = 0; i < missing.length; i++) {
+                if (stopResolving.value) {
+                    break;
+                }
+                resolveProgress.value = `${i + 1}/${missing.length}`;
+                try {
+                    const name = await ctx.api.getWorldName(missing[i]);
+                    if (name) {
+                        const next = new Map(worldNames.value);
+                        next.set(missing[i], name);
+                        worldNames.value = next;
+                    }
+                } catch (err) {
+                    ctx.warn('world name lookup failed:', missing[i], err);
+                }
+                if (i < missing.length - 1) {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                }
+            }
+        } finally {
+            resolving.value = false;
+            resolveProgress.value = '';
+        }
     }
 
     function sourceLabel(source) {
@@ -200,6 +297,16 @@
             }
 
             // ---- Tab 1: last seen in shared instance -----------------------
+            // world names known from own visits (no API calls needed)
+            const dbNames = await getWorldNames(ctx);
+            // keep names already resolved via API on top of the DB set
+            for (const [id, name] of worldNames.value) {
+                if (!dbNames.has(id)) {
+                    dbNames.set(id, name);
+                }
+            }
+            worldNames.value = dbNames;
+
             const gamelogRows = await getLastSeenRows(ctx);
             const seenHits = matchLastSeen(friends, gamelogRows);
             seenRows.value = friends.map((friend) => {
@@ -288,21 +395,24 @@
     function exportCsv() {
         const header =
             tab.value === 'seen'
-                ? 'user_id;display_name;last_seen;days_ago;category;location'
+                ? 'user_id;display_name;last_seen;days_ago;category;location;world_name'
                 : 'user_id;display_name;last_active;days_ago;category;source';
         const esc = (v) => `"${String(v ?? '').replaceAll('"', '""')}"`;
-        const lines = visibleRows.value.map((row) =>
-            [
+        const lines = visibleRows.value.map((row) => {
+            const cols = [
                 row.userId,
                 row.displayName,
                 row.tsMs ? new Date(row.tsMs).toJSON() : '',
                 row.days != null ? row.days.toFixed(1) : '',
-                row.category,
-                tab.value === 'seen' ? row.location : row.source
-            ]
-                .map(esc)
-                .join(';')
-        );
+                row.category
+            ];
+            if (tab.value === 'seen') {
+                cols.push(row.location, worldNames.value.get(worldIdOf(row.location)) || '');
+            } else {
+                cols.push(row.source);
+            }
+            return cols.map(esc).join(';');
+        });
         const blob = new Blob(['﻿' + [header, ...lines].join('\r\n')], {
             type: 'text/csv;charset=utf-8'
         });
@@ -399,5 +509,13 @@
         white-space: nowrap;
         opacity: 0.75;
         font-size: 12px;
+    }
+    .fc-world-link {
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .fc-world-link:hover {
+        color: var(--primary, #409eff);
+        text-decoration: underline;
     }
 </style>
