@@ -8,5 +8,6 @@ import playtimeDashboard from './playtime-dashboard';
 import profileArchiver from './profile-archiver';
 import worldHopper from './world-hopper';
 import orbitGraph from './orbit-graph';
+import globalDb from './global-db';
 
-export const mods = [statusTracker, friendCare, playtimeDashboard, profileArchiver, worldHopper, orbitGraph];
+export const mods = [statusTracker, friendCare, playtimeDashboard, profileArchiver, worldHopper, orbitGraph, globalDb];
