@@ -4,8 +4,8 @@
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
                 {{ t('mods.globaldb.nav.mod-global-db') }}
             </h2>
-            <span class="gdb-badge" :class="settings.enabled && settings.token ? 'gdb-badge--on' : ''">
-                {{ settings.enabled && settings.token ? 'Sync aktiv' : 'Nicht verbunden' }}
+            <span class="gdb-badge" :class="settings.token && connected ? 'gdb-badge--on' : ''">
+                {{ settings.token && connected ? 'Verbunden' : 'Nicht verbunden' }}
             </span>
             <span v-if="busy && !init.running" style="font-size: 12px; opacity: 0.7">{{ progress }}</span>
         </div>
@@ -181,6 +181,7 @@
     const counts = ref({});
     const members = ref([]);
     const log = ref([]);
+    const connected = ref(false); // abgeleitet aus erfolgreichen API-Calls
     const eligible = ref(null); // null = checking
     const isMember = ref(false); // Mitglied ohne lokalen Token (Zweit-PC)
     const joinError = ref('');
@@ -204,6 +205,17 @@
         }
         lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
         counts.value = await poolCounts(ctx);
+        if (settings.token) {
+            // Stiller Members-Fetch: füllt Mitgliederliste + Verbunden-Badge.
+            apiFetch(settings, 'v1/members')
+                .then((data) => {
+                    members.value = data.members;
+                    connected.value = true;
+                })
+                .catch(() => {
+                    connected.value = false;
+                });
+        }
         if (!settings.token) {
             eligible.value = null;
             isMember.value = false;
@@ -279,6 +291,7 @@
                 { batch: 5000, throttleMs: 0, gate }
             );
             members.value = result.members || [];
+            connected.value = true;
             counts.value = await poolCounts(ctx);
             lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
             pushLog(`Erst-Sync fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen.`);
@@ -297,6 +310,7 @@
             settings.enabled = true;
             await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
             await apiFetch(settings, 'v1/members'); // Token validieren
+            connected.value = true;
             manualToken.value = '';
             pushLog('Token übernommen.');
             restartTimer(ctx, settings.intervalMin);
@@ -324,8 +338,10 @@
         try {
             const data = await apiFetch(settings, 'v1/members');
             members.value = data.members;
+            connected.value = true;
             pushLog(`Verbunden — ${data.members.length} Mitglied(er) im Pool.`);
         } catch (err) {
+            connected.value = false;
             pushLog('Fehler: ' + (err.message || err));
         } finally {
             busy.value = false;
@@ -339,10 +355,12 @@
             await saveSettings();
             const result = await fullSync(ctx, settings, pushLog);
             members.value = result.members || [];
+            connected.value = true;
             counts.value = await poolCounts(ctx);
             lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
             pushLog(`Fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen, ${result.filtered} gefiltert.`);
         } catch (err) {
+            connected.value = false;
             pushLog('Sync-Fehler: ' + (err.message || err));
         } finally {
             busy.value = false;
@@ -360,6 +378,7 @@
             await clearPool(ctx);
             settings.enabled = false;
             settings.token = '';
+            connected.value = false;
             tokenVisible.value = false;
             await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
             counts.value = await poolCounts(ctx);
