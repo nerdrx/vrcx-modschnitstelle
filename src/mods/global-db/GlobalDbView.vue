@@ -146,6 +146,10 @@
                         </div>
                         <div class="gdb-row">
                             <button class="gdb-btn gdb-btn--primary" :disabled="busy" @click="saveSettings">Speichern</button>
+                            <button class="gdb-btn" :disabled="busy" @click="forceReupload"
+                                title="Setzt alle Upload-Cursor zurück und lädt die komplette Historie erneut hoch (Server dedupliziert)">
+                                Re-Upload erzwingen
+                            </button>
                         </div>
                     </details>
                 </div>
@@ -159,7 +163,7 @@
     import { useI18n } from 'vue-i18n';
 
     import { kvGet, kvSet, poolCounts, clearPool } from './db';
-    import { DEFAULT_SERVER, apiFetch, fullSync } from './sync';
+    import { DEFAULT_SERVER, apiFetch, fullSync, resetUploadCursors } from './sync';
     import { checkEligible, joinPool, uploadFriendHashes } from './join';
     import { ensureChatReady, restartTimer, startChatIfConfigured } from './index';
     import { getCtx } from './runtime';
@@ -334,6 +338,16 @@
         }
     }
 
+    async function forceReupload() {
+        if (!window.confirm('Alle Upload-Cursor zurücksetzen und komplette Historie erneut hochladen?')) {
+            return;
+        }
+        const ctx = getCtx();
+        await resetUploadCursors(ctx);
+        pushLog('Cursor zurückgesetzt — starte vollen Re-Upload.');
+        await syncNow();
+    }
+
     async function testNoty() {
         const ctx = getCtx();
         await ctx.ui.notify({
@@ -410,6 +424,7 @@
             tokenVisible.value = false;
             await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
             await kvSet(ctx, 'first_sync_done', false);
+            await resetUploadCursors(ctx); // Neubeitritt startet wirklich frisch
             startChatIfConfigured(ctx).catch(() => {}); // stoppt Chat + VR-Panel
             counts.value = await poolCounts(ctx);
             members.value = [];

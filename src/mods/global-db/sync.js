@@ -122,6 +122,18 @@ async function backfillOnNewMembers(ctx, members, onProgress) {
     await kvSet(ctx, 'known_members', diff.ids);
 }
 
+/**
+ * Setzt alle Upload-Cursor zurück => nächster Sync lädt die komplette
+ * Historie erneut hoch (Server dedupliziert, idempotent). Auch bei
+ * Pool-Austritt nötig, damit ein Neubeitritt wirklich frisch startet.
+ */
+export async function resetUploadCursors(ctx) {
+    for (const key of Object.keys(UPLOAD)) {
+        await kvSet(ctx, `up_cursor_${key}`, '');
+    }
+    await kvSet(ctx, 'known_members', null);
+}
+
 // ---------------------------------------------------------------- upload ---
 // opts: { batch, throttleMs, gate } — gate() is awaited before every batch
 // (pause support for the initial full-bandwidth sync).
@@ -146,6 +158,13 @@ export async function uploadDeltas(ctx, settings, members, onProgress = () => {}
                 const newest = rows[rows.length - 1].created_at;
                 const allowed = rows.filter((r) => rowAllowed(key, r, members.ids, members.names));
                 result.filtered += rows.length - allowed.length;
+                // Diagnose: erste gefilterte Zeile je Tabelle einmalig loggen
+                if (!result.filteredSample) result.filteredSample = {};
+                if (allowed.length < rows.length && !result.filteredSample[key]) {
+                    const sample = rows.find((r) => !rowAllowed(key, r, members.ids, members.names));
+                    result.filteredSample[key] = JSON.stringify(sample).slice(0, 220);
+                    ctx.log(`filter-sample ${key}:`, result.filteredSample[key]);
+                }
                 if (allowed.length > 0) {
                     const resp = await apiFetch(settings, 'v1/contribute', {
                         method: 'POST',
@@ -154,6 +173,10 @@ export async function uploadDeltas(ctx, settings, members, onProgress = () => {}
                     result.uploaded += resp.accepted || 0;
                     if (resp.rowError) {
                         result.errors[key] = `Zeilenfehler: ${resp.rowError}`;
+                    }
+                    // Diagnose: Server hat Zeilen verworfen (rejected > client-gefiltert 0)
+                    if ((resp.rejected || 0) > 0) {
+                        ctx.log(`server-rejected ${key}: ${resp.rejected} von ${allowed.length}${resp.rowError ? ' — ' + resp.rowError : ''}`);
                     }
                 }
                 onProgress(`Upload ${key}: bis ${newest}`, result);
