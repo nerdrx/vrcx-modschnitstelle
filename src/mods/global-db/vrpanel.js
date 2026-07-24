@@ -19,13 +19,19 @@ import { kvGet, kvSet } from './db';
 
 export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
-    vrMode: 'hud', // 'hud' | 'world'
+    vrMode: 'wrist', // 'wrist' | 'hud' | 'world'
     vrAlpha: 0.9,
     vrCurvature: 0.08,
-    vrWidth: 0.9,
-    vrAutoShow: true, // bei neuer Nachricht aus Minimiert aufklappen
-    vrGesture: false, // Controller-Geste (Grip/A lang drücken) togglet
-    vrMinimized: false
+    vrWidth: 0.6,
+    vrAutoShow: true, // neue Nachricht: Mini-Flash (wrist) bzw. aufklappen
+    vrGesture: true, // Controller-Geste (Grip/A lang drücken) togglet Groß
+    vrLaserPitch: 45, // Laser-Neigung (Index-Controller)
+    vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
+    // Benachrichtigungen (bei DND alle stumm):
+    vrNotySound: true,
+    vrNotyVisual: true,
+    vrNotyHaptic: true,
+    vrHapticHand: 'both' // 'left' | 'right' | 'both'
 };
 
 let timer = null;
@@ -93,7 +99,8 @@ async function pushConfig(ctx) {
         width: s.vrWidth,
         autoShow: s.vrAutoShow,
         gesture: s.vrGesture,
-        minimized: s.vrMinimized,
+        laserPitch: s.vrLaserPitch,
+        flashSec: s.vrFlashSec,
         quickReplies: chatState.settings.quickReplies || []
     });
 }
@@ -113,26 +120,33 @@ function onAction(ctx) {
     return async (json) => {
         try {
             const a = typeof json === 'string' ? JSON.parse(json) : json;
+            ctx.log('vr action:', a.type, a.channel || ''); // Diagnose Send-Pfad
             if (a.type === 'send' && a.channel && a.text) {
-                sendMessage(a.channel, a.text);
+                const ok = sendMessage(a.channel, a.text);
+                if (!ok) ctx.warn('vr send failed: WS nicht verbunden');
             } else if (a.type === 'read' && a.channel) {
                 markRead(a.channel);
             } else if (a.type === 'typing' && a.channel) {
                 sendTyping(a.channel);
             } else if (a.type === 'config') {
-                // Panel-seitige Änderungen (Modus/Alpha/minimiert) persistieren
+                // Panel-seitige Änderungen persistieren
                 const cs = await kvGet(ctx, 'chat_settings', {});
                 if (a.mode !== undefined) cs.vrMode = a.mode;
                 if (a.alpha !== undefined) cs.vrAlpha = a.alpha;
                 if (a.curvature !== undefined) cs.vrCurvature = a.curvature;
                 if (a.width !== undefined) cs.vrWidth = a.width;
-                if (a.minimized !== undefined) cs.vrMinimized = a.minimized;
+                if (a.laserPitch !== undefined) cs.vrLaserPitch = a.laserPitch;
                 await kvSet(ctx, 'chat_settings', cs);
             }
         } catch (err) {
             ctx.warn('vr panel action failed:', err.message || err);
         }
     };
+}
+
+/** Haptik-Puls im Overlay-Prozess auslösen (Hand laut Settings). */
+export function vrHaptic(hand) {
+    vrCall('haptic', { hand: hand || 'both' });
 }
 
 /** Nach initChat aufrufen. Läuft passiv (1s-Poll + Diff), bis stopVrPanel. */
