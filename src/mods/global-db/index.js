@@ -10,6 +10,7 @@ import ChatView from './ChatView.vue';
 import { initTables, kvGet } from './db';
 import { fullSync } from './sync';
 import { chatState, displayName, initChat, isDnd, stopChat } from './chat';
+import { checkEligible, uploadFriendHashes } from './join';
 import { setCtx } from './runtime';
 
 let timer = null;
@@ -71,10 +72,48 @@ export async function startChatIfConfigured(ctx) {
     await initChat(ctx, settings, chatSettings, onChatMessage(ctx));
 }
 
+// P1.5: nav entries are only registered AFTER login and only when the user
+// is a member (token) or eligible (a member has them as friend). Everyone
+// else never sees the pool features. addNavView is idempotent.
+export function registerNavViews(ctx) {
+    ctx.ui.addNavView({
+        key: 'mod-global-db',
+        component: GlobalDbView,
+        icon: 'ri-cloud-line',
+        label: {
+            en: 'Global DB',
+            de: 'Global-DB'
+        }
+    });
+
+    ctx.ui.addNavView({
+        key: 'mod-pool-chat',
+        component: ChatView,
+        icon: 'ri-chat-3-line',
+        label: {
+            en: 'Pool Chat',
+            de: 'Pool-Chat'
+        }
+    });
+}
+
+async function shouldShowNav(ctx, settings) {
+    if (settings.token) return true;
+    try {
+        const userId = ctx.stores.user.currentUser?.id;
+        const state = await checkEligible(settings, userId);
+        // member: existing member without local token (second PC) — show the
+        // dashboard so they can paste their token.
+        return state.eligible || state.member;
+    } catch {
+        return false;
+    }
+}
+
 export default {
     id: 'globaldb',
     name: 'Global DB',
-    version: '1.1.0',
+    version: '1.2.0',
 
     async setup(ctx) {
         setCtx(ctx);
@@ -83,9 +122,22 @@ export default {
             try {
                 await initTables(ctx);
                 const settings = await kvGet(ctx, 'settings', {});
+                if (await shouldShowNav(ctx, settings)) {
+                    registerNavViews(ctx);
+                    ctx.log('nav registered (token/member/eligible)');
+                } else {
+                    ctx.log('nav hidden (no token, not eligible)');
+                }
                 restartTimer(ctx, settings.intervalMin || 5);
                 if (settings.enabled && settings.token) {
                     autoSyncTick(ctx);
+                    // Keep the friend-hash replace-set fresh (delayed:
+                    // friend store fills up after login).
+                    setTimeout(() => {
+                        uploadFriendHashes(ctx, settings).catch((err) =>
+                            ctx.warn('friend-hash upload failed:', err.message || err)
+                        );
+                    }, 60 * 1000);
                 }
                 await startChatIfConfigured(ctx);
             } catch (err) {
@@ -94,25 +146,5 @@ export default {
         });
 
         ctx.on('logout', () => stopChat());
-
-        ctx.ui.addNavView({
-            key: 'mod-global-db',
-            component: GlobalDbView,
-            icon: 'ri-cloud-line',
-            label: {
-                en: 'Global DB',
-                de: 'Global-DB'
-            }
-        });
-
-        ctx.ui.addNavView({
-            key: 'mod-pool-chat',
-            component: ChatView,
-            icon: 'ri-chat-3-line',
-            label: {
-                en: 'Pool Chat',
-                de: 'Pool-Chat'
-            }
-        });
     }
 };

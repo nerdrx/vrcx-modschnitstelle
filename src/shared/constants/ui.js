@@ -1,6 +1,8 @@
+import { reactive } from 'vue'; // MOD-API: nav entries can be added post-mount
 import { toolNavDefinitions } from './tools';
 
-const navDefinitions = [
+// MOD-API: reactive() so mod nav entries registered after login propagate
+const navDefinitions = reactive([
     {
         key: 'feed',
         icon: 'ri-rss-line',
@@ -128,6 +130,6 @@ const navDefinitions = [
         action: 'direct-access'
     },
     ...toolNavDefinitions
-];
+]); // MOD-API: end reactive()
 
 export { navDefinitions };

@@ -67,9 +67,13 @@
                         v-for="m in activeChan.messages"
                         :key="m.id"
                         class="msg"
-                        :class="{ mine: m.from_user === st.me }"
+                        :class="{ mine: m.from_user === st.me, system: m.kind === 'system' }"
                     >
-                        <div class="msg-head">
+                        <div v-if="m.kind === 'system'" class="msg-system">
+                            <i class="ri-user-add-line"></i> {{ m.text }}
+                            <span class="msg-time">{{ fmtTime(m.created_at) }}</span>
+                        </div>
+                        <div v-if="m.kind !== 'system'" class="msg-head">
                             <span
                                 class="msg-name"
                                 :class="{ blur: st.settings.shield }"
@@ -91,7 +95,7 @@
                             >
                         </div>
 
-                        <div class="msg-body" :class="{ blur: st.settings.shield }">
+                        <div v-if="m.kind !== 'system'" class="msg-body" :class="{ blur: st.settings.shield }">
                             <template v-if="m.kind === 'invite'">
                                 <button class="btn join" @click="joinLocation(m.text)">
                                     <i class="ri-login-circle-line"></i> Join
@@ -100,7 +104,7 @@
                             </template>
                             <template v-else>{{ m.text }}</template>
                         </div>
-                        <div class="msg-foot">
+                        <div v-if="m.kind !== 'system'" class="msg-foot">
                             <span
                                 v-for="g in groupReactions(m)"
                                 :key="g.emoji"
@@ -505,4 +509,13 @@ onUnmounted(() => {
 .chat-input:focus { outline: none; border-color: var(--accent, #3498db); }
 .btn.send { padding: 8px 16px; font-size: 15px; }
 .btn.send:disabled { opacity: 0.4; cursor: default; }
+.msg.system { align-self: center; max-width: 90%; }
+.msg-system {
+    font-size: 12px;
+    color: var(--muted-foreground, #9f9fa5);
+    font-style: italic;
+    text-align: center;
+    padding: 2px 10px;
+}
+.msg-system .msg-time { margin-left: 6px; opacity: 0.6; }
 </style>

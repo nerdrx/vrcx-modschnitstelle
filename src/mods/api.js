@@ -15,6 +15,7 @@ import { watch } from 'vue';
 
 import { i18n } from '../plugins/i18n';
 import { navDefinitions } from '../shared/constants/ui';
+import { dispatchNavLayoutUpdated } from '../components/nav-menu/navLayoutEvents';
 import { getWorldName } from '../shared/utils/world';
 import { showWorldDialog } from '../coordinators/worldCoordinator';
 import { showUserDialog } from '../coordinators/userCoordinator';
@@ -336,6 +337,10 @@ export function createModContext(mod, host) {
              * @param {object} def.label      { en: '...', de: '...' } plain labels
              */
             addNavView({ key, component, icon, label }) {
+                // Idempotent: safe to call again after re-login.
+                if (navDefinitions.some((d) => d.key === key)) {
+                    return;
+                }
                 const labelKey = `mods.${modId}.nav.${key}`;
                 for (const [locale, text] of Object.entries(label || {})) {
                     registerModMessages(locale, deepSet(labelKey, text));
@@ -358,6 +363,15 @@ export function createModContext(mod, host) {
                     labelKey,
                     routeName: key
                 });
+
+                // Late registration (after app mount, e.g. in onLogin):
+                // tell the nav menu to rebuild its layout so the new entry
+                // is appended and rendered.
+                if (typeof window !== 'undefined') {
+                    try {
+                        dispatchNavLayoutUpdated();
+                    } catch {}
+                }
             }
         }
     };
