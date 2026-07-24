@@ -261,6 +261,10 @@ namespace VRCX
 
             PumpOverlayEvents(overlay);
 
+            // SteamVR routes overlay mouse events only in dashboard context —
+            // head-locked/world overlays need their own laser (like OVR Toolkit).
+            ProcessLaser(system, overlay);
+
             if (_keyboardRequested)
             {
                 _keyboardRequested = false;
@@ -336,6 +340,89 @@ namespace VRCX
                     }
                 }
             }
+        }
+
+        // ------------------------------------------------------------ laser --
+        private readonly bool[] _triggerDown = new bool[2];
+        private bool _pointerWasOnPanel;
+
+        private void ProcessLaser(CVRSystem system, CVROverlay overlay)
+        {
+            if (!_visible)
+                return;
+            var host = _browser?.GetBrowserHost();
+            if (host == null)
+                return;
+
+            var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
+            system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
+
+            var bestDist = float.MaxValue;
+            var bestU = 0f;
+            var bestV = 0f;
+            var bestHand = -1;
+            var bestIdx = 0u;
+
+            for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
+            {
+                var role = system.GetControllerRoleForTrackedDeviceIndex(i);
+                if (role != ETrackedControllerRole.LeftHand && role != ETrackedControllerRole.RightHand)
+                    continue;
+                if (!poses[i].bPoseIsValid)
+                    continue;
+                var m = poses[i].mDeviceToAbsoluteTracking;
+                var parms = new VROverlayIntersectionParams_t
+                {
+                    eOrigin = ETrackingUniverseOrigin.TrackingUniverseStanding,
+                    vSource = new HmdVector3_t { v0 = m.m3, v1 = m.m7, v2 = m.m11 },
+                    vDirection = new HmdVector3_t { v0 = -m.m2, v1 = -m.m6, v2 = -m.m10 }
+                };
+                var results = new VROverlayIntersectionResults_t();
+                if (!overlay.ComputeOverlayIntersection(_handle, ref parms, ref results))
+                    continue;
+                if (results.fDistance < bestDist && results.fDistance < 3f)
+                {
+                    bestDist = results.fDistance;
+                    bestU = results.vUVs.v0;
+                    bestV = results.vUVs.v1;
+                    bestHand = role == ETrackedControllerRole.LeftHand ? 0 : 1;
+                    bestIdx = i;
+                }
+            }
+
+            if (bestHand < 0)
+            {
+                if (_pointerWasOnPanel)
+                {
+                    _pointerWasOnPanel = false;
+                    host.SendMouseMoveEvent(-1, -1, true, CefEventFlags.None);
+                    _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.cursor(-1,-1)");
+                }
+                return;
+            }
+            _pointerWasOnPanel = true;
+
+            // UV origin bottom-left -> CEF pixel coords top-left
+            var x = (int)(bestU * PANEL_SIZE);
+            var y = (int)((1f - bestV) * PANEL_SIZE);
+            host.SendMouseMoveEvent(x, y, false, CefEventFlags.None);
+            _browser?.ExecuteScriptAsync($"window.$vrchat && $vrchat.cursor({x},{y})");
+
+            var state = new VRControllerState_t();
+            if (!system.GetControllerState(bestIdx, ref state, (uint)Marshal.SizeOf(state)))
+                return;
+
+            var trigger = (state.ulButtonPressed & (1UL << (int)EVRButtonId.k_EButton_SteamVR_Trigger)) != 0;
+            if (trigger && !_triggerDown[bestHand])
+                host.SendMouseClickEvent(x, y, MouseButtonType.Left, false, 1, CefEventFlags.None);
+            else if (!trigger && _triggerDown[bestHand])
+                host.SendMouseClickEvent(x, y, MouseButtonType.Left, true, 1, CefEventFlags.None);
+            _triggerDown[bestHand] = trigger;
+
+            // joystick/touchpad Y scrollt die Nachrichtenliste
+            var ay = state.rAxis0.y;
+            if (Math.Abs(ay) > 0.4f)
+                host.SendMouseWheelEvent(x, y, 0, (int)(ay * 40), CefEventFlags.None);
         }
 
         private void ProcessGesture(CVRSystem system)
