@@ -20,10 +20,40 @@ async function autoSyncTick(ctx) {
     try {
         const settings = await kvGet(ctx, 'settings', {});
         if (!settings.enabled || !settings.token) return;
-        await fullSync(ctx, settings);
-        ctx.log('auto-sync done');
+        const result = await fullSync(ctx, settings);
+        if (result.ok) {
+            ctx.log('auto-sync done');
+            await ensureChatReady(ctx);
+        } else {
+            ctx.warn('auto-sync mit Fehlern:', JSON.stringify(result.errors));
+        }
     } catch (err) {
         ctx.warn('auto-sync failed:', err.message || err);
+    }
+}
+
+/**
+ * Pool-Chat ist erst nach dem ersten vollständig erfolgreichen Sync
+ * verfügbar (Nav + Verbindung). Fallback für Bestandsnutzer: last_sync
+ * gesetzt => First-Sync gilt als erledigt.
+ */
+export async function firstSyncDone(ctx) {
+    if (await kvGet(ctx, 'first_sync_done', false)) return true;
+    const legacy = await kvGet(ctx, 'last_sync', '');
+    if (legacy) {
+        await kvSet(ctx, 'first_sync_done', true);
+        return true;
+    }
+    return false;
+}
+
+/** Nach erfolgreichem Sync: Chat-Nav registrieren + Chat verbinden. */
+export async function ensureChatReady(ctx) {
+    const settings = await kvGet(ctx, 'settings', {});
+    if (!settings.token || !(await firstSyncDone(ctx))) return;
+    registerChatNav(ctx);
+    if (!chatState.enabled) {
+        await startChatIfConfigured(ctx);
     }
 }
 
@@ -69,7 +99,8 @@ function onChatMessage(ctx) {
 // Token immer chat-fähig).
 export async function startChatIfConfigured(ctx) {
     const settings = await kvGet(ctx, 'settings', {});
-    if (!settings.token) {
+    // Chat erst nach Token UND erfolgreichem First-Sync
+    if (!settings.token || !(await firstSyncDone(ctx))) {
         stopVrPanel();
         stopChat();
         return;
@@ -82,7 +113,7 @@ export async function startChatIfConfigured(ctx) {
 // P1.5: nav entries are only registered AFTER login and only when the user
 // is a member (token) or eligible (a member has them as friend). Everyone
 // else never sees the pool features. addNavView is idempotent.
-export function registerNavViews(ctx) {
+export function registerDbNav(ctx) {
     ctx.ui.addNavView({
         key: 'mod-global-db',
         component: GlobalDbView,
@@ -92,7 +123,10 @@ export function registerNavViews(ctx) {
             de: 'Global-DB'
         }
     });
+}
 
+// Pool-Chat-Nav erst nach erfolgreichem First-Sync (idempotent).
+export function registerChatNav(ctx) {
     ctx.ui.addNavView({
         key: 'mod-pool-chat',
         component: ChatView,
@@ -136,7 +170,10 @@ export default {
                     ctx.log('migration: enabled=true (token vorhanden)');
                 }
                 if (await shouldShowNav(ctx, settings)) {
-                    registerNavViews(ctx);
+                    registerDbNav(ctx);
+                    if (settings.token && (await firstSyncDone(ctx))) {
+                        registerChatNav(ctx);
+                    }
                     ctx.log('nav registered (token/member/eligible)');
                 } else {
                     ctx.log('nav hidden (no token, not eligible)');
