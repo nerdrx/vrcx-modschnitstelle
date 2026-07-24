@@ -67,6 +67,15 @@
         line-height: 36px; padding: 0 8px; }
     #bubble .dot { position: absolute; bottom: 6px; width: 22px; height: 22px; }
 
+    /* ---------- emojis + dragbar ---------- */
+    #emojis { display: none; flex-wrap: wrap; gap: 8px; padding: 8px 18px; }
+    #emojis.open { display: flex; }
+    #emojis .ebtn { font-size: 38px; padding: 8px 12px; border-radius: 12px; background: #26262e; }
+    #dragbar { height: 56px; margin: 4px 18px 12px; border-radius: 14px; background: #26262e;
+        text-align: center; font-size: 40px; line-height: 34px; color: #666;
+        border: 2px dashed #3a3a44; }
+    #dragbar:hover { outline: 3px solid #3d6ae0; }
+
     /* ---------- mini (wrist) ---------- */
     #mini { display: none; position: absolute; inset: 0; padding: 30px;
         background: rgba(16, 16, 20, 0.92); border: 3px solid #3a3a44; border-radius: 40px;
@@ -103,9 +112,12 @@
     <div id="typing"></div>
     <div id="quick"></div>
     <div id="inputrow">
+        <div id="emojibtn" class="hbtn">&#128578;</div>
         <div id="inputfield" class="empty">Nachricht eingeben…</div>
         <div id="send" class="disabled">Senden</div>
     </div>
+    <div id="emojis"></div>
+    <div id="dragbar" title="Ziehen zum Verschieben">&#8230;</div>
     <div id="settings">
         <span>Deckkraft</span>
         <div class="hbtn" data-alpha="-0.1">−</div>
@@ -117,9 +129,11 @@
         <div class="hbtn" data-width="-0.15">−</div>
         <div class="hbtn" data-width="0.15">+</div>
         <span style="margin-left:16px">Laser</span>
-        <div class="hbtn" data-pitch="-5">−</div>
+        <div class="hbtn" data-pitch="-2">−</div>
         <span id="pitchval">45°</span>
-        <div class="hbtn" data-pitch="5">+</div>
+        <div class="hbtn" data-pitch="2">+</div>
+        <span style="margin-left:16px">Platzieren-Hand</span>
+        <div id="handbtn" class="hbtn">R</div>
     </div>
 </div>
 <div id="bubble">
@@ -149,10 +163,12 @@
     const $ = (id) => document.getElementById(id);
     const state = {
         me: '', ampel: 'green', channels: [], active: 'global',
-        big: false, autoShow: true, mode: 'wrist',
+        big: false, autoShow: true, mode: 'hud', placeHand: 'right',
         alpha: 0.9, curvature: 0.08, width: 0.6, laserPitch: 45,
         draft: '', lastUnread: 0, lastMsg: null
     };
+    const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','😭','😱','🥳','😴','👍','👎',
+        '❤️','🔥','✨','🎉','💀','🙏','👋','💜','😈','🍕','🎮','📍'];
 
     function act(obj) {
         try { AppApiVr.ChatPanelAction(JSON.stringify(obj)); } catch (e) { apiOk = false; render(); }
@@ -170,10 +186,11 @@
     }
 
     function render() {
-        const mini = !state.big && state.mode === 'wrist';
-        const bubble = !state.big && state.mode !== 'wrist';
+        // Mini-Ansicht für alle Modi; C# blendet das Overlay komplett aus,
+        // solange kein Flash-/Gesten-Fenster aktiv ist (keine Geisterfläche).
+        const mini = !state.big;
         $('panel').classList.toggle('hidden', !state.big);
-        $('bubble').classList.toggle('show', bubble);
+        $('bubble').classList.toggle('show', false);
         $('mini').classList.toggle('show', mini);
         $('ampel').className = 'dot ' + state.ampel;
         $('bubbleDot').className = 'dot ' + state.ampel;
@@ -205,7 +222,13 @@
                 b.textContent = c.unread > 99 ? '99+' : c.unread;
                 t.appendChild(b);
             }
-            t.onclick = () => { state.active = c.channel; markRead(); render(); };
+            t.onclick = () => {
+                state.active = c.channel;
+                // Historie nachladen, falls der Kanal noch leer ist
+                if (!(c.messages || []).length) act({ type: 'history', channel: c.channel });
+                markRead();
+                render();
+            };
             tabs.appendChild(t);
         }
 
@@ -213,6 +236,7 @@
             state.mode === 'world' ? 'World' : state.mode === 'hud' ? 'HUD' : 'Wrist';
         $('placebtn').style.display = state.mode === 'world' ? 'block' : 'none';
         $('pitchval').textContent = Math.round(state.laserPitch) + '°';
+        $('handbtn').textContent = state.placeHand === 'left' ? 'L' : 'R';
 
         const box = $('msgs');
         const ch = chan();
@@ -284,12 +308,9 @@
                 }
                 state.lastUnread = totalUnread();
                 if (state.autoShow && !state.big && state.lastUnread > prevUnread) {
-                    if (state.mode === 'wrist') {
-                        cfg({ flash: true }); // Mini kurz am Handgelenk zeigen
-                    } else {
-                        state.big = true;
-                        cfg({ big: true });
-                    }
+                    // Mini für Flash-Zeit einblenden (alle Modi) — Groß nur
+                    // per Antippen/Geste
+                    cfg({ flash: true });
                 }
                 if (state.big) markRead();
                 render();
@@ -305,6 +326,7 @@
                 if (c.autoShow !== undefined) state.autoShow = c.autoShow;
                 if (c.big !== undefined) state.big = c.big;
                 if (c.laserPitch !== undefined) state.laserPitch = c.laserPitch;
+                if (c.placeHand !== undefined) state.placeHand = c.placeHand;
                 if (c.quickReplies !== undefined) state.quickReplies = c.quickReplies;
                 render();
             } catch (e) {}
@@ -350,6 +372,27 @@
     };
     // Platzieren: Panel folgt dem Laser, Trigger fixiert an der Position
     $('placebtn').onclick = () => cfg({ placeMode: true });
+    $('handbtn').onclick = () => {
+        state.placeHand = state.placeHand === 'left' ? 'right' : 'left';
+        cfg({ placeHand: state.placeHand });
+        render();
+    };
+    $('emojibtn').onclick = () => {
+        const box = $('emojis');
+        if (!box.childElementCount) {
+            for (const em of EMOJIS) {
+                const b = document.createElement('div');
+                b.className = 'ebtn';
+                b.textContent = em;
+                b.onclick = () => {
+                    state.draft = (state.draft || '') + em;
+                    render();
+                };
+                box.appendChild(b);
+            }
+        }
+        box.classList.toggle('open');
+    };
     $('gearbtn').onclick = () => $('settings').classList.toggle('open');
     for (const el of document.querySelectorAll('[data-alpha]')) {
         el.onclick = () => {
@@ -378,6 +421,9 @@
     }
 
     render();
+    // Frischen State vom Mod anfordern (Panel startet sonst leer, bis sich
+    // etwas ändert — z. B. nach Overlay-Neustart).
+    act({ type: 'refresh' });
 })();
 </script>
 </body>
