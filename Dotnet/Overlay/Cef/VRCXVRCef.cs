@@ -59,6 +59,8 @@ namespace VRCX
 
         private ComPtr<ID3D11Texture2D> _sharedTexture;
 
+        private VRCXVRChatPanel _chatPanel; // MOD-API: P2 VR chat panel
+
         public VRCXVRCef(bool isLegacy)
         {
             _isLegacy = isLegacy;
@@ -153,6 +155,8 @@ namespace VRCX
                 // new
                 _sharedOverlay?.UpdateRender(_device, _deviceContext, _sharedTexture);
 
+                _chatPanel?.SetupTexture(_device, _deviceContext); // MOD-API
+
                 _multithread = _device.QueryInterface<ID3D11Multithread>();
                 _multithread.SetMultithreadProtected(true);
 
@@ -180,10 +184,13 @@ namespace VRCX
                 _isLegacy
             );
 
+            _chatPanel = new VRCXVRChatPanel(_isLegacy); // MOD-API
+
             while (_thread != null)
             {
                 if (_isLegacy && (_wristOverlayActive || _hmdOverlayActive))
                     _sharedOverlay.RenderToTexture(_deviceContext, _sharedTexture);
+                _chatPanel?.RenderLegacy(); // MOD-API
                 try
                 {
                     Thread.Sleep(32);
@@ -227,6 +234,7 @@ namespace VRCX
 
                             _wristOverlayHandle = 0;
                             _hmdOverlayHandle = 0;
+                            _chatPanel?.OnVrQuit(); // MOD-API
                             break;
                         }
                     }
@@ -283,6 +291,8 @@ namespace VRCX
                                     logger.Error(err);
                                 }
                             }
+
+                            _chatPanel?.Process(system, overlay, dashboardVisible); // MOD-API
                         }
                     }
                 }
@@ -307,6 +317,8 @@ namespace VRCX
             _adapter.Dispose();
             _factory.Dispose();
 
+            _chatPanel?.Dispose(); // MOD-API
+            _chatPanel = null;
             _sharedOverlay?.Dispose();
             _sharedOverlay = null;
             _sharedTexture.Dispose();
@@ -839,6 +851,13 @@ namespace VRCX
 
         public override void ExecuteVrOverlayFunction(string function, string json)
         {
+            // MOD-API: "chat.*" functions are routed to the chat panel browser
+            if (function.StartsWith("chat.", StringComparison.Ordinal))
+            {
+                _chatPanel?.Execute(function.Substring(5), json);
+                return;
+            }
+
             if (_sharedOverlay == null || _sharedOverlay.IsLoading || !_sharedOverlay.CanExecuteJavascriptInMainFrame)
                 return;
 

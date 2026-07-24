@@ -21,6 +21,18 @@
                 <input type="checkbox" v-model="st.settings.shield" @change="saveSettings" />
                 Streamer-Schutz
             </label>
+            <label class="tgl" title="Interaktives Chat-Panel als SteamVR-Overlay">
+                <input type="checkbox" v-model="st.settings.vrPanel" @change="saveVrSettings" />
+                VR-Panel
+            </label>
+            <label v-if="st.settings.vrPanel" class="tgl" title="Bei neuer Nachricht automatisch aufklappen">
+                <input type="checkbox" v-model="st.settings.vrAutoShow" @change="saveVrSettings" />
+                VR: Auto-Show
+            </label>
+            <label v-if="st.settings.vrPanel" class="tgl" title="Grip/A-Taste lang drücken minimiert/öffnet das Panel">
+                <input type="checkbox" v-model="st.settings.vrGesture" @change="saveVrSettings" />
+                VR: Geste
+            </label>
             <span class="spacer"></span>
             <span v-if="st.lastError" class="err">{{ st.lastError }}</span>
         </div>
@@ -180,6 +192,7 @@ import {
     sendReaction,
     sendTyping
 } from './chat';
+import { DEFAULT_VR_PANEL, refreshVrPanelConfig } from './vrpanel';
 
 const ctx = getCtx();
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
@@ -295,6 +308,20 @@ function saveSettings() {
     kvSet(ctx, 'chat_settings', { ...st.settings }).catch((e) =>
         ctx.warn('chat settings save failed:', e)
     );
+}
+
+// P2: VR-Panel-Einstellungen — Defaults sicherstellen, speichern, Panel-Config pushen
+function ensureVrDefaults() {
+    for (const [k, v] of Object.entries(DEFAULT_VR_PANEL)) {
+        if (st.settings[k] === undefined) st.settings[k] = v;
+    }
+}
+async function saveVrSettings() {
+    ensureVrDefaults();
+    await kvSet(ctx, 'chat_settings', { ...st.settings }).catch((e) =>
+        ctx.warn('chat settings save failed:', e)
+    );
+    refreshVrPanelConfig(ctx).catch(() => {});
 }
 
 function scrollDown() {

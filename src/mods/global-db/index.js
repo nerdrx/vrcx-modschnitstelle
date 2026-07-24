@@ -11,6 +11,7 @@ import { initTables, kvGet, kvSet } from './db';
 import { fullSync } from './sync';
 import { chatState, displayName, initChat, isDnd, stopChat } from './chat';
 import { checkEligible, uploadFriendHashes } from './join';
+import { startVrPanel, stopVrPanel } from './vrpanel';
 import { setCtx } from './runtime';
 
 let timer = null;
@@ -54,6 +55,7 @@ function onChatMessage(ctx) {
                 body,
                 desktop: chatState.settings.notifyDesktop !== false,
                 xs: chatState.settings.notifyVr !== false,
+                ovrt: chatState.settings.notifyVr !== false,
                 vr: chatState.settings.notifyVr !== false
             });
         } catch (err) {
@@ -68,11 +70,13 @@ function onChatMessage(ctx) {
 export async function startChatIfConfigured(ctx) {
     const settings = await kvGet(ctx, 'settings', {});
     if (!settings.token) {
+        stopVrPanel();
         stopChat();
         return;
     }
     const chatSettings = await kvGet(ctx, 'chat_settings', {});
     await initChat(ctx, settings, chatSettings, onChatMessage(ctx));
+    await startVrPanel(ctx); // P2: VR-Overlay-Chat-Panel
 }
 
 // P1.5: nav entries are only registered AFTER login and only when the user
@@ -116,7 +120,7 @@ async function shouldShowNav(ctx, settings) {
 export default {
     id: 'globaldb',
     name: 'Global DB',
-    version: '1.2.0',
+    version: '1.3.0',
 
     async setup(ctx) {
         setCtx(ctx);
@@ -154,6 +158,9 @@ export default {
             }
         });
 
-        ctx.on('logout', () => stopChat());
+        ctx.on('logout', () => {
+            stopVrPanel();
+            stopChat();
+        });
     }
 };

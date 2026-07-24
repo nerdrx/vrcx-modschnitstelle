@@ -286,6 +286,7 @@ export function createModContext(mod, host) {
              * @param {string} [n.image]   local file path for the toast
              * @param {boolean} [n.desktop=true]
              * @param {boolean} [n.xs=true]
+             * @param {boolean} [n.ovrt=true]  OVR Toolkit HUD notification
              * @param {boolean} [n.vr=true]
              */
             async notify({
@@ -294,6 +295,7 @@ export function createModContext(mod, host) {
                 image = '',
                 desktop = true,
                 xs = true,
+                ovrt = true,
                 vr = true
             }) {
                 if (typeof AppApi === 'undefined') {
@@ -308,6 +310,11 @@ export function createModContext(mod, host) {
                 if (xs) {
                     try {
                         AppApi.XSNotification('VRCX', text, 5, 1, image);
+                    } catch {}
+                }
+                if (ovrt) {
+                    try {
+                        AppApi.OVRTNotification(true, false, 'VRCX', text, 5, 1, image);
                     } catch {}
                 }
                 if (vr) {

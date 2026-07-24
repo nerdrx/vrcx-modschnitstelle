@@ -5,5 +5,6 @@ public enum OverlayMessageType
     OverlayConnected,
     JsFunctionCall,
     UpdateVars,
-    IsHmdAfk
+    IsHmdAfk,
+    ChatAction // MOD-API: P2 VR chat panel -> main renderer (send/read/typing/config)
 }

@@ -164,6 +164,15 @@ public class OverlayServer
                     MainForm.Instance.Browser.ExecuteScriptAsync("window?.$pinia?.game.updateIsHmdAfk", isHmdAfk);
                 break;
 
+            // MOD-API: P2 VR chat panel — forward panel actions to the mod
+            // bridge in the main renderer (globaldb registers the hook).
+            case OverlayMessageType.ChatAction:
+                if (MainForm.Instance?.Browser != null && !MainForm.Instance.Browser.IsLoading &&
+                    MainForm.Instance.Browser.CanExecuteJavascriptInMainFrame)
+                    MainForm.Instance.Browser.ExecuteScriptAsync(
+                        "window.__vrcxChatAction && window.__vrcxChatAction", message.Data);
+                break;
+
             case OverlayMessageType.JsFunctionCall:
             case OverlayMessageType.UpdateVars:
             default:
