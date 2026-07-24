@@ -46,6 +46,11 @@ namespace VRCX
         private float _widthMeters = 0.6f;
         private bool _gestureEnabled;
         private float _laserPitchDeg = 45f; // Index: Ray-Neigung zur Controller-Spitze
+        private float _laserOffXcm; // Pointer-Offset horizontal (cm, je Hand gespiegelt)
+        private float _laserOffYcm; // Pointer-Offset vertikal (cm)
+        private Vector3 _lastPanelPos = new Vector3(0, 1.2f, -0.8f);
+        private float _dragDist = 1f;
+        private Vector3 _dragOffset = Vector3.Zero;
         private bool _big; // "Groß"-Modus: volle UI, bleibt bis Minimieren
         private float _flashSec = 10f;
 
@@ -159,6 +164,8 @@ namespace VRCX
                 if (root.TryGetProperty("width", out var wi)) _widthMeters = Math.Clamp(wi.GetSingle(), 0.2f, 2.5f);
                 if (root.TryGetProperty("gesture", out var ge)) _gestureEnabled = ge.GetBoolean();
                 if (root.TryGetProperty("laserPitch", out var lp)) _laserPitchDeg = Math.Clamp(lp.GetSingle(), -30f, 90f);
+                if (root.TryGetProperty("laserOffX", out var lx)) _laserOffXcm = Math.Clamp(lx.GetSingle(), -10f, 10f);
+                if (root.TryGetProperty("laserOffY", out var ly)) _laserOffYcm = Math.Clamp(ly.GetSingle(), -10f, 10f);
                 if (root.TryGetProperty("flashSec", out var fs)) _flashSec = Math.Clamp(fs.GetSingle(), 2f, 120f);
                 if (root.TryGetProperty("big", out var bg))
                 {
@@ -339,11 +346,12 @@ namespace VRCX
             if (_keyboardRequested)
             {
                 _keyboardRequested = false;
-                overlay.ShowKeyboardForOverlay(_handle,
+                var kerr = overlay.ShowKeyboardForOverlay(_handle,
                     (int)EGamepadTextInputMode.k_EGamepadTextInputModeNormal,
                     (int)EGamepadTextInputLineMode.k_EGamepadTextInputLineModeSingleLine,
                     (uint)EKeyboardFlags.KeyboardFlag_Minimal,
                     "Pool-Chat", 512, _pendingKeyboardText ?? string.Empty, 0);
+                logger.Info("ShowKeyboardForOverlay: {0}", kerr); // Diagnose
             }
 
             if (_gestureEnabled)
@@ -421,12 +429,16 @@ namespace VRCX
                 var m = poses[i].mDeviceToAbsoluteTracking;
                 var src = LaserSource(m, role == ETrackedControllerRole.LeftHand);
                 var dir = LaserDirection(m);
-                var pos = src + dir * 1.0f;
+                // Drag: Griffpunkt beibehalten; Platzieren: 1 m vor dem Laser
+                var pos = _dragging
+                    ? src + dir * _dragDist + _dragOffset
+                    : src + dir * 1.0f;
 
                 var hmdPos = hmd.bPoseIsValid
                     ? new Vector3(hmd.mDeviceToAbsoluteTracking.m3, hmd.mDeviceToAbsoluteTracking.m7,
                         hmd.mDeviceToAbsoluteTracking.m11)
                     : src;
+                _lastPanelPos = pos;
                 var z = Vector3.Normalize(hmdPos - pos);
                 var x = Vector3.Normalize(Vector3.Cross(new Vector3(0, 1, 0), z));
                 if (float.IsNaN(x.X)) x = new Vector3(1, 0, 0);
@@ -472,6 +484,22 @@ namespace VRCX
             }
         }
 
+        /// Aktuelle Panel-Position in Welt-Koordinaten (für den Drag-Griffpunkt).
+        private Vector3 CurrentPanelPos(CVRSystem system)
+        {
+            if (_mode == "world")
+                return _lastPanelPos;
+            // hud (Groß): head-locked Offset in Welt umrechnen
+            var poses = new TrackedDevicePose_t[OpenVR.k_unTrackedDeviceIndex_Hmd + 1];
+            system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
+            var hmd = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
+            if (!hmd.bPoseIsValid)
+                return _lastPanelPos;
+            var hm = ToMatrix4x4(hmd.mDeviceToAbsoluteTracking);
+            var world = Matrix4x4.CreateTranslation(0f, -0.15f, -0.85f) * hm;
+            return new Vector3(world.M41, world.M42, world.M43);
+        }
+
         /// Buzz auf gewünschter Hand (left/right/both), ~10 Frames.
         private void ProcessHaptics(CVRSystem system)
         {
@@ -504,6 +532,7 @@ namespace VRCX
                 var hmd = ToMatrix4x4(hmdPose.mDeviceToAbsoluteTracking);
                 var offset = Matrix4x4.CreateTranslation(0f, -0.1f, -0.9f);
                 var m = offset * hmd;
+                _lastPanelPos = new Vector3(m.M41, m.M42, m.M43);
                 var hm34 = ToHmdMatrix34(m);
                 overlay.SetOverlayTransformAbsolute(_handle,
                     ETrackingUniverseOrigin.TrackingUniverseStanding, ref hm34);
@@ -546,7 +575,8 @@ namespace VRCX
                         break;
                     case EVREventType.VREvent_KeyboardDone:
                     case EVREventType.VREvent_KeyboardClosed:
-                        OnKeyboardEvent(type);
+                    case EVREventType.VREvent_KeyboardCharInput:
+                        OnKeyboardEvent(type, e.data.keyboard.cNewInput);
                         break;
                 }
             }
@@ -556,21 +586,37 @@ namespace VRCX
         private readonly bool[] _triggerDown = new bool[2];
         private bool _pointerWasOnPanel;
 
-        /// Ray-Ursprung: 2 cm nach außen versetzt (Index-Controller zeigen
-        /// je Hand ~2 cm nach innen daneben).
-        private static Vector3 LaserSource(HmdMatrix34_t m, bool isLeft)
+        /// Ray-Ursprung mit einstellbaren Offsets (cm): X gespiegelt je Hand
+        /// (+ = nach außen), Y global (+ = nach oben). Defaults 0/0 —
+        /// Kalibrierung im Panel (⚙).
+        private Vector3 LaserSource(HmdMatrix34_t m, bool isLeft)
         {
+            var pos = new Vector3(m.m3, m.m7, m.m11);
+            if (_laserOffXcm == 0f && _laserOffYcm == 0f)
+                return pos;
             var xAxis = Vector3.Normalize(new Vector3(m.m0, m.m4, m.m8));
-            var offset = (isLeft ? -0.02f : 0.02f);
-            return new Vector3(m.m3, m.m7, m.m11) + xAxis * offset;
+            var yAxis = Vector3.Normalize(new Vector3(m.m1, m.m5, m.m9));
+            return pos
+                + xAxis * ((isLeft ? -1f : 1f) * _laserOffXcm / 100f)
+                + yAxis * (_laserOffYcm / 100f);
         }
 
-        /// SteamVR-Tastatur-Text übernehmen (Done/Closed) — wird sowohl aus
-        /// der Overlay-Queue als auch aus der System-Queue (VRCXVRCef,
-        /// markierte Stelle) aufgerufen, da SteamVR die Keyboard-Events je
-        /// nach Version unterschiedlich zustellt.
-        public void OnKeyboardEvent(EVREventType type)
+        /// SteamVR-Tastatur-Events — aus Overlay- UND System-Queue (VRCXVRCef,
+        /// markierte Stelle), da SteamVR sie je nach Version unterschiedlich
+        /// zustellt. CharInput streamt live in die Chatbox; Done/Closed
+        /// übernimmt den kompletten Text.
+        public void OnKeyboardEvent(EVREventType type, string chars = "")
         {
+            if (type == EVREventType.VREvent_KeyboardCharInput)
+            {
+                var t = (chars ?? string.Empty).TrimEnd('\0');
+                var zero = t.IndexOf('\0');
+                if (zero >= 0) t = t.Substring(0, zero);
+                logger.Info("keyboard char input: {0} chars", t.Length);
+                if (t.Length > 0)
+                    _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.keyboardChar", t);
+                return;
+            }
             if (type != EVREventType.VREvent_KeyboardDone &&
                 type != EVREventType.VREvent_KeyboardClosed)
                 return;
@@ -666,9 +712,16 @@ namespace VRCX
             var trigger = (state.ulButtonPressed & (1UL << (int)EVRButtonId.k_EButton_SteamVR_Trigger)) != 0;
             if (trigger && !_triggerDown[bestHand])
             {
-                // Dragbar (unterer Panel-Streifen, nur Groß): Trigger startet Drag
+                // Dragbar (unterer Panel-Streifen, nur Groß): Trigger startet Drag.
+                // Griffpunkt merken, damit das Panel nicht zur Mitte springt.
                 if (_big && y > PANEL_SIZE - 70)
                 {
+                    var pm = poses[bestIdx].mDeviceToAbsoluteTracking;
+                    var psrc = LaserSource(pm, bestHand == 0);
+                    var pdir = LaserDirection(pm);
+                    var panelPos = CurrentPanelPos(system);
+                    _dragDist = Math.Clamp(Vector3.Distance(psrc, panelPos), 0.35f, 3f);
+                    _dragOffset = panelPos - (psrc + pdir * _dragDist);
                     _dragging = true;
                     _dragIdx = bestIdx;
                     _placeTriggerDown = true;

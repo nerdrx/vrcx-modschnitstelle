@@ -193,7 +193,7 @@ namespace VRCX
                 _chatPanel?.RenderLegacy(); // MOD-API
                 try
                 {
-                    Thread.Sleep(32);
+                    Thread.Sleep(16); // MOD-API: 60 Hz statt 30 — flüssiges Chat-Panel/Laser (war 32)
                 }
                 catch (ThreadInterruptedException)
                 {
@@ -227,8 +227,9 @@ namespace VRCX
                         // MOD-API: SteamVR liefert Keyboard-Events je nach
                         // Version über die System-Queue — ans Chat-Panel weiterreichen
                         if (type == EVREventType.VREvent_KeyboardDone ||
-                            type == EVREventType.VREvent_KeyboardClosed)
-                            _chatPanel?.OnKeyboardEvent(type);
+                            type == EVREventType.VREvent_KeyboardClosed ||
+                            type == EVREventType.VREvent_KeyboardCharInput)
+                            _chatPanel?.OnKeyboardEvent(type, e.data.keyboard.cNewInput);
                         if (type == EVREventType.VREvent_Quit)
                         {
                             active = false;
