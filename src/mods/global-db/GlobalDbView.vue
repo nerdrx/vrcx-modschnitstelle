@@ -161,7 +161,7 @@
     import { kvGet, kvSet, poolCounts, clearPool } from './db';
     import { DEFAULT_SERVER, apiFetch, fullSync } from './sync';
     import { checkEligible, joinPool, uploadFriendHashes } from './join';
-    import { restartTimer, startChatIfConfigured } from './index';
+    import { ensureChatReady, restartTimer, startChatIfConfigured } from './index';
     import { getCtx } from './runtime';
 
     const { t } = useI18n();
@@ -266,7 +266,7 @@
             }
             await runInitialSync();
             restartTimer(ctx, settings.intervalMin);
-            startChatIfConfigured(ctx).catch(() => {});
+            ensureChatReady(ctx).catch(() => {});
         } catch (err) {
             joinError.value = String(err.message || err);
         } finally {
@@ -299,7 +299,11 @@
             connected.value = true;
             counts.value = await poolCounts(ctx);
             lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
-            pushLog(`Erst-Sync fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen.`);
+            if (result.ok) {
+                pushLog(`Erst-Sync fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen.`);
+            } else {
+                pushLog(`Erst-Sync unvollständig (${Object.keys(result.errors).join(', ')}) — nächster Sync setzt fort.`);
+            }
         } catch (err) {
             pushLog('Erst-Sync unterbrochen: ' + (err.message || err) + ' — läuft beim nächsten Sync weiter.');
         } finally {
@@ -317,9 +321,11 @@
             await apiFetch(settings, 'v1/members'); // Token validieren
             connected.value = true;
             manualToken.value = '';
-            pushLog('Token übernommen.');
+            pushLog('Token übernommen — starte Sync (Chat folgt nach erstem erfolgreichen Sync).');
             restartTimer(ctx, settings.intervalMin);
-            startChatIfConfigured(ctx).catch(() => {});
+            busy.value = false;
+            await syncNow();
+            return;
         } catch (err) {
             settings.token = '';
             pushLog('Token ungültig: ' + (err.message || err));
@@ -375,7 +381,12 @@
             connected.value = true;
             counts.value = await poolCounts(ctx);
             lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
-            pushLog(`Fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen, ${result.filtered} gefiltert.`);
+            if (result.ok) {
+                pushLog(`Fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen, ${result.filtered} gefiltert.`);
+                ensureChatReady(ctx).catch(() => {});
+            } else {
+                pushLog(`Sync mit Fehlern (${Object.keys(result.errors).join(', ')}): ${Object.values(result.errors)[0]}`);
+            }
         } catch (err) {
             connected.value = false;
             pushLog('Sync-Fehler: ' + (err.message || err));
@@ -398,6 +409,8 @@
             connected.value = false;
             tokenVisible.value = false;
             await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
+            await kvSet(ctx, 'first_sync_done', false);
+            startChatIfConfigured(ctx).catch(() => {}); // stoppt Chat + VR-Panel
             counts.value = await poolCounts(ctx);
             members.value = [];
             pushLog('Pool verlassen — Serverdaten gelöscht, lokale Pool-Kopie geleert.');

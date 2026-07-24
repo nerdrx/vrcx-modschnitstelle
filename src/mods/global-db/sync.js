@@ -130,31 +130,42 @@ export async function uploadDeltas(ctx, settings, members, onProgress = () => {}
     const batch = opts.batch || BATCH;
     const throttleMs = opts.throttleMs ?? THROTTLE_MS;
     const gate = opts.gate || (() => Promise.resolve());
-    const result = { uploaded: 0, filtered: 0 };
+    const result = { uploaded: 0, filtered: 0, errors: {} };
 
     for (const [key, spec] of Object.entries(UPLOAD)) {
-        let cursor = await kvGet(ctx, `up_cursor_${key}`, '');
-        for (;;) {
-            await gate();
-            const raw = await ctx.db.query(spec.sql(core, batch), { '@c': cursor });
-            if (raw.length === 0) break;
-            const rows = toObjects(raw, spec.cols);
-            const newest = rows[rows.length - 1].created_at;
-            const allowed = rows.filter((r) => rowAllowed(key, r, members.ids, members.names));
-            result.filtered += rows.length - allowed.length;
-            if (allowed.length > 0) {
-                const resp = await apiFetch(settings, 'v1/contribute', {
-                    method: 'POST',
-                    body: JSON.stringify({ table: key, rows: allowed })
-                });
-                result.uploaded += resp.accepted || 0;
+        // Fehler bei einer Tabelle stoppen die übrigen nicht; der Cursor der
+        // fehlgeschlagenen Tabelle bleibt stehen (Batch läuft beim nächsten
+        // Sync erneut).
+        try {
+            let cursor = await kvGet(ctx, `up_cursor_${key}`, '');
+            for (;;) {
+                await gate();
+                const raw = await ctx.db.query(spec.sql(core, batch), { '@c': cursor });
+                if (raw.length === 0) break;
+                const rows = toObjects(raw, spec.cols);
+                const newest = rows[rows.length - 1].created_at;
+                const allowed = rows.filter((r) => rowAllowed(key, r, members.ids, members.names));
+                result.filtered += rows.length - allowed.length;
+                if (allowed.length > 0) {
+                    const resp = await apiFetch(settings, 'v1/contribute', {
+                        method: 'POST',
+                        body: JSON.stringify({ table: key, rows: allowed })
+                    });
+                    result.uploaded += resp.accepted || 0;
+                    if (resp.rowError) {
+                        result.errors[key] = `Zeilenfehler: ${resp.rowError}`;
+                    }
+                }
+                onProgress(`Upload ${key}: bis ${newest}`, result);
+                if (newest === cursor && raw.length < batch) break;
+                cursor = newest;
+                await kvSet(ctx, `up_cursor_${key}`, cursor);
+                if (raw.length < batch) break;
+                if (throttleMs > 0) await sleep(throttleMs);
             }
-            onProgress(`Upload ${key}: bis ${newest}`, result);
-            if (newest === cursor && raw.length < batch) break;
-            cursor = newest;
-            await kvSet(ctx, `up_cursor_${key}`, cursor);
-            if (raw.length < batch) break;
-            if (throttleMs > 0) await sleep(throttleMs);
+        } catch (err) {
+            result.errors[key] = String(err.message || err);
+            onProgress(`Upload ${key} fehlgeschlagen: ${result.errors[key]} — weiter mit nächster Tabelle`, result);
         }
     }
     return result;
@@ -165,10 +176,11 @@ export async function downloadDeltas(ctx, settings, onProgress = () => {}, opts 
     const batch = opts.batch || BATCH;
     const throttleMs = opts.throttleMs ?? THROTTLE_MS;
     const gate = opts.gate || (() => Promise.resolve());
-    const result = { downloaded: 0 };
+    const result = { downloaded: 0, errors: {} };
     for (const key of Object.keys(POOL_TABLES)) {
         const table = poolTable(ctx, key);
         const cols = UPLOAD[key].cols;
+        try {
         for (;;) {
             await gate();
             const cur = await ctx.db.query(`SELECT COALESCE(MAX(remote_id),0) FROM ${table}`);
@@ -191,6 +203,10 @@ export async function downloadDeltas(ctx, settings, onProgress = () => {}, opts 
             if (data.done) break;
             if (throttleMs > 0) await sleep(throttleMs);
         }
+        } catch (err) {
+            result.errors[key] = String(err.message || err);
+            onProgress(`Download ${key} fehlgeschlagen: ${result.errors[key]} — weiter mit nächster Tabelle`, result);
+        }
     }
     return result;
 }
@@ -204,5 +220,11 @@ export async function fullSync(ctx, settings, onProgress = () => {}, opts = {}) 
     const up = await uploadDeltas(ctx, settings, members, onProgress, opts);
     const down = await downloadDeltas(ctx, settings, onProgress, opts);
     await kvSet(ctx, 'last_sync', new Date().toJSON());
-    return { members: members.list, ...up, ...down };
+    const errors = { ...up.errors, ...down.errors };
+    const ok = Object.keys(errors).length === 0;
+    if (ok) {
+        // Chat-Freischaltung hängt am ersten VOLLSTÄNDIG erfolgreichen Sync.
+        await kvSet(ctx, 'first_sync_done', true);
+    }
+    return { members: members.list, ...up, ...down, errors, ok };
 }
