@@ -87,7 +87,7 @@
 
     import { kvGet, kvSet, poolCounts, clearPool } from './db';
     import { DEFAULT_SERVER, apiFetch, fullSync } from './sync';
-    import { restartTimer } from './index';
+    import { restartTimer, startChatIfConfigured } from './index';
     import { getCtx } from './runtime';
 
     const { t } = useI18n();
@@ -132,6 +132,7 @@
         const ctx = getCtx();
         await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
         restartTimer(ctx, settings.intervalMin);
+        startChatIfConfigured(ctx).catch(() => {});
         pushLog('Einstellungen gespeichert.');
     }
 

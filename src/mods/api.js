@@ -275,6 +275,59 @@ export function createModContext(mod, host) {
             },
 
             /**
+             * Fire a notification through VRCX's native channels (same
+             * pipeline as VRCX notys): Windows toast, XSOverlay UDP and the
+             * VRCX VR overlay. Callers decide *when* to notify (DND etc.).
+             * No-op outside the CEF build.
+             * @param {object} n
+             * @param {string} n.title
+             * @param {string} [n.body]
+             * @param {string} [n.image]   local file path for the toast
+             * @param {boolean} [n.desktop=true]
+             * @param {boolean} [n.xs=true]
+             * @param {boolean} [n.vr=true]
+             */
+            async notify({
+                title,
+                body = '',
+                image = '',
+                desktop = true,
+                xs = true,
+                vr = true
+            }) {
+                if (typeof AppApi === 'undefined') {
+                    return;
+                }
+                const text = body ? `${title}: ${body}` : title;
+                if (desktop) {
+                    try {
+                        await AppApi.DesktopNotification(title, body, image);
+                    } catch {}
+                }
+                if (xs) {
+                    try {
+                        AppApi.XSNotification('VRCX', text, 5, 1, image);
+                    } catch {}
+                }
+                if (vr) {
+                    try {
+                        AppApi.ExecuteVrOverlayFunction(
+                            'playNoty',
+                            JSON.stringify({
+                                noty: {
+                                    type: 'Event',
+                                    created_at: new Date().toJSON(),
+                                    data: text
+                                },
+                                message: '',
+                                image: ''
+                            })
+                        );
+                    } catch {}
+                }
+            },
+
+            /**
              * Register a view reachable from the nav menu.
              * @param {object} def
              * @param {string} def.key        unique route/nav key, e.g. 'mod-status-tracker'
