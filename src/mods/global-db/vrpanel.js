@@ -27,8 +27,9 @@ export const DEFAULT_VR_PANEL = {
     vrAutoShow: true, // neue Nachricht: Mini-Flash (wrist) bzw. aufklappen
     vrGesture: true, // Controller-Geste (Grip/A lang drücken) togglet Groß
     vrLaserPitch: 45, // Laser-Neigung (Index-Controller)
+    vrLaserOffX: 0, // Pointer-Offset horizontal in cm (+ = außen, je Hand gespiegelt)
+    vrLaserOffY: 0, // Pointer-Offset vertikal in cm (+ = oben)
     vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
-    vrPlaceHand: 'right', // Hand fürs Platzieren/Draggen
     // Benachrichtigungen (bei DND alle stumm):
     vrNotySound: true,
     vrNotyVisual: true,
@@ -102,8 +103,9 @@ async function pushConfig(ctx) {
         autoShow: s.vrAutoShow,
         gesture: s.vrGesture,
         laserPitch: s.vrLaserPitch,
+        laserOffX: s.vrLaserOffX,
+        laserOffY: s.vrLaserOffY,
         flashSec: s.vrFlashSec,
-        placeHand: s.vrPlaceHand,
         quickReplies: chatState.settings.quickReplies || []
     });
 }
@@ -148,7 +150,8 @@ function onAction(ctx) {
                 if (a.curvature !== undefined) cs.vrCurvature = a.curvature;
                 if (a.width !== undefined) cs.vrWidth = a.width;
                 if (a.laserPitch !== undefined) cs.vrLaserPitch = a.laserPitch;
-                if (a.placeHand !== undefined) cs.vrPlaceHand = a.placeHand;
+                if (a.laserOffX !== undefined) cs.vrLaserOffX = a.laserOffX;
+                if (a.laserOffY !== undefined) cs.vrLaserOffY = a.laserOffY;
                 await kvSet(ctx, 'chat_settings', cs);
             }
         } catch (err) {

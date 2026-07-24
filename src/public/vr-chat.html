@@ -103,8 +103,7 @@
         <div id="ampel" class="dot green"></div>
         <div id="apiwarn" style="display:none;color:#e64a4a;font-size:26px" title="AppApiVr-Bindung fehlgeschlagen">&#9888;</div>
         <div id="tabs"></div>
-        <div id="modebtn" class="hbtn">Wrist</div>
-        <div id="placebtn" class="hbtn" style="display:none">Platzieren</div>
+        <div id="modebtn" class="hbtn">HUD</div>
         <div id="gearbtn" class="hbtn">&#9881;</div>
         <div id="minbtn" class="hbtn">&#8211;</div>
     </div>
@@ -132,8 +131,14 @@
         <div class="hbtn" data-pitch="-2">−</div>
         <span id="pitchval">45°</span>
         <div class="hbtn" data-pitch="2">+</div>
-        <span style="margin-left:16px">Platzieren-Hand</span>
-        <div id="handbtn" class="hbtn">R</div>
+        <span style="margin-left:16px" title="+ = nach außen (je Hand gespiegelt)">H</span>
+        <div class="hbtn" data-offx="-0.5">−</div>
+        <span id="offxval">0</span>
+        <div class="hbtn" data-offx="0.5">+</div>
+        <span style="margin-left:16px" title="+ = nach oben">V</span>
+        <div class="hbtn" data-offy="-0.5">−</div>
+        <span id="offyval">0</span>
+        <div class="hbtn" data-offy="0.5">+</div>
     </div>
 </div>
 <div id="bubble">
@@ -163,8 +168,9 @@
     const $ = (id) => document.getElementById(id);
     const state = {
         me: '', ampel: 'green', channels: [], active: 'global',
-        big: false, autoShow: true, mode: 'hud', placeHand: 'right',
+        big: false, autoShow: true, mode: 'hud',
         alpha: 0.9, curvature: 0.08, width: 0.6, laserPitch: 45,
+        laserOffX: 0, laserOffY: 0,
         draft: '', lastUnread: 0, lastMsg: null
     };
     const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','😭','😱','🥳','😴','👍','👎',
@@ -234,9 +240,9 @@
 
         $('modebtn').textContent =
             state.mode === 'world' ? 'World' : state.mode === 'hud' ? 'HUD' : 'Wrist';
-        $('placebtn').style.display = state.mode === 'world' ? 'block' : 'none';
         $('pitchval').textContent = Math.round(state.laserPitch) + '°';
-        $('handbtn').textContent = state.placeHand === 'left' ? 'L' : 'R';
+        $('offxval').textContent = state.laserOffX.toFixed(1);
+        $('offyval').textContent = state.laserOffY.toFixed(1);
 
         const box = $('msgs');
         const ch = chan();
@@ -326,13 +332,23 @@
                 if (c.autoShow !== undefined) state.autoShow = c.autoShow;
                 if (c.big !== undefined) state.big = c.big;
                 if (c.laserPitch !== undefined) state.laserPitch = c.laserPitch;
-                if (c.placeHand !== undefined) state.placeHand = c.placeHand;
+                if (c.laserOffX !== undefined) state.laserOffX = c.laserOffX;
+                if (c.laserOffY !== undefined) state.laserOffY = c.laserOffY;
                 if (c.quickReplies !== undefined) state.quickReplies = c.quickReplies;
                 render();
             } catch (e) {}
         },
         keyboardDone(text) {
             state.draft = (text || '').trim();
+            render();
+        },
+        keyboardChar(text) {
+            // Live-Zeichenstrom der SteamVR-Tastatur (\b = löschen)
+            for (const ch of text || '') {
+                if (ch === '\b') state.draft = state.draft.slice(0, -1);
+                else if (ch === '\n' || ch === '\r') continue;
+                else state.draft += ch;
+            }
             render();
         },
         cursor(x, y) {
@@ -368,13 +384,6 @@
     $('modebtn').onclick = () => {
         state.mode = state.mode === 'wrist' ? 'hud' : state.mode === 'hud' ? 'world' : 'wrist';
         cfg({ mode: state.mode, place: true });
-        render();
-    };
-    // Platzieren: Panel folgt dem Laser, Trigger fixiert an der Position
-    $('placebtn').onclick = () => cfg({ placeMode: true });
-    $('handbtn').onclick = () => {
-        state.placeHand = state.placeHand === 'left' ? 'right' : 'left';
-        cfg({ placeHand: state.placeHand });
         render();
     };
     $('emojibtn').onclick = () => {
@@ -416,6 +425,20 @@
         el.onclick = () => {
             state.laserPitch = Math.min(90, Math.max(-30, state.laserPitch + parseFloat(el.dataset.pitch)));
             cfg({ laserPitch: state.laserPitch });
+            render();
+        };
+    }
+    for (const el of document.querySelectorAll('[data-offx]')) {
+        el.onclick = () => {
+            state.laserOffX = Math.min(10, Math.max(-10, state.laserOffX + parseFloat(el.dataset.offx)));
+            cfg({ laserOffX: state.laserOffX });
+            render();
+        };
+    }
+    for (const el of document.querySelectorAll('[data-offy]')) {
+        el.onclick = () => {
+            state.laserOffY = Math.min(10, Math.max(-10, state.laserOffY + parseFloat(el.dataset.offy)));
+            cfg({ laserOffY: state.laserOffY });
             render();
         };
     }
