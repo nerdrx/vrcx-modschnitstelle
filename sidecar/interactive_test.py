@@ -19,10 +19,11 @@ async def interactive_stt_test():
 
     try:
         async with websockets.connect(SERVER_URL) as ws:
-            # Drain initial unsolicited ready
-            init_msg = await ws.recv()
+            # Send hello on connect to verify handshake
+            await ws.send(json.dumps({"type": "hello", "version": 1}))
+            ready_msg = json.loads(await ws.recv())
             
-            print("[✓] Verbindung erfolgreich hergestellt!")
+            print(f"[✓] Verbindung erfolgreich hergestellt! (Sidecar Version {ready_msg.get('version')})")
             print("[INFO] Das Sidecar hört auf dein Standard-Mikrofon.\n")
 
             while True:
