@@ -70,12 +70,9 @@ if not exist "venv\Scripts\python.exe" (
 )
 
 :: 6. Install requirements
-echo [INFO] Aktiviere virtuelle Umgebung...
-call "venv\Scripts\activate.bat"
-
 echo [INFO] Pruefe / installiere Python-Pakete...
-python -m pip install --quiet --upgrade pip
-python -m pip install -r requirements.txt
+"!PYTHON_CMD!" -m pip install --quiet --upgrade pip
+"!PYTHON_CMD!" -m pip install -r requirements.txt
 
 :: 7. Check models directory
 if not exist "models" (
@@ -85,5 +82,9 @@ if not exist "models" (
 )
 
 echo [INFO] Starte Voice-Sidecar...
-python main.py
+"!PYTHON_CMD!" main.py
+if %errorlevel% neq 0 (
+    echo.
+    echo [FEHLER] Der Sidecar-Prozess wurde mit Fehler beendet.
+)
 pause
