@@ -121,6 +121,11 @@
                         <span style="font-size: 12px; opacity: 0.6">(für Zweit-PC)</span>
                     </div>
                     <div class="gdb-row">
+                        <label>Benachrichtigung</label>
+                        <button class="gdb-btn" @click="testNoty">Test-Noty (Desktop + VR)</button>
+                        <span style="font-size: 12px; opacity: 0.6">prüft Windows-Toast, XSOverlay &amp; VRCX-VR-Overlay</span>
+                    </div>
+                    <div class="gdb-row">
                         <button class="gdb-btn gdb-btn--danger" :disabled="busy" @click="leavePool">
                             Pool verlassen &amp; meine Daten löschen
                         </button>
@@ -321,6 +326,18 @@
         } finally {
             busy.value = false;
         }
+    }
+
+    async function testNoty() {
+        const ctx = getCtx();
+        await ctx.ui.notify({
+            title: 'Pool-Chat',
+            body: 'Test-Benachrichtigung ' + new Date().toLocaleTimeString('de-AT'),
+            desktop: true,
+            xs: true,
+            vr: true
+        });
+        pushLog('Test-Noty gesendet (Desktop + XSOverlay + VR-Overlay).');
     }
 
     function copyToken() {
