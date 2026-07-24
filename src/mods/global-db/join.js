@@ -103,7 +103,7 @@ export async function joinPool(settings, userId, displayName) {
     const data = await res.json().catch(() => ({}));
     if (res.status === 409) {
         throw new Error(
-            'Du bist bereits Mitglied. Token vom anderen PC übernehmen (Dashboard → „Token anzeigen") oder Marco fragen.'
+            'Du bist bereits Mitglied. Token vom anderen PC übernehmen (Dashboard → „Token anzeigen") oder den Pool-Admin fragen.'
         );
     }
     if (res.status === 403) {
