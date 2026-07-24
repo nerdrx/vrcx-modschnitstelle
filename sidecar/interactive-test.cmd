@@ -7,13 +7,27 @@ echo   VRCX Voice-Sidecar Interaktiver STT-Test
 echo ===================================================
 
 set "PYTHON_CMD="
-if exist "%~dp0venv\Scripts\python.exe" (
-    set "PYTHON_CMD=%~dp0venv\Scripts\python.exe"
-) else if exist "%~dp0python\python.exe" (
-    set "PYTHON_CMD=%~dp0python\python.exe"
+if exist "venv\Scripts\python.exe" (
+    set "PYTHON_CMD=venv\Scripts\python.exe"
+) else if exist "python\python.exe" (
+    set "PYTHON_CMD=python\python.exe"
 ) else (
-    set "PYTHON_CMD=python"
+    where python >nul 2>nul
+    if !errorlevel! equ 0 (
+        set "PYTHON_CMD=python"
+    ) else (
+        where py >nul 2>nul
+        if !errorlevel! equ 0 (
+            set "PYTHON_CMD=py"
+        )
+    )
 )
 
-"!PYTHON_CMD!" "%~dp0interactive_test.py"
+if "!PYTHON_CMD!"=="" (
+    echo [FEHLER] Kein Python gefunden. Bitte erst start.cmd ausfuehren oder Python installieren.
+    pause
+    exit /b 1
+)
+
+"!PYTHON_CMD!" interactive_test.py
 pause

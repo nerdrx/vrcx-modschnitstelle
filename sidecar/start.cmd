@@ -1,81 +1,89 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Navigation zum Script-Verzeichnis
 cd /d "%~dp0"
 
 echo ===================================================
 echo   VRCX Voice-Sidecar Starter (Windows)
 echo ===================================================
 
-:: 1. Prüfen ob ein lokales/portables Python in sidecar\python\python.exe liegt
 set "PYTHON_CMD="
-if exist "%~dp0python\python.exe" (
-    set "PYTHON_CMD=%~dp0python\python.exe"
+
+:: 1. Check if virtual environment exists in sidecar\venv
+if exist "venv\Scripts\python.exe" (
+    set "PYTHON_CMD=venv\Scripts\python.exe"
+    echo [INFO] Verwende venv: !PYTHON_CMD!
+    goto :FOUND_PYTHON
+)
+
+:: 2. Check if portable Python exists in sidecar\python\python.exe
+if exist "python\python.exe" (
+    set "PYTHON_CMD=python\python.exe"
     echo [INFO] Verwende portables Python: !PYTHON_CMD!
-) else (
-    :: 2. Prüfen ob globales Python installiert ist
-    where python >nul 2>nul
-    if !errorlevel! equ 0 (
-        set "PYTHON_CMD=python"
-        echo [INFO] Verwende System-Python
-    ) else (
-        where py >nul 2>nul
-        if !errorlevel! equ 0 (
-            set "PYTHON_CMD=py"
-            echo [INFO] Verwende Python-Launcher (py)
-        )
-    )
+    goto :FOUND_PYTHON
 )
 
-:: 3. Wenn kein Python gefunden wurde: Freundliche Fehlermeldung und Abbruch
-if "!PYTHON_CMD!"=="" (
-    echo.
-    echo [FEHLER] Kein Python-Laufzeitumgebung gefunden!
-    echo.
-    echo Um den Voice-Sidecar auszufuehren, benoetigst du Python 3.11 oder neuer.
-    echo.
-    echo Optionen:
-    echo  1. Python 3.11+ offiziell installieren (https://www.python.org/downloads/)
-    echo     Wichtig: Haken bei "Add Python to PATH" setzen!
-    echo.
-    echo  2. Portables Python verwenden:
-    echo     - Python Embeddable Package (64-bit) von python.org herunterladen
-    echo     - Inhalt in den Ordner "%~dp0python\" entpacken
-    echo.
-    pause
-    exit /b 1
+:: 3. Check system python via where
+where python >nul 2>nul
+if %errorlevel% equ 0 (
+    set "PYTHON_CMD=python"
+    echo [INFO] Verwende System-Python
+    goto :FOUND_PYTHON
 )
 
-:: 4. Virtualenv einrichten falls nicht vorhanden
-if not exist "%~dp0venv\Scripts\python.exe" (
+:: 4. Check py launcher via where
+where py >nul 2>nul
+if %errorlevel% equ 0 (
+    set "PYTHON_CMD=py"
+    echo [INFO] Verwende Python-Launcher (py)
+    goto :FOUND_PYTHON
+)
+
+echo.
+echo [FEHLER] Keine funktionierende Python-Laufzeitumgebung gefunden!
+echo.
+echo Um den Voice-Sidecar auszufuehren, benoetigst du Python 3.11 oder neuer.
+echo.
+echo Optionen:
+echo  1. Python 3.11+ offiziell installieren (https://www.python.org/downloads/)
+echo     Wichtig: Im Installer den Haken bei "Add Python to PATH" setzen!
+echo.
+echo  2. Portables Python verwenden:
+echo     - Python Embeddable Package (64-bit) von python.org herunterladen
+echo     - Inhalt in den Ordner "sidecar\python\" entpacken
+echo.
+pause
+exit /b 1
+
+:FOUND_PYTHON
+
+:: 5. Create virtual environment if not present
+if not exist "venv\Scripts\python.exe" (
     echo [INFO] Erstelle virtuelle Umgebung in sidecar\venv...
-    "!PYTHON_CMD!" -m venv "%~dp0venv"
+    "!PYTHON_CMD!" -m venv venv
     if !errorlevel! neq 0 (
         echo [FEHLER] Erstellung der virtuellen Umgebung fehlgeschlagen.
         pause
         exit /b 1
     )
+    set "PYTHON_CMD=venv\Scripts\python.exe"
 )
 
-:: 5. Abhaengigkeiten installieren/aktualisieren
+:: 6. Install requirements
 echo [INFO] Aktiviere virtuelle Umgebung...
-call "%~dp0venv\Scripts\activate.bat"
+call "venv\Scripts\activate.bat"
 
-echo [INFO] Prüfe / installiere Python-Pakete...
+echo [INFO] Pruefe / installiere Python-Pakete...
 python -m pip install --quiet --upgrade pip
-python -m pip install -r "%~dp0requirements.txt"
-if %errorlevel% neq 0 (
-    echo [WARNUNG] Einige Pakete konnten nicht installiert werden.
-)
+python -m pip install -r requirements.txt
 
-:: 6. Modell-Prüfung Hinweis
-if not exist "%~dp0models" (
+:: 7. Check models directory
+if not exist "models" (
     echo [HINWEIS] Ordner 'models' existiert noch nicht.
     echo [HINWEIS] Bitte fuehre 'download-models.cmd' aus, um STT/TTS-Modelle herunterzuladen.
     echo [HINWEIS] Der Sidecar startet trotzdem im Status (ready: tts=false, stt=false).
 )
 
 echo [INFO] Starte Voice-Sidecar...
-python "%~dp0main.py"
+python main.py
 pause
