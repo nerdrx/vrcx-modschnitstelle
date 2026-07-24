@@ -81,6 +81,9 @@
         background: rgba(16, 16, 20, 0.92); border: 3px solid #3a3a44; border-radius: 40px;
         flex-direction: column; gap: 18px; justify-content: center; }
     #mini.show { display: flex; }
+    #mini.moving { border-color: #e64a4a; }
+    #miniMoveText { display: none; color: #e64a4a; font-size: 34px; font-weight: 700; text-align: center; }
+    #mini.moving #miniMoveText { display: block; }
     #mini .head { display: flex; align-items: center; gap: 18px; }
     #mini .head .dot { width: 34px; height: 34px; }
     #mini .head .badge { background: #e64a4a; color: #fff; border-radius: 20px; min-width: 40px;
@@ -139,6 +142,8 @@
         <div class="hbtn" data-offy="-0.5">−</div>
         <span id="offyval">0</span>
         <div class="hbtn" data-offy="0.5">+</div>
+        <span style="margin-left:16px" title="Wrist-Mini verschieben sperren">Wrist-Lock</span>
+        <div id="wristlockbtn" class="hbtn">aus</div>
     </div>
 </div>
 <div id="bubble">
@@ -154,7 +159,8 @@
     </div>
     <div id="miniWho" class="who"></div>
     <div id="miniTxt" class="txt">Keine neuen Nachrichten</div>
-    <div class="hint">Antippen zum Öffnen</div>
+    <div id="miniMoveText">wird verschoben…</div>
+    <div class="hint">Antippen: öffnen · Halten: verschieben</div>
 </div>
 <div id="cursor"></div>
 
@@ -168,7 +174,7 @@
     const $ = (id) => document.getElementById(id);
     const state = {
         me: '', ampel: 'green', channels: [], active: 'global',
-        big: false, autoShow: true, mode: 'hud',
+        big: false, autoShow: true, mode: 'wrist', wristLock: false,
         alpha: 0.9, curvature: 0.08, width: 0.6, laserPitch: 45,
         laserOffX: -6, laserOffY: -3.5,
         draft: '', lastUnread: 0, lastMsg: null
@@ -243,6 +249,8 @@
         $('pitchval').textContent = Math.round(state.laserPitch) + '°';
         $('offxval').textContent = state.laserOffX.toFixed(1);
         $('offyval').textContent = state.laserOffY.toFixed(1);
+        $('wristlockbtn').textContent = state.wristLock ? 'AN' : 'aus';
+        $('wristlockbtn').classList.toggle('active', state.wristLock);
 
         const box = $('msgs');
         const ch = chan();
@@ -334,6 +342,7 @@
                 if (c.laserPitch !== undefined) state.laserPitch = c.laserPitch;
                 if (c.laserOffX !== undefined) state.laserOffX = c.laserOffX;
                 if (c.laserOffY !== undefined) state.laserOffY = c.laserOffY;
+                if (c.wristLock !== undefined) state.wristLock = c.wristLock;
                 if (c.quickReplies !== undefined) state.quickReplies = c.quickReplies;
                 render();
             } catch (e) {}
@@ -364,6 +373,9 @@
             c.style.display = 'block';
             c.style.left = x + 'px';
             c.style.top = y + 'px';
+        },
+        moving(flag) {
+            $('mini').classList.toggle('moving', !!flag);
         },
         gestureToggle() {
             state.big = !state.big;
@@ -443,6 +455,11 @@
             render();
         };
     }
+    $('wristlockbtn').onclick = () => {
+        state.wristLock = !state.wristLock;
+        cfg({ wristLock: state.wristLock });
+        render();
+    };
     for (const el of document.querySelectorAll('[data-offy]')) {
         el.onclick = () => {
             state.laserOffY = Math.min(10, Math.max(-10, state.laserOffY + parseFloat(el.dataset.offy)));
