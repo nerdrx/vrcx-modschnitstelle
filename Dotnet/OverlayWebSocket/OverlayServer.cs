@@ -167,10 +167,13 @@ public class OverlayServer
             // MOD-API: P2 VR chat panel — forward panel actions to the mod
             // bridge in the main renderer (globaldb registers the hook).
             case OverlayMessageType.ChatAction:
+                logger.Info("ChatAction -> renderer ({0} bytes)", message.Data?.Length ?? 0); // MOD-API Diagnose
                 if (MainForm.Instance?.Browser != null && !MainForm.Instance.Browser.IsLoading &&
                     MainForm.Instance.Browser.CanExecuteJavascriptInMainFrame)
                     MainForm.Instance.Browser.ExecuteScriptAsync(
                         "window.__vrcxChatAction && window.__vrcxChatAction", message.Data);
+                else
+                    logger.Warn("ChatAction dropped: renderer not ready"); // MOD-API
                 break;
 
             case OverlayMessageType.JsFunctionCall:

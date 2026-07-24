@@ -37,13 +37,22 @@ namespace VRCX
 
         // --- config (updated from the mod via chat.config) ---
         private volatile bool _enabled;
-        private string _mode = "hud"; // "hud" | "world"
+        private string _mode = "wrist"; // "wrist" | "hud" | "world"
         private float _alpha = 0.9f;
         private float _curvature = 0.08f;
-        private float _widthMeters = 0.9f;
+        private float _widthMeters = 0.6f;
         private bool _gestureEnabled;
+        private float _laserPitchDeg = 45f; // Index: Ray-Neigung zur Controller-Spitze
+        private bool _big; // "Groß"-Modus: volle UI, bleibt bis Minimieren
+        private float _flashSec = 10f;
 
         private bool _placeRequested = true; // world mode: (re)place at HMD pose
+        private bool _placing; // Platzieren: Panel folgt dem Laser, Trigger fixiert
+        private DateTime _flashUntil = DateTime.MinValue; // Mini nach neuer Nachricht
+        private uint _wristIndex = OpenVR.k_unTrackedDeviceIndexInvalid;
+        private DateTime _wristUntil = DateTime.MinValue;
+        private int _hapticPulses;
+        private string _hapticHand = "both";
         private string _pendingKeyboardText;
         private bool _keyboardRequested;
 
@@ -108,6 +117,19 @@ namespace VRCX
         {
             if (function == "config")
                 ApplyConfig(json);
+            if (function == "haptic")
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(json);
+                    _hapticHand = doc.RootElement.TryGetProperty("hand", out var h)
+                        ? h.GetString() ?? "both"
+                        : "both";
+                }
+                catch { }
+                _hapticPulses = 10; // ~10 Frames à 32 ms Buzz
+                return;
+            }
             if (_browser == null || _browser.IsLoading || !_browser.CanExecuteJavascriptInMainFrame)
                 return;
             _browser.ExecuteScriptAsync($"window.$vrchat && $vrchat.{function}", json);
@@ -122,7 +144,7 @@ namespace VRCX
                 if (root.TryGetProperty("enabled", out var en)) _enabled = en.GetBoolean();
                 if (root.TryGetProperty("mode", out var mo))
                 {
-                    var mode = mo.GetString() ?? "hud";
+                    var mode = mo.GetString() ?? "wrist";
                     if (mode != _mode)
                     {
                         _mode = mode;
@@ -131,9 +153,23 @@ namespace VRCX
                 }
                 if (root.TryGetProperty("alpha", out var al)) _alpha = Math.Clamp(al.GetSingle(), 0.2f, 1f);
                 if (root.TryGetProperty("curvature", out var cu)) _curvature = Math.Clamp(cu.GetSingle(), 0f, 0.4f);
-                if (root.TryGetProperty("width", out var wi)) _widthMeters = Math.Clamp(wi.GetSingle(), 0.3f, 2.5f);
+                if (root.TryGetProperty("width", out var wi)) _widthMeters = Math.Clamp(wi.GetSingle(), 0.2f, 2.5f);
                 if (root.TryGetProperty("gesture", out var ge)) _gestureEnabled = ge.GetBoolean();
+                if (root.TryGetProperty("laserPitch", out var lp)) _laserPitchDeg = Math.Clamp(lp.GetSingle(), -30f, 90f);
+                if (root.TryGetProperty("flashSec", out var fs)) _flashSec = Math.Clamp(fs.GetSingle(), 2f, 120f);
+                if (root.TryGetProperty("big", out var bg))
+                {
+                    var big = bg.GetBoolean();
+                    if (big != _big)
+                    {
+                        _big = big;
+                        _placeRequested = true;
+                    }
+                }
+                if (root.TryGetProperty("flash", out var fl) && fl.GetBoolean())
+                    _flashUntil = DateTime.UtcNow.AddSeconds(_flashSec);
                 if (root.TryGetProperty("place", out var pl) && pl.GetBoolean()) _placeRequested = true;
+                if (root.TryGetProperty("placeMode", out var pm) && pm.GetBoolean()) _placing = true;
                 _handleDirty = true;
             }
             catch (Exception e)
@@ -151,6 +187,7 @@ namespace VRCX
             {
                 using var doc = JsonDocument.Parse(json);
                 var type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
+                logger.Info("chat panel action: {0}", type); // Diagnose Send-Pfad
                 switch (type)
                 {
                     case "keyboard":
@@ -176,10 +213,17 @@ namespace VRCX
         }
 
         /// Main per-frame processing — called from the VRCXVRCef thread loop.
-        public void Process(CVRSystem system, CVROverlay overlay, bool dashboardVisible)
+        /// wristIndex/wristUntil mirror the VRCX wrist overlay (hand + its
+        /// visibility window) so the mini panel can piggyback on it.
+        public void Process(CVRSystem system, CVROverlay overlay, bool dashboardVisible,
+            uint wristIndex, DateTime wristUntil)
         {
             try
             {
+                if (wristIndex != OpenVR.k_unTrackedDeviceIndexInvalid)
+                    _wristIndex = wristIndex;
+                if (wristUntil > _wristUntil)
+                    _wristUntil = wristUntil;
                 ProcessInternal(system, overlay, dashboardVisible);
             }
             catch (Exception e)
@@ -190,13 +234,26 @@ namespace VRCX
 
         private void ProcessInternal(CVRSystem system, CVROverlay overlay, bool dashboardVisible)
         {
-            if (!_enabled)
+            // Wrist-Modus: Mini nur sichtbar im Wrist-Fenster (VRCX-Geste)
+            // oder kurz nach neuer Nachricht (Flash); Groß bleibt bis Minimieren.
+            var wantVisible = _enabled && !dashboardVisible;
+            if (wantVisible && _mode == "wrist" && !_big && !_placing)
+            {
+                var now = DateTime.UtcNow;
+                wantVisible = now <= _wristUntil || now <= _flashUntil;
+            }
+
+            if (!wantVisible)
             {
                 if (_visible && _handle != 0)
                 {
                     overlay.HideOverlay(_handle);
                     _visible = false;
                 }
+                if (_enabled && _gestureEnabled)
+                    ProcessGesture(system); // Geste kann Mini/Groß auch aus dem Hidden-Zustand öffnen
+                if (_enabled)
+                    ProcessHaptics(system);
                 return;
             }
 
@@ -231,7 +288,15 @@ namespace VRCX
                 _handleDirty = false;
             }
 
-            if (_placeRequested)
+            if (_placing)
+            {
+                ProcessPlacement(system, overlay);
+            }
+            else if (_mode == "wrist" && !_big)
+            {
+                ApplyWristTransform(system, overlay); // jede Frame: Hand kann wechseln
+            }
+            else if (_placeRequested)
             {
                 ApplyTransform(system, overlay);
                 _placeRequested = false;
@@ -277,10 +342,121 @@ namespace VRCX
 
             if (_gestureEnabled)
                 ProcessGesture(system);
+            ProcessHaptics(system);
+        }
+
+        // -------------------------------------------------------- transforms --
+        /// Mini-Panel neben dem VRCX-Wrist-Overlay (gleiche Hand).
+        private void ApplyWristTransform(CVRSystem system, CVROverlay overlay)
+        {
+            if (_wristIndex == OpenVR.k_unTrackedDeviceIndexInvalid)
+                return;
+            var role = system.GetControllerRoleForTrackedDeviceIndex(_wristIndex);
+            var left = role == ETrackedControllerRole.LeftHand;
+            var deg = (float)(Math.PI / 180f);
+            var m = Matrix4x4.CreateScale(1f);
+            if (left)
+            {
+                m *= Matrix4x4.CreateRotationX(90f * deg);
+                m *= Matrix4x4.CreateRotationY(90f * deg);
+                m *= Matrix4x4.CreateRotationZ(-90f * deg);
+                m *= Matrix4x4.CreateTranslation(-0.17f, -0.05f, 0.06f);
+            }
+            else
+            {
+                m *= Matrix4x4.CreateRotationX(-90f * deg);
+                m *= Matrix4x4.CreateRotationY(-90f * deg);
+                m *= Matrix4x4.CreateRotationZ(-90f * deg);
+                m *= Matrix4x4.CreateTranslation(0.17f, -0.05f, 0.06f);
+            }
+            var hm34 = ToHmdMatrix34(m);
+            overlay.SetOverlayWidthInMeters(_handle, 0.18f); // Mini klein am Handgelenk
+            overlay.SetOverlayTransformTrackedDeviceRelative(_handle, _wristIndex, ref hm34);
+        }
+
+        /// Platzieren: Panel folgt dem Controller-Laser (1 m Distanz, Billboard
+        /// zum HMD); Trigger fixiert an der aktuellen Position (world mode).
+        private bool _placeTriggerDown;
+
+        private void ProcessPlacement(CVRSystem system, CVROverlay overlay)
+        {
+            var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
+            system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
+            var hmd = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
+            var state = new VRControllerState_t();
+
+            for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
+            {
+                var role = system.GetControllerRoleForTrackedDeviceIndex(i);
+                if (role != ETrackedControllerRole.LeftHand && role != ETrackedControllerRole.RightHand)
+                    continue;
+                if (!poses[i].bPoseIsValid)
+                    continue;
+
+                var m = poses[i].mDeviceToAbsoluteTracking;
+                var src = new Vector3(m.m3, m.m7, m.m11);
+                var dir = LaserDirection(m);
+                var pos = src + dir * 1.0f;
+
+                var hmdPos = hmd.bPoseIsValid
+                    ? new Vector3(hmd.mDeviceToAbsoluteTracking.m3, hmd.mDeviceToAbsoluteTracking.m7,
+                        hmd.mDeviceToAbsoluteTracking.m11)
+                    : src;
+                var z = Vector3.Normalize(hmdPos - pos);
+                var x = Vector3.Normalize(Vector3.Cross(new Vector3(0, 1, 0), z));
+                if (float.IsNaN(x.X)) x = new Vector3(1, 0, 0);
+                var y = Vector3.Cross(z, x);
+                var tm = new Matrix4x4(
+                    x.X, x.Y, x.Z, 0,
+                    y.X, y.Y, y.Z, 0,
+                    z.X, z.Y, z.Z, 0,
+                    pos.X, pos.Y, pos.Z, 1);
+                var hm34 = ToHmdMatrix34(tm);
+                overlay.SetOverlayWidthInMeters(_handle, _widthMeters);
+                overlay.SetOverlayTransformAbsolute(_handle,
+                    ETrackingUniverseOrigin.TrackingUniverseStanding, ref hm34);
+
+                if (system.GetControllerState(i, ref state, (uint)Marshal.SizeOf(state)))
+                {
+                    var trigger = (state.ulButtonPressed & (1UL << (int)EVRButtonId.k_EButton_SteamVR_Trigger)) != 0;
+                    if (trigger && !_placeTriggerDown)
+                    {
+                        // fixieren
+                        _placing = false;
+                        _mode = "world";
+                        _big = true;
+                        _browser?.ExecuteScriptAsync(
+                            "window.$vrchat && $vrchat.config", "{\"mode\":\"world\",\"placing\":false}");
+                        logger.Info("chat panel placed (world)");
+                    }
+                    _placeTriggerDown = trigger;
+                }
+                return; // erster gültiger Controller führt
+            }
+        }
+
+        /// Buzz auf gewünschter Hand (left/right/both), ~10 Frames.
+        private void ProcessHaptics(CVRSystem system)
+        {
+            if (_hapticPulses <= 0)
+                return;
+            _hapticPulses--;
+            for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
+            {
+                var role = system.GetControllerRoleForTrackedDeviceIndex(i);
+                var isLeft = role == ETrackedControllerRole.LeftHand;
+                var isRight = role == ETrackedControllerRole.RightHand;
+                if (!isLeft && !isRight)
+                    continue;
+                if (_hapticHand == "left" && !isLeft) continue;
+                if (_hapticHand == "right" && !isRight) continue;
+                system.TriggerHapticPulse(i, 0, 3000);
+            }
         }
 
         private void ApplyTransform(CVRSystem system, CVROverlay overlay)
         {
+            overlay.SetOverlayWidthInMeters(_handle, _widthMeters);
             if (_mode == "world")
             {
                 var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
@@ -332,9 +508,11 @@ namespace VRCX
                             (int)(e.data.scroll.xdelta * 120), (int)(e.data.scroll.ydelta * 120), CefEventFlags.None);
                         break;
                     case EVREventType.VREvent_KeyboardDone:
+                    case EVREventType.VREvent_KeyboardClosed:
                     {
                         var sb = new StringBuilder(1024);
                         OpenVR.Overlay.GetKeyboardText(sb, 1024);
+                        logger.Info("keyboard event {0}, text len {1}", type, sb.Length); // Diagnose
                         _browser.ExecuteScriptAsync("window.$vrchat && $vrchat.keyboardDone", sb.ToString());
                         break;
                     }
@@ -346,9 +524,23 @@ namespace VRCX
         private readonly bool[] _triggerDown = new bool[2];
         private bool _pointerWasOnPanel;
 
+        /// Ray-Richtung mit einstellbarer Neigung (Index-Controller: rohe Pose
+        /// zeigt nicht zur Spitze — Standard ~45° nach unten gekippt).
+        private Vector3 LaserDirection(HmdMatrix34_t m)
+        {
+            var p = _laserPitchDeg * (float)(Math.PI / 180f);
+            var s = (float)Math.Sin(p);
+            var c = (float)Math.Cos(p);
+            // dir_local = (0, -sin p, -cos p) in Controller-Space
+            return Vector3.Normalize(new Vector3(
+                -s * m.m1 - c * m.m2,
+                -s * m.m5 - c * m.m6,
+                -s * m.m9 - c * m.m10));
+        }
+
         private void ProcessLaser(CVRSystem system, CVROverlay overlay)
         {
-            if (!_visible)
+            if (!_visible || _placing)
                 return;
             var host = _browser?.GetBrowserHost();
             if (host == null)
@@ -371,11 +563,12 @@ namespace VRCX
                 if (!poses[i].bPoseIsValid)
                     continue;
                 var m = poses[i].mDeviceToAbsoluteTracking;
+                var dir = LaserDirection(m);
                 var parms = new VROverlayIntersectionParams_t
                 {
                     eOrigin = ETrackingUniverseOrigin.TrackingUniverseStanding,
                     vSource = new HmdVector3_t { v0 = m.m3, v1 = m.m7, v2 = m.m11 },
-                    vDirection = new HmdVector3_t { v0 = -m.m2, v1 = -m.m6, v2 = -m.m10 }
+                    vDirection = new HmdVector3_t { v0 = dir.X, v1 = dir.Y, v2 = dir.Z }
                 };
                 var results = new VROverlayIntersectionResults_t();
                 if (!overlay.ComputeOverlayIntersection(_handle, ref parms, ref results))

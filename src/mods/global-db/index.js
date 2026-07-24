@@ -11,8 +11,25 @@ import { initTables, kvGet, kvSet } from './db';
 import { fullSync } from './sync';
 import { chatState, displayName, initChat, isDnd, stopChat } from './chat';
 import { checkEligible, uploadFriendHashes } from './join';
-import { startVrPanel, stopVrPanel } from './vrpanel';
+import { startVrPanel, stopVrPanel, vrHaptic } from './vrpanel';
 import { setCtx } from './runtime';
+
+// Kurzer Benachrichtigungston (WebAudio, kein Asset nötig).
+let audioCtx = null;
+function playBeep() {
+    try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+        osc.connect(gain).connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+    } catch {}
+}
 
 let timer = null;
 
@@ -80,14 +97,20 @@ function onChatMessage(ctx) {
             const scope = ev.channel === 'global' ? 'Pool' : 'DM';
             const body =
                 ev.kind === 'invite' ? 'Join-Einladung 📍' : ev.text;
-            ctx.ui.notify({
-                title: `${from} (${scope})`,
-                body,
-                desktop: chatState.settings.notifyDesktop !== false,
-                xs: chatState.settings.notifyVr !== false,
-                ovrt: chatState.settings.notifyVr !== false,
-                vr: chatState.settings.notifyVr !== false
-            });
+            const s = chatState.settings;
+            // Separat togglebar: Ton / visuelle Benachrichtigung / Haptik
+            if (s.vrNotySound !== false) playBeep();
+            if (s.vrNotyVisual !== false) {
+                ctx.ui.notify({
+                    title: `${from} (${scope})`,
+                    body,
+                    desktop: s.notifyDesktop !== false,
+                    xs: s.notifyVr !== false,
+                    ovrt: s.notifyVr !== false,
+                    vr: s.notifyVr !== false
+                });
+            }
+            if (s.vrNotyHaptic !== false) vrHaptic(s.vrHapticHand || 'both');
         } catch (err) {
             ctx.warn('chat notify failed:', err);
         }

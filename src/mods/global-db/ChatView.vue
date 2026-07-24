@@ -21,18 +21,41 @@
                 <input type="checkbox" v-model="st.settings.shield" @change="saveSettings" />
                 Streamer-Schutz
             </label>
-            <label class="tgl" title="Interaktives Chat-Panel als SteamVR-Overlay">
+            <label class="tgl" title="Kurzer Ton bei neuer Nachricht">
+                <input type="checkbox" v-model="st.settings.vrNotySound" @change="saveVrSettings" />
+                Ton
+            </label>
+            <label class="tgl" title="Windows-Toast / VR-Overlay / OVR-Toolkit">
+                <input type="checkbox" v-model="st.settings.vrNotyVisual" @change="saveVrSettings" />
+                Benachrichtigung
+            </label>
+            <label class="tgl" title="Controller-Vibration bei neuer Nachricht">
+                <input type="checkbox" v-model="st.settings.vrNotyHaptic" @change="saveVrSettings" />
+                Haptik
+            </label>
+            <select v-if="st.settings.vrNotyHaptic" v-model="st.settings.vrHapticHand"
+                class="tgl-select" title="Welche Hand vibriert" @change="saveVrSettings">
+                <option value="both">beide</option>
+                <option value="left">links</option>
+                <option value="right">rechts</option>
+            </select>
+            <label class="tgl" title="Interaktives Chat-Panel als SteamVR-Overlay (Standard: am Handgelenk)">
                 <input type="checkbox" v-model="st.settings.vrPanel" @change="saveVrSettings" />
                 VR-Panel
             </label>
-            <label v-if="st.settings.vrPanel" class="tgl" title="Bei neuer Nachricht automatisch aufklappen">
+            <label v-if="st.settings.vrPanel" class="tgl" title="Neue Nachricht: Mini am Handgelenk einblenden bzw. Panel aufklappen">
                 <input type="checkbox" v-model="st.settings.vrAutoShow" @change="saveVrSettings" />
                 VR: Auto-Show
             </label>
-            <label v-if="st.settings.vrPanel" class="tgl" title="Grip/A-Taste lang drücken minimiert/öffnet das Panel">
+            <label v-if="st.settings.vrPanel" class="tgl" title="Grip/A-Taste lang drücken öffnet/schließt den großen Chat">
                 <input type="checkbox" v-model="st.settings.vrGesture" @change="saveVrSettings" />
                 VR: Geste
             </label>
+            <span v-if="st.settings.vrPanel" class="tgl" title="Mini-Anzeigedauer bei neuer Nachricht (Sekunden)">
+                Mini
+                <input v-model.number="st.settings.vrFlashSec" type="number" min="2" max="120"
+                    class="tgl-num" @change="saveVrSettings" />s
+            </span>
             <span class="spacer"></span>
             <span v-if="st.lastError" class="err">{{ st.lastError }}</span>
         </div>
@@ -340,6 +363,7 @@ watch(
 
 onMounted(() => {
     st.viewOpen = true;
+    ensureVrDefaults(); // neue VR-/Noty-Settings mit Defaults initialisieren
     tickTimer = setInterval(() => tick.value++, 1000);
     openChannel(st.active);
 });
@@ -545,4 +569,13 @@ onUnmounted(() => {
     padding: 2px 10px;
 }
 .msg-system .msg-time { margin-left: 6px; opacity: 0.6; }
+.tgl-select, .tgl-num {
+    background: transparent;
+    color: inherit;
+    border: 1px solid var(--border, #4443);
+    border-radius: 6px;
+    font-size: 12px;
+    padding: 2px 6px;
+}
+.tgl-num { width: 48px; }
 </style>

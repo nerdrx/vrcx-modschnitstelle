@@ -67,6 +67,20 @@
         line-height: 36px; padding: 0 8px; }
     #bubble .dot { position: absolute; bottom: 6px; width: 22px; height: 22px; }
 
+    /* ---------- mini (wrist) ---------- */
+    #mini { display: none; position: absolute; inset: 0; padding: 30px;
+        background: rgba(16, 16, 20, 0.92); border: 3px solid #3a3a44; border-radius: 40px;
+        flex-direction: column; gap: 18px; justify-content: center; }
+    #mini.show { display: flex; }
+    #mini .head { display: flex; align-items: center; gap: 18px; }
+    #mini .head .dot { width: 34px; height: 34px; }
+    #mini .head .badge { background: #e64a4a; color: #fff; border-radius: 20px; min-width: 40px;
+        height: 40px; font-size: 30px; text-align: center; line-height: 40px; padding: 0 10px; }
+    #mini .head .title { font-size: 34px; color: #9aa0ae; flex: 1; }
+    #mini .who { font-size: 34px; color: #9aa0ae; }
+    #mini .txt { font-size: 44px; line-height: 1.25; word-wrap: break-word; max-height: 620px; overflow: hidden; }
+    #mini .hint { font-size: 28px; color: #666; }
+
     /* ---------- laser cursor ---------- */
     #cursor { display: none; position: absolute; width: 22px; height: 22px; border-radius: 50%;
         background: rgba(255, 255, 255, 0.9); border: 3px solid #3d6ae0; pointer-events: none;
@@ -78,8 +92,9 @@
 <div id="panel">
     <div id="head">
         <div id="ampel" class="dot green"></div>
+        <div id="apiwarn" style="display:none;color:#e64a4a;font-size:26px" title="AppApiVr-Bindung fehlgeschlagen">&#9888;</div>
         <div id="tabs"></div>
-        <div id="modebtn" class="hbtn">HUD</div>
+        <div id="modebtn" class="hbtn">Wrist</div>
         <div id="placebtn" class="hbtn" style="display:none">Platzieren</div>
         <div id="gearbtn" class="hbtn">&#9881;</div>
         <div id="minbtn" class="hbtn">&#8211;</div>
@@ -101,6 +116,10 @@
         <span style="margin-left:16px">Größe</span>
         <div class="hbtn" data-width="-0.15">−</div>
         <div class="hbtn" data-width="0.15">+</div>
+        <span style="margin-left:16px">Laser</span>
+        <div class="hbtn" data-pitch="-5">−</div>
+        <span id="pitchval">45°</span>
+        <div class="hbtn" data-pitch="5">+</div>
     </div>
 </div>
 <div id="bubble">
@@ -108,23 +127,35 @@
     <div id="bubbleBadge" class="badge" style="display:none">0</div>
     <div id="bubbleDot" class="dot green"></div>
 </div>
+<div id="mini">
+    <div class="head">
+        <div id="miniDot" class="dot green"></div>
+        <div class="title">Pool-Chat</div>
+        <div id="miniBadge" class="badge" style="display:none">0</div>
+    </div>
+    <div id="miniWho" class="who"></div>
+    <div id="miniTxt" class="txt">Keine neuen Nachrichten</div>
+    <div class="hint">Antippen zum Öffnen</div>
+</div>
 <div id="cursor"></div>
 
 <script>
 (async function () {
     'use strict';
-    try { await CefSharp.BindObjectAsync('AppApiVr'); } catch (e) {}
+    let apiOk = true;
+    try { await CefSharp.BindObjectAsync('AppApiVr'); } catch (e) { apiOk = false; }
+    if (typeof AppApiVr === 'undefined') apiOk = false;
 
     const $ = (id) => document.getElementById(id);
     const state = {
         me: '', ampel: 'green', channels: [], active: 'global',
-        minimized: false, autoShow: true, mode: 'hud',
-        alpha: 0.9, curvature: 0.08, width: 0.9,
-        draft: '', lastUnread: 0
+        big: false, autoShow: true, mode: 'wrist',
+        alpha: 0.9, curvature: 0.08, width: 0.6, laserPitch: 45,
+        draft: '', lastUnread: 0, lastMsg: null
     };
 
     function act(obj) {
-        try { AppApiVr.ChatPanelAction(JSON.stringify(obj)); } catch (e) {}
+        try { AppApiVr.ChatPanelAction(JSON.stringify(obj)); } catch (e) { apiOk = false; render(); }
     }
     function cfg(partial) {
         act(Object.assign({ type: 'config' }, partial));
@@ -139,14 +170,28 @@
     }
 
     function render() {
-        $('panel').classList.toggle('hidden', state.minimized);
-        $('bubble').classList.toggle('show', state.minimized);
+        const mini = !state.big && state.mode === 'wrist';
+        const bubble = !state.big && state.mode !== 'wrist';
+        $('panel').classList.toggle('hidden', !state.big);
+        $('bubble').classList.toggle('show', bubble);
+        $('mini').classList.toggle('show', mini);
         $('ampel').className = 'dot ' + state.ampel;
         $('bubbleDot').className = 'dot ' + state.ampel;
+        $('miniDot').className = 'dot ' + state.ampel;
+        $('apiwarn').style.display = apiOk ? 'none' : 'block';
         const un = totalUnread();
-        $('bubbleBadge').style.display = un ? 'block' : 'none';
-        $('bubbleBadge').textContent = un > 99 ? '99+' : un;
-        if (state.minimized) return;
+        for (const id of ['bubbleBadge', 'miniBadge']) {
+            $(id).style.display = un ? 'block' : 'none';
+            $(id).textContent = un > 99 ? '99+' : un;
+        }
+        if (mini) {
+            const m = state.lastMsg;
+            $('miniWho').textContent = m ? m.name : '';
+            $('miniTxt').textContent = m
+                ? (m.kind === 'invite' ? '📍 Join-Einladung' : m.text)
+                : 'Keine neuen Nachrichten';
+        }
+        if (!state.big) return;
 
         const tabs = $('tabs');
         tabs.innerHTML = '';
@@ -164,8 +209,10 @@
             tabs.appendChild(t);
         }
 
-        $('modebtn').textContent = state.mode === 'world' ? 'World' : 'HUD';
+        $('modebtn').textContent =
+            state.mode === 'world' ? 'World' : state.mode === 'hud' ? 'HUD' : 'Wrist';
         $('placebtn').style.display = state.mode === 'world' ? 'block' : 'none';
+        $('pitchval').textContent = Math.round(state.laserPitch) + '°';
 
         const box = $('msgs');
         const ch = chan();
@@ -195,7 +242,11 @@
             const b = document.createElement('div');
             b.className = 'qbtn';
             b.textContent = q;
-            b.onclick = () => { if (ch) act({ type: 'send', channel: ch.channel, text: q }); };
+            // Füllt die Chatbox (Senden separat) — testbar auch ohne IPC
+            b.onclick = () => {
+                state.draft = state.draft ? state.draft + ' ' + q : q;
+                render();
+            };
             quick.appendChild(b);
         }
 
@@ -206,7 +257,7 @@
 
     function markRead() {
         const ch = chan();
-        if (ch && ch.unread && !state.minimized) {
+        if (ch && ch.unread && state.big) {
             ch.unread = 0;
             act({ type: 'read', channel: ch.channel });
         }
@@ -225,12 +276,22 @@
                 if (!state.channels.some((c) => c.channel === state.active) && state.channels[0]) {
                     state.active = state.channels[0].channel;
                 }
-                state.lastUnread = totalUnread();
-                if (state.autoShow && state.minimized && state.lastUnread > prevUnread) {
-                    state.minimized = false;
-                    cfg({ minimized: false });
+                // letzte fremde Nachricht (für Mini-Ansicht)
+                for (const c of state.channels) {
+                    for (const m of c.messages || []) {
+                        if (!m.mine && m.kind !== 'system') state.lastMsg = m;
+                    }
                 }
-                if (!state.minimized) markRead();
+                state.lastUnread = totalUnread();
+                if (state.autoShow && !state.big && state.lastUnread > prevUnread) {
+                    if (state.mode === 'wrist') {
+                        cfg({ flash: true }); // Mini kurz am Handgelenk zeigen
+                    } else {
+                        state.big = true;
+                        cfg({ big: true });
+                    }
+                }
+                if (state.big) markRead();
                 render();
             } catch (e) {}
         },
@@ -242,7 +303,8 @@
                 if (c.curvature !== undefined) state.curvature = c.curvature;
                 if (c.width !== undefined) state.width = c.width;
                 if (c.autoShow !== undefined) state.autoShow = c.autoShow;
-                if (c.minimized !== undefined) state.minimized = c.minimized;
+                if (c.big !== undefined) state.big = c.big;
+                if (c.laserPitch !== undefined) state.laserPitch = c.laserPitch;
                 if (c.quickReplies !== undefined) state.quickReplies = c.quickReplies;
                 render();
             } catch (e) {}
@@ -262,9 +324,9 @@
             c.style.top = y + 'px';
         },
         gestureToggle() {
-            state.minimized = !state.minimized;
-            cfg({ minimized: state.minimized });
-            if (!state.minimized) markRead();
+            state.big = !state.big;
+            cfg({ big: state.big });
+            if (state.big) markRead();
             render();
         }
     };
@@ -272,6 +334,7 @@
     // ------------------------------------------------------------ events --
     $('minbtn').onclick = () => $vrchat.gestureToggle();
     $('bubble').onclick = () => $vrchat.gestureToggle();
+    $('mini').onclick = () => $vrchat.gestureToggle();
     $('inputfield').onclick = () => act({ type: 'keyboard', text: state.draft });
     $('send').onclick = () => {
         const ch = chan();
@@ -281,11 +344,12 @@
         render();
     };
     $('modebtn').onclick = () => {
-        state.mode = state.mode === 'world' ? 'hud' : 'world';
+        state.mode = state.mode === 'wrist' ? 'hud' : state.mode === 'hud' ? 'world' : 'wrist';
         cfg({ mode: state.mode, place: true });
         render();
     };
-    $('placebtn').onclick = () => cfg({ place: true });
+    // Platzieren: Panel folgt dem Laser, Trigger fixiert an der Position
+    $('placebtn').onclick = () => cfg({ placeMode: true });
     $('gearbtn').onclick = () => $('settings').classList.toggle('open');
     for (const el of document.querySelectorAll('[data-alpha]')) {
         el.onclick = () => {
@@ -301,8 +365,15 @@
     }
     for (const el of document.querySelectorAll('[data-width]')) {
         el.onclick = () => {
-            state.width = Math.min(2.5, Math.max(0.3, state.width + parseFloat(el.dataset.width)));
+            state.width = Math.min(2.5, Math.max(0.2, state.width + parseFloat(el.dataset.width)));
             cfg({ width: state.width });
+        };
+    }
+    for (const el of document.querySelectorAll('[data-pitch]')) {
+        el.onclick = () => {
+            state.laserPitch = Math.min(90, Math.max(-30, state.laserPitch + parseFloat(el.dataset.pitch)));
+            cfg({ laserPitch: state.laserPitch });
+            render();
         };
     }
 
