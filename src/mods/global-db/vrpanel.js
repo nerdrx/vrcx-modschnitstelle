@@ -20,7 +20,7 @@ import { kvGet, kvSet } from './db';
 
 export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
-    vrMode: 'hud', // 'hud' | 'wrist' | 'world' — Mini head-locked, ausgeblendet bis Nachricht/Geste
+    vrMode: 'wrist', // 'wrist' | 'hud' | 'world' — Mini am Handgelenk (Blickwinkel-Anzeige)
     vrAlpha: 0.9,
     vrCurvature: 0.08,
     vrWidth: 0.6,
@@ -30,6 +30,11 @@ export const DEFAULT_VR_PANEL = {
     vrLaserOffX: -6, // Pointer-Offset horizontal in cm (+ = außen, je Hand gespiegelt) — Index-kalibriert
     vrLaserOffY: -3.5, // Pointer-Offset vertikal in cm (+ = oben) — Index-kalibriert
     vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
+    vrWristLock: false, // Wrist-Mini verschieben gesperrt
+    vrWristAngle: 30, // Sichtbarkeitswinkel Handgelenk (Grad)
+    vrWristOffX: 0, // Wrist-Mini-Offset (cm, Controller-lokal)
+    vrWristOffY: 0,
+    vrWristOffZ: 0,
     // Benachrichtigungen (bei DND alle stumm):
     vrNotySound: true,
     vrNotyVisual: true,
@@ -106,6 +111,11 @@ async function pushConfig(ctx) {
         laserOffX: s.vrLaserOffX,
         laserOffY: s.vrLaserOffY,
         flashSec: s.vrFlashSec,
+        wristLock: s.vrWristLock,
+        wristAngle: s.vrWristAngle,
+        wristOffX: s.vrWristOffX,
+        wristOffY: s.vrWristOffY,
+        wristOffZ: s.vrWristOffZ,
         quickReplies: chatState.settings.quickReplies || []
     });
 }
@@ -152,6 +162,10 @@ function onAction(ctx) {
                 if (a.laserPitch !== undefined) cs.vrLaserPitch = a.laserPitch;
                 if (a.laserOffX !== undefined) cs.vrLaserOffX = a.laserOffX;
                 if (a.laserOffY !== undefined) cs.vrLaserOffY = a.laserOffY;
+                if (a.wristLock !== undefined) cs.vrWristLock = a.wristLock;
+                if (a.wristOffX !== undefined) cs.vrWristOffX = a.wristOffX;
+                if (a.wristOffY !== undefined) cs.vrWristOffY = a.wristOffY;
+                if (a.wristOffZ !== undefined) cs.vrWristOffZ = a.wristOffZ;
                 await kvSet(ctx, 'chat_settings', cs);
             }
         } catch (err) {

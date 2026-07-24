@@ -299,7 +299,7 @@ namespace VRCX
                             }
 
                             _chatPanel?.Process(system, overlay, dashboardVisible,
-                                overlayIndex, _nextOverlayUpdate); // MOD-API: + Wrist-Fenster
+                                overlayIndex, _nextOverlayUpdate, _overlayHand); // MOD-API: + Wrist-Fenster/Hand
                         }
                     }
                 }
