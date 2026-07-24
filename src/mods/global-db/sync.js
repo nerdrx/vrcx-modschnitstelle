@@ -5,7 +5,18 @@
 // Download: pulls server deltas per table into the pool mirror tables.
 // ============================================================================
 
+import { reactive } from 'vue';
+
 import { POOL_TABLES, kvGet, kvSet, poolTable } from './db';
+
+// Reaktiver Sync-Zustand — auch der unsichtbare Auto-Sync wird damit im
+// Dashboard sichtbar ("Synchronisiere…" + Zähler).
+export const syncState = reactive({
+    running: false,
+    label: '',
+    uploaded: 0,
+    downloaded: 0
+});
 
 export const DEFAULT_SERVER = 'https://arikazei.wom-gaming.eu/vrcx-pool';
 const BATCH = 2000;
@@ -238,16 +249,78 @@ export async function downloadDeltas(ctx, settings, onProgress = () => {}, opts 
 // join runs with { batch: 5000, throttleMs: 0 }, the periodic delta sync
 // keeps the throttled defaults.
 export async function fullSync(ctx, settings, onProgress = () => {}, opts = {}) {
-    const members = await fetchMembers(ctx, settings);
-    await backfillOnNewMembers(ctx, members, onProgress);
-    const up = await uploadDeltas(ctx, settings, members, onProgress, opts);
-    const down = await downloadDeltas(ctx, settings, onProgress, opts);
-    await kvSet(ctx, 'last_sync', new Date().toJSON());
-    const errors = { ...up.errors, ...down.errors };
-    const ok = Object.keys(errors).length === 0;
-    if (ok) {
-        // Chat-Freischaltung hängt am ersten VOLLSTÄNDIG erfolgreichen Sync.
-        await kvSet(ctx, 'first_sync_done', true);
+    syncState.running = true;
+    syncState.label = 'Starte Sync…';
+    syncState.uploaded = 0;
+    syncState.downloaded = 0;
+    const progress = (label, res) => {
+        syncState.label = label;
+        if (res?.uploaded !== undefined) syncState.uploaded = res.uploaded;
+        if (res?.downloaded !== undefined) syncState.downloaded = res.downloaded;
+        onProgress(label, res);
+    };
+    try {
+        const members = await fetchMembers(ctx, settings);
+        await backfillOnNewMembers(ctx, members, progress);
+        const up = await uploadDeltas(ctx, settings, members, progress, opts);
+        const down = await downloadDeltas(ctx, settings, progress, opts);
+        await kvSet(ctx, 'last_sync', new Date().toJSON());
+        const errors = { ...up.errors, ...down.errors };
+        const ok = Object.keys(errors).length === 0;
+        if (ok) {
+            // Chat-Freischaltung hängt am ersten VOLLSTÄNDIG erfolgreichen Sync.
+            await kvSet(ctx, 'first_sync_done', true);
+        }
+        return { members: members.list, ...up, ...down, errors, ok };
+    } finally {
+        syncState.running = false;
     }
-    return { members: members.list, ...up, ...down, errors, ok };
+}
+
+// ------------------------------------------------------ Sync-Stand (Gap) ---
+const UPLOAD_SRC = {
+    status: (core) => `${core}_feed_status`,
+    bio: (core) => `${core}_feed_bio`,
+    online_offline: (core) => `${core}_feed_online_offline`,
+    gps: (core) => `${core}_feed_gps`,
+    join_leave: () => 'gamelog_join_leave'
+};
+
+/**
+ * Soll/Ist-Abgleich mit dem Server:
+ *  - down: exakter Rückstand (Server-MAX(id) minus lokales MAX(remote_id))
+ *  - up: geschätzter Rückstand (lokale Zeilen neuer als Cursor, VOR Filterung
+ *    — überschätzt also; 0 heißt sicher fertig)
+ */
+export async function computeSyncGap(ctx, settings) {
+    const data = await apiFetch(settings, 'v1/heads');
+    const gap = { down: 0, up: 0, tables: {} };
+    for (const key of Object.keys(POOL_TABLES)) {
+        const rows = await ctx.db.query(
+            `SELECT COALESCE(MAX(remote_id),0) FROM ${poolTable(ctx, key)}`
+        );
+        const local = rows[0]?.[0] || 0;
+        const head = data.heads?.[key] || 0;
+        const d = Math.max(0, head - local);
+        if (d) {
+            gap.down += d;
+            gap.tables[key] = (gap.tables[key] || 0) + d;
+        }
+    }
+    const core = ctx.db.corePrefix();
+    for (const key of Object.keys(UPLOAD_SRC)) {
+        try {
+            const cursor = await kvGet(ctx, `up_cursor_${key}`, '');
+            const rows = await ctx.db.query(
+                `SELECT COUNT(*) FROM ${UPLOAD_SRC[key](core)} WHERE created_at > @c`,
+                { '@c': cursor || '' }
+            );
+            const u = rows[0]?.[0] || 0;
+            if (u) {
+                gap.up += u;
+                gap.tables[key] = (gap.tables[key] || 0) + u;
+            }
+        } catch {}
+    }
+    return gap;
 }
