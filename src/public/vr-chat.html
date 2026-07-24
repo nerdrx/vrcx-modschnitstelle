@@ -170,7 +170,7 @@
         me: '', ampel: 'green', channels: [], active: 'global',
         big: false, autoShow: true, mode: 'hud',
         alpha: 0.9, curvature: 0.08, width: 0.6, laserPitch: 45,
-        laserOffX: 0, laserOffY: 0,
+        laserOffX: -6, laserOffY: -3.5,
         draft: '', lastUnread: 0, lastMsg: null
     };
     const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','😭','😱','🥳','😴','👍','👎',
@@ -339,7 +339,11 @@
             } catch (e) {}
         },
         keyboardDone(text) {
-            state.draft = (text || '').trim();
+            // Zeichenstrom (keyboardChar) ist die primäre Quelle. Done nur
+            // übernehmen, wenn wirklich Text kommt — das Häkchen darf die
+            // Chatbox nie leeren.
+            const t = (text || '').trim();
+            if (t) state.draft = t;
             render();
         },
         keyboardChar(text) {
@@ -402,7 +406,11 @@
         }
         box.classList.toggle('open');
     };
-    $('gearbtn').onclick = () => $('settings').classList.toggle('open');
+    $('gearbtn').onclick = () => {
+        const open = $('settings').classList.toggle('open');
+        $('dragbar').style.display = open ? 'none' : 'block';
+        cfg({ dragLock: open }); // Settings offen => Dragbar gesperrt
+    };
     for (const el of document.querySelectorAll('[data-alpha]')) {
         el.onclick = () => {
             state.alpha = Math.min(1, Math.max(0.2, state.alpha + parseFloat(el.dataset.alpha)));

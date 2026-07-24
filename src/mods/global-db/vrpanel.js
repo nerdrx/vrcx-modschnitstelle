@@ -27,8 +27,8 @@ export const DEFAULT_VR_PANEL = {
     vrAutoShow: true, // neue Nachricht: Mini-Flash (wrist) bzw. aufklappen
     vrGesture: true, // Controller-Geste (Grip/A lang drücken) togglet Groß
     vrLaserPitch: 45, // Laser-Neigung (Index-Controller)
-    vrLaserOffX: 0, // Pointer-Offset horizontal in cm (+ = außen, je Hand gespiegelt)
-    vrLaserOffY: 0, // Pointer-Offset vertikal in cm (+ = oben)
+    vrLaserOffX: -6, // Pointer-Offset horizontal in cm (+ = außen, je Hand gespiegelt) — Index-kalibriert
+    vrLaserOffY: -3.5, // Pointer-Offset vertikal in cm (+ = oben) — Index-kalibriert
     vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
     // Benachrichtigungen (bei DND alle stumm):
     vrNotySound: true,

@@ -46,8 +46,9 @@ namespace VRCX
         private float _widthMeters = 0.6f;
         private bool _gestureEnabled;
         private float _laserPitchDeg = 45f; // Index: Ray-Neigung zur Controller-Spitze
-        private float _laserOffXcm; // Pointer-Offset horizontal (cm, je Hand gespiegelt)
-        private float _laserOffYcm; // Pointer-Offset vertikal (cm)
+        private float _laserOffXcm = -6f; // Pointer-Offset horizontal (cm, je Hand gespiegelt)
+        private float _laserOffYcm = -3.5f; // Pointer-Offset vertikal (cm)
+        private bool _dragLock; // Settings offen => Dragbar inaktiv
         private Vector3 _lastPanelPos = new Vector3(0, 1.2f, -0.8f);
         private float _dragDist = 1f;
         private Vector3 _dragOffset = Vector3.Zero;
@@ -181,6 +182,7 @@ namespace VRCX
                 if (root.TryGetProperty("place", out var pl) && pl.GetBoolean()) _placeRequested = true;
                 if (root.TryGetProperty("placeMode", out var pm) && pm.GetBoolean()) _placing = true;
                 if (root.TryGetProperty("placeHand", out var ph)) _placeHand = ph.GetString() ?? "right";
+                if (root.TryGetProperty("dragLock", out var dl)) _dragLock = dl.GetBoolean();
                 _handleDirty = true;
             }
             catch (Exception e)
@@ -714,7 +716,7 @@ namespace VRCX
             {
                 // Dragbar (unterer Panel-Streifen, nur Groß): Trigger startet Drag.
                 // Griffpunkt merken, damit das Panel nicht zur Mitte springt.
-                if (_big && y > PANEL_SIZE - 70)
+                if (_big && !_dragLock && y > PANEL_SIZE - 70)
                 {
                     var pm = poses[bestIdx].mDeviceToAbsoluteTracking;
                     var psrc = LaserSource(pm, bestHand == 0);
