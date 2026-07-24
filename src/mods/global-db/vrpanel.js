@@ -11,6 +11,7 @@ import {
     chatState,
     displayName,
     canonDm,
+    loadHistory,
     markRead,
     sendMessage,
     sendTyping
@@ -19,7 +20,7 @@ import { kvGet, kvSet } from './db';
 
 export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
-    vrMode: 'wrist', // 'wrist' | 'hud' | 'world'
+    vrMode: 'hud', // 'hud' | 'wrist' | 'world' — Mini head-locked, ausgeblendet bis Nachricht/Geste
     vrAlpha: 0.9,
     vrCurvature: 0.08,
     vrWidth: 0.6,
@@ -27,6 +28,7 @@ export const DEFAULT_VR_PANEL = {
     vrGesture: true, // Controller-Geste (Grip/A lang drücken) togglet Groß
     vrLaserPitch: 45, // Laser-Neigung (Index-Controller)
     vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
+    vrPlaceHand: 'right', // Hand fürs Platzieren/Draggen
     // Benachrichtigungen (bei DND alle stumm):
     vrNotySound: true,
     vrNotyVisual: true,
@@ -101,6 +103,7 @@ async function pushConfig(ctx) {
         gesture: s.vrGesture,
         laserPitch: s.vrLaserPitch,
         flashSec: s.vrFlashSec,
+        placeHand: s.vrPlaceHand,
         quickReplies: chatState.settings.quickReplies || []
     });
 }
@@ -128,6 +131,15 @@ function onAction(ctx) {
                 markRead(a.channel);
             } else if (a.type === 'typing' && a.channel) {
                 sendTyping(a.channel);
+            } else if (a.type === 'refresh') {
+                // Panel neu geladen: Config + kompletten State erneut pushen
+                lastPayload = '';
+                await pushConfig(ctx);
+                pushState();
+            } else if (a.type === 'history' && a.channel) {
+                await loadHistory(a.channel);
+                lastPayload = '';
+                pushState();
             } else if (a.type === 'config') {
                 // Panel-seitige Änderungen persistieren
                 const cs = await kvGet(ctx, 'chat_settings', {});
@@ -136,6 +148,7 @@ function onAction(ctx) {
                 if (a.curvature !== undefined) cs.vrCurvature = a.curvature;
                 if (a.width !== undefined) cs.vrWidth = a.width;
                 if (a.laserPitch !== undefined) cs.vrLaserPitch = a.laserPitch;
+                if (a.placeHand !== undefined) cs.vrPlaceHand = a.placeHand;
                 await kvSet(ctx, 'chat_settings', cs);
             }
         } catch (err) {
@@ -153,6 +166,8 @@ export function vrHaptic(hand) {
 export async function startVrPanel(ctx) {
     modCtx = ctx;
     window.__vrcxChatAction = onAction(ctx);
+    // Global-Historie vorladen — Panel soll nicht leer starten
+    loadHistory('global').catch(() => {});
     await pushConfig(ctx);
     clearInterval(timer);
     lastPayload = '';

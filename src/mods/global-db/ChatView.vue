@@ -179,7 +179,17 @@
                         <i class="ri-map-pin-line"></i> Standort senden
                     </button>
                 </div>
+                <div v-if="emojiOpen" class="emoji-panel">
+                    <span
+                        v-for="em in INPUT_EMOJIS"
+                        :key="em"
+                        class="emoji-btn"
+                        @click="draft += em"
+                        >{{ em }}</span
+                    >
+                </div>
                 <div class="input-row">
+                    <button class="btn" title="Emojis" @click="emojiOpen = !emojiOpen">🙂</button>
                     <textarea
                         v-model="draft"
                         class="chat-input"
@@ -219,6 +229,9 @@ import { DEFAULT_VR_PANEL, refreshVrPanelConfig } from './vrpanel';
 
 const ctx = getCtx();
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
+const INPUT_EMOJIS = ['😀', '😂', '😍', '🥰', '😎', '🤔', '😭', '😱', '🥳', '😴',
+    '👍', '👎', '❤️', '🔥', '✨', '🎉', '💀', '🙏', '👋', '💜', '😈', '🍕', '🎮', '📍'];
+const emojiOpen = ref(false);
 const draft = ref('');
 const pickerFor = ref(0);
 const listEl = ref(null);
@@ -578,4 +591,18 @@ onUnmounted(() => {
     padding: 2px 6px;
 }
 .tgl-num { width: 48px; }
+.emoji-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px 10px;
+    border-top: 1px solid var(--border, #444);
+}
+.emoji-btn {
+    font-size: 18px;
+    padding: 3px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.emoji-btn:hover { background: var(--accent, #3f3f46); }
 </style>

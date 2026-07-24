@@ -224,6 +224,11 @@ namespace VRCX
                     while (system.PollNextEvent(ref e, (uint)Marshal.SizeOf(e)))
                     {
                         var type = (EVREventType)e.eventType;
+                        // MOD-API: SteamVR liefert Keyboard-Events je nach
+                        // Version über die System-Queue — ans Chat-Panel weiterreichen
+                        if (type == EVREventType.VREvent_KeyboardDone ||
+                            type == EVREventType.VREvent_KeyboardClosed)
+                            _chatPanel?.OnKeyboardEvent(type);
                         if (type == EVREventType.VREvent_Quit)
                         {
                             active = false;

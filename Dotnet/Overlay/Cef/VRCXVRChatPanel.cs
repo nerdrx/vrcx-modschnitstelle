@@ -37,7 +37,10 @@ namespace VRCX
 
         // --- config (updated from the mod via chat.config) ---
         private volatile bool _enabled;
-        private string _mode = "wrist"; // "wrist" | "hud" | "world"
+        private string _mode = "hud"; // "hud" | "wrist" | "world"
+        private string _placeHand = "right"; // Hand fürs Platzieren/Draggen
+        private bool _dragging; // Dragbar: Panel folgt bis Trigger-Release
+        private uint _dragIdx;
         private float _alpha = 0.9f;
         private float _curvature = 0.08f;
         private float _widthMeters = 0.6f;
@@ -170,6 +173,7 @@ namespace VRCX
                     _flashUntil = DateTime.UtcNow.AddSeconds(_flashSec);
                 if (root.TryGetProperty("place", out var pl) && pl.GetBoolean()) _placeRequested = true;
                 if (root.TryGetProperty("placeMode", out var pm) && pm.GetBoolean()) _placing = true;
+                if (root.TryGetProperty("placeHand", out var ph)) _placeHand = ph.GetString() ?? "right";
                 _handleDirty = true;
             }
             catch (Exception e)
@@ -234,13 +238,15 @@ namespace VRCX
 
         private void ProcessInternal(CVRSystem system, CVROverlay overlay, bool dashboardVisible)
         {
-            // Wrist-Modus: Mini nur sichtbar im Wrist-Fenster (VRCX-Geste)
-            // oder kurz nach neuer Nachricht (Flash); Groß bleibt bis Minimieren.
+            // Minimiert = wirklich unsichtbar (keine Geisterfläche): Mini
+            // erscheint nur im Flash-Fenster nach neuer Nachricht bzw. im
+            // Wrist-Fenster (wrist-Modus). Groß bleibt bis Minimieren.
             var wantVisible = _enabled && !dashboardVisible;
-            if (wantVisible && _mode == "wrist" && !_big && !_placing)
+            if (wantVisible && !_big && !_placing && !_dragging)
             {
                 var now = DateTime.UtcNow;
-                wantVisible = now <= _wristUntil || now <= _flashUntil;
+                wantVisible = now <= _flashUntil ||
+                              (_mode == "wrist" && now <= _wristUntil);
             }
 
             if (!wantVisible)
@@ -288,13 +294,13 @@ namespace VRCX
                 _handleDirty = false;
             }
 
-            if (_placing)
+            if (_placing || _dragging)
             {
                 ProcessPlacement(system, overlay);
             }
-            else if (_mode == "wrist" && !_big)
+            else if (!_big)
             {
-                ApplyWristTransform(system, overlay); // jede Frame: Hand kann wechseln
+                ApplyMiniTransform(system, overlay); // jede Frame (Hand/HMD folgt)
             }
             else if (_placeRequested)
             {
@@ -346,9 +352,19 @@ namespace VRCX
         }
 
         // -------------------------------------------------------- transforms --
-        /// Mini-Panel neben dem VRCX-Wrist-Overlay (gleiche Hand).
-        private void ApplyWristTransform(CVRSystem system, CVROverlay overlay)
+        /// Mini-Ansicht: klein und unten im Blickfeld (hud/world) bzw. am
+        /// Handgelenk neben dem VRCX-Wrist-Overlay (wrist-Modus).
+        private void ApplyMiniTransform(CVRSystem system, CVROverlay overlay)
         {
+            if (_mode != "wrist")
+            {
+                var mm = Matrix4x4.CreateTranslation(0f, -0.22f, -0.6f);
+                var mh34 = ToHmdMatrix34(mm);
+                overlay.SetOverlayWidthInMeters(_handle, 0.26f);
+                overlay.SetOverlayTransformTrackedDeviceRelative(_handle,
+                    OpenVR.k_unTrackedDeviceIndex_Hmd, ref mh34);
+                return;
+            }
             if (_wristIndex == OpenVR.k_unTrackedDeviceIndexInvalid)
                 return;
             var role = system.GetControllerRoleForTrackedDeviceIndex(_wristIndex);
@@ -384,6 +400,9 @@ namespace VRCX
             system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
             var hmd = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
             var state = new VRControllerState_t();
+            var wantRole = _placeHand == "left"
+                ? ETrackedControllerRole.LeftHand
+                : ETrackedControllerRole.RightHand;
 
             for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
             {
@@ -392,9 +411,15 @@ namespace VRCX
                     continue;
                 if (!poses[i].bPoseIsValid)
                     continue;
+                // Draggen: die Hand, die den Drag gestartet hat; Platzieren:
+                // konfigurierte Hand (Default rechts).
+                if (_dragging && i != _dragIdx)
+                    continue;
+                if (!_dragging && role != wantRole)
+                    continue;
 
                 var m = poses[i].mDeviceToAbsoluteTracking;
-                var src = new Vector3(m.m3, m.m7, m.m11);
+                var src = LaserSource(m, role == ETrackedControllerRole.LeftHand);
                 var dir = LaserDirection(m);
                 var pos = src + dir * 1.0f;
 
@@ -419,9 +444,21 @@ namespace VRCX
                 if (system.GetControllerState(i, ref state, (uint)Marshal.SizeOf(state)))
                 {
                     var trigger = (state.ulButtonPressed & (1UL << (int)EVRButtonId.k_EButton_SteamVR_Trigger)) != 0;
-                    if (trigger && !_placeTriggerDown)
+                    if (_dragging)
                     {
-                        // fixieren
+                        // Drag endet beim Loslassen des Triggers
+                        if (!trigger)
+                        {
+                            _dragging = false;
+                            _mode = "world"; // bleibt, wo losgelassen
+                            _browser?.ExecuteScriptAsync(
+                                "window.$vrchat && $vrchat.config", "{\"mode\":\"world\"}");
+                            logger.Info("chat panel dragged (world)");
+                        }
+                    }
+                    else if (trigger && !_placeTriggerDown)
+                    {
+                        // Platzieren: Trigger fixiert
                         _placing = false;
                         _mode = "world";
                         _big = true;
@@ -431,7 +468,7 @@ namespace VRCX
                     }
                     _placeTriggerDown = trigger;
                 }
-                return; // erster gültiger Controller führt
+                return; // gewählte Hand führt
             }
         }
 
@@ -509,13 +546,8 @@ namespace VRCX
                         break;
                     case EVREventType.VREvent_KeyboardDone:
                     case EVREventType.VREvent_KeyboardClosed:
-                    {
-                        var sb = new StringBuilder(1024);
-                        OpenVR.Overlay.GetKeyboardText(sb, 1024);
-                        logger.Info("keyboard event {0}, text len {1}", type, sb.Length); // Diagnose
-                        _browser.ExecuteScriptAsync("window.$vrchat && $vrchat.keyboardDone", sb.ToString());
+                        OnKeyboardEvent(type);
                         break;
-                    }
                 }
             }
         }
@@ -523,6 +555,31 @@ namespace VRCX
         // ------------------------------------------------------------ laser --
         private readonly bool[] _triggerDown = new bool[2];
         private bool _pointerWasOnPanel;
+
+        /// Ray-Ursprung: 2 cm nach außen versetzt (Index-Controller zeigen
+        /// je Hand ~2 cm nach innen daneben).
+        private static Vector3 LaserSource(HmdMatrix34_t m, bool isLeft)
+        {
+            var xAxis = Vector3.Normalize(new Vector3(m.m0, m.m4, m.m8));
+            var offset = (isLeft ? -0.02f : 0.02f);
+            return new Vector3(m.m3, m.m7, m.m11) + xAxis * offset;
+        }
+
+        /// SteamVR-Tastatur-Text übernehmen (Done/Closed) — wird sowohl aus
+        /// der Overlay-Queue als auch aus der System-Queue (VRCXVRCef,
+        /// markierte Stelle) aufgerufen, da SteamVR die Keyboard-Events je
+        /// nach Version unterschiedlich zustellt.
+        public void OnKeyboardEvent(EVREventType type)
+        {
+            if (type != EVREventType.VREvent_KeyboardDone &&
+                type != EVREventType.VREvent_KeyboardClosed)
+                return;
+            var sb = new StringBuilder(1024);
+            OpenVR.Overlay?.GetKeyboardText(sb, 1024);
+            logger.Info("keyboard event {0}, text len {1}", type, sb.Length);
+            if (sb.Length > 0)
+                _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.keyboardDone", sb.ToString());
+        }
 
         /// Ray-Richtung mit einstellbarer Neigung (Index-Controller: rohe Pose
         /// zeigt nicht zur Spitze — Standard ~45° nach unten gekippt).
@@ -564,10 +621,11 @@ namespace VRCX
                     continue;
                 var m = poses[i].mDeviceToAbsoluteTracking;
                 var dir = LaserDirection(m);
+                var src = LaserSource(m, role == ETrackedControllerRole.LeftHand);
                 var parms = new VROverlayIntersectionParams_t
                 {
                     eOrigin = ETrackingUniverseOrigin.TrackingUniverseStanding,
-                    vSource = new HmdVector3_t { v0 = m.m3, v1 = m.m7, v2 = m.m11 },
+                    vSource = new HmdVector3_t { v0 = src.X, v1 = src.Y, v2 = src.Z },
                     vDirection = new HmdVector3_t { v0 = dir.X, v1 = dir.Y, v2 = dir.Z }
                 };
                 var results = new VROverlayIntersectionResults_t();
@@ -607,7 +665,18 @@ namespace VRCX
 
             var trigger = (state.ulButtonPressed & (1UL << (int)EVRButtonId.k_EButton_SteamVR_Trigger)) != 0;
             if (trigger && !_triggerDown[bestHand])
+            {
+                // Dragbar (unterer Panel-Streifen, nur Groß): Trigger startet Drag
+                if (_big && y > PANEL_SIZE - 70)
+                {
+                    _dragging = true;
+                    _dragIdx = bestIdx;
+                    _placeTriggerDown = true;
+                    _triggerDown[bestHand] = true;
+                    return;
+                }
                 host.SendMouseClickEvent(x, y, MouseButtonType.Left, false, 1, CefEventFlags.None);
+            }
             else if (!trigger && _triggerDown[bestHand])
                 host.SendMouseClickEvent(x, y, MouseButtonType.Left, true, 1, CefEventFlags.None);
             _triggerDown[bestHand] = trigger;
