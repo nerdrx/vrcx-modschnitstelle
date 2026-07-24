@@ -7,7 +7,7 @@
 
 import GlobalDbView from './GlobalDbView.vue';
 import ChatView from './ChatView.vue';
-import { initTables, kvGet } from './db';
+import { initTables, kvGet, kvSet } from './db';
 import { fullSync } from './sync';
 import { chatState, displayName, initChat, isDnd, stopChat } from './chat';
 import { checkEligible, uploadFriendHashes } from './join';
@@ -62,9 +62,12 @@ function onChatMessage(ctx) {
     };
 }
 
+// P1.5: Token vorhanden => Chat verbinden. `enabled` steuert nur noch den
+// Auto-Sync, nicht mehr den Chat (im Opt-in-Modell ist ein Mitglied mit
+// Token immer chat-fähig).
 export async function startChatIfConfigured(ctx) {
     const settings = await kvGet(ctx, 'settings', {});
-    if (!settings.enabled || !settings.token) {
+    if (!settings.token) {
         stopChat();
         return;
     }
@@ -122,6 +125,12 @@ export default {
             try {
                 await initTables(ctx);
                 const settings = await kvGet(ctx, 'settings', {});
+                // Migration P1 -> P1.5: Token vorhanden => Sync aktiv.
+                if (settings.token && !settings.enabled) {
+                    settings.enabled = true;
+                    await kvSet(ctx, 'settings', settings);
+                    ctx.log('migration: enabled=true (token vorhanden)');
+                }
                 if (await shouldShowNav(ctx, settings)) {
                     registerNavViews(ctx);
                     ctx.log('nav registered (token/member/eligible)');

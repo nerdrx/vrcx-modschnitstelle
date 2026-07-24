@@ -173,6 +173,7 @@ function connect() {
         chatState.connected = true;
         chatState.lastError = '';
         backoff = 1000;
+        modCtx?.log('chat connected');
         refreshState().catch(() => {});
     };
     ws.onmessage = (e) => {

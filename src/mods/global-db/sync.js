@@ -86,6 +86,42 @@ async function fetchMembers(ctx, settings) {
     return { ids, names, list: data.members };
 }
 
+// ---------------------------------------------------- member-diff (P1.5) ---
+/**
+ * Compare the current member list with the previously known ids.
+ * Pure function (unit-tested); returns which members are new.
+ * first=true on the very first sync (nothing known yet) — no backfill then.
+ */
+export function diffMembers(known, list) {
+    const ids = list.map((m) => m.user_id).sort();
+    if (!Array.isArray(known)) return { fresh: [], ids, first: true };
+    const knownSet = new Set(known);
+    return {
+        fresh: list.filter((m) => !knownSet.has(m.user_id)),
+        ids,
+        first: false
+    };
+}
+
+/**
+ * Upload-Cursors laufen über gefilterte (Nicht-Mitglieder-)Zeilen hinweg.
+ * Tritt später ein Freund bei, muss die eigene Historie über ihn nachgeliefert
+ * werden: alle up_cursor_* zurücksetzen => voller Re-Upload. Der Server
+ * dedupliziert via INSERT OR IGNORE, der Vorgang ist idempotent.
+ */
+async function backfillOnNewMembers(ctx, members, onProgress) {
+    const known = await kvGet(ctx, 'known_members', null);
+    const diff = diffMembers(known, members.list);
+    if (!diff.first && diff.fresh.length > 0) {
+        for (const key of Object.keys(UPLOAD)) {
+            await kvSet(ctx, `up_cursor_${key}`, '');
+        }
+        const names = diff.fresh.map((m) => m.display_name || m.user_id).join(', ');
+        onProgress(`Neues Mitglied ${names} — Re-Backfill gestartet`);
+    }
+    await kvSet(ctx, 'known_members', diff.ids);
+}
+
 // ---------------------------------------------------------------- upload ---
 // opts: { batch, throttleMs, gate } — gate() is awaited before every batch
 // (pause support for the initial full-bandwidth sync).
@@ -164,6 +200,7 @@ export async function downloadDeltas(ctx, settings, onProgress = () => {}, opts 
 // keeps the throttled defaults.
 export async function fullSync(ctx, settings, onProgress = () => {}, opts = {}) {
     const members = await fetchMembers(ctx, settings);
+    await backfillOnNewMembers(ctx, members, onProgress);
     const up = await uploadDeltas(ctx, settings, members, onProgress, opts);
     const down = await downloadDeltas(ctx, settings, onProgress, opts);
     await kvSet(ctx, 'last_sync', new Date().toJSON());
