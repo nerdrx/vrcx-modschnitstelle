@@ -4,9 +4,7 @@
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
                 {{ t('mods.globaldb.nav.mod-global-db') }}
             </h2>
-            <span class="gdb-badge" :class="settings.token && connected ? 'gdb-badge--on' : ''">
-                {{ settings.token && connected ? 'Verbunden' : 'Nicht verbunden' }}
-            </span>
+            <span class="gdb-badge" :class="badgeClass">{{ badgeText }}</span>
             <span v-if="busy && !init.running" style="font-size: 12px; opacity: 0.7">{{ progress }}</span>
         </div>
 
@@ -78,6 +76,21 @@
                         <button class="gdb-btn" :disabled="busy" @click="testConnection">Verbindung testen</button>
                     </div>
                     <div class="gdb-row"><label>Letzter Sync</label><span>{{ lastSync || '—' }}</span></div>
+                    <div class="gdb-row">
+                        <label>Sync-Stand</label>
+                        <span v-if="syncState.running" style="color: #e5c451">
+                            läuft — ↑{{ syncState.uploaded }} ↓{{ syncState.downloaded }} · {{ syncState.label }}
+                        </span>
+                        <template v-else-if="gap !== null">
+                            <span v-if="gapTotal === 0" style="color: #51e57e">vollständig synchron ✓</span>
+                            <span v-else style="color: #e5c451"
+                                title="Download exakt; Upload vor Filterung geschätzt (überschätzt)">
+                                ~{{ gapTotal }} Zeilen ausstehend (↓{{ gap.down }} · ↑~{{ gap.up }})
+                            </span>
+                            <button class="gdb-btn" :disabled="busy" @click="refreshGap">Prüfen</button>
+                        </template>
+                        <button v-else class="gdb-btn" :disabled="busy" @click="refreshGap">Prüfen</button>
+                    </div>
                     <div class="gdb-row" style="align-items: flex-start">
                         <label>Pool-Daten lokal</label>
                         <div style="display: flex; gap: 16px; flex-wrap: wrap">
@@ -159,11 +172,11 @@
 </template>
 
 <script setup>
-    import { onActivated, onMounted, reactive, ref } from 'vue';
+    import { computed, onActivated, onMounted, reactive, ref, watch } from 'vue';
     import { useI18n } from 'vue-i18n';
 
     import { kvGet, kvSet, poolCounts, clearPool } from './db';
-    import { DEFAULT_SERVER, apiFetch, fullSync, resetUploadCursors } from './sync';
+    import { DEFAULT_SERVER, apiFetch, computeSyncGap, fullSync, resetUploadCursors, syncState } from './sync';
     import { checkEligible, joinPool, uploadFriendHashes } from './join';
     import { ensureChatReady, restartTimer, startChatIfConfigured } from './index';
     import { getCtx } from './runtime';
@@ -197,6 +210,29 @@
     const manualToken = ref('');
     const tokenVisible = ref(false);
     const init = reactive({ running: false, paused: false, label: '', uploaded: 0, downloaded: 0 });
+    const gap = ref(null); // {down, up, tables} oder null = noch nicht geprüft
+
+    const gapTotal = computed(() => (gap.value ? gap.value.down + gap.value.up : 0));
+    const badgeText = computed(() => {
+        if (!settings.token || !connected.value) return 'Nicht verbunden';
+        if (syncState.running) return 'Synchronisiere…';
+        if (gap.value && gapTotal.value > 0) return 'Nicht vollständig synchron';
+        return 'Verbunden';
+    });
+    const badgeClass = computed(() => {
+        if (!settings.token || !connected.value) return '';
+        if (syncState.running || (gap.value && gapTotal.value > 0)) return 'gdb-badge--warn';
+        return 'gdb-badge--on';
+    });
+
+    async function refreshGap() {
+        const ctx = getCtx();
+        try {
+            gap.value = await computeSyncGap(ctx, settings);
+        } catch (err) {
+            pushLog('Sync-Stand-Prüfung fehlgeschlagen: ' + (err.message || err));
+        }
+    }
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -220,6 +256,7 @@
                 .then((data) => {
                     members.value = data.members;
                     connected.value = true;
+                    refreshGap();
                 })
                 .catch(() => {
                     connected.value = false;
@@ -437,6 +474,18 @@
         }
     }
 
+    // Nach jedem (auch Auto-)Sync: Zähler + Sync-Stand auffrischen.
+    watch(
+        () => syncState.running,
+        async (running) => {
+            if (running || !settings.token) return;
+            const ctx = getCtx();
+            counts.value = await poolCounts(ctx);
+            lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
+            refreshGap();
+        }
+    );
+
     onMounted(loadState);
     onActivated(loadState);
 </script>
@@ -494,6 +543,7 @@
         color: var(--muted-foreground, #9f9fa5);
     }
     .gdb-badge--on { border-color: #51e57e80; color: #51e57e; }
+    .gdb-badge--warn { border-color: #e5c45180; color: #e5c451; }
     .gdb-stat, .gdb-member {
         font-size: 12px;
         padding: 2px 10px;
