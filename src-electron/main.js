@@ -966,6 +966,7 @@ app.on('before-quit', function () {
 
 app.on('window-all-closed', function () {
     disposeOverlay();
+    destroyTray();
 
     if (process.platform === 'linux') {
         app.exit(0);
