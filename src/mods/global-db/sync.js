@@ -54,28 +54,28 @@ export async function apiFetch(settings, pathname, opts = {}) {
 const UPLOAD = {
     status: {
         cols: ['created_at', 'user_id', 'status', 'status_description'],
-        sql: (core) => `SELECT created_at,user_id,status,status_description
-            FROM ${core}_feed_status WHERE created_at >= @c ORDER BY created_at LIMIT ${BATCH}`
+        sql: (core, batch = BATCH) => `SELECT created_at,user_id,status,status_description
+            FROM ${core}_feed_status WHERE created_at >= @c ORDER BY created_at LIMIT ${batch}`
     },
     bio: {
         cols: ['created_at', 'user_id', 'bio'],
-        sql: (core) => `SELECT created_at,user_id,bio
-            FROM ${core}_feed_bio WHERE created_at >= @c ORDER BY created_at LIMIT ${BATCH}`
+        sql: (core, batch = BATCH) => `SELECT created_at,user_id,bio
+            FROM ${core}_feed_bio WHERE created_at >= @c ORDER BY created_at LIMIT ${batch}`
     },
     online_offline: {
         cols: ['created_at', 'user_id', 'type', 'location', 'world_name', 'time'],
-        sql: (core) => `SELECT created_at,user_id,type,location,world_name,time
-            FROM ${core}_feed_online_offline WHERE created_at >= @c ORDER BY created_at LIMIT ${BATCH}`
+        sql: (core, batch = BATCH) => `SELECT created_at,user_id,type,location,world_name,time
+            FROM ${core}_feed_online_offline WHERE created_at >= @c ORDER BY created_at LIMIT ${batch}`
     },
     gps: {
         cols: ['created_at', 'user_id', 'location', 'world_name', 'time'],
-        sql: (core) => `SELECT created_at,user_id,location,world_name,time
-            FROM ${core}_feed_gps WHERE created_at >= @c ORDER BY created_at LIMIT ${BATCH}`
+        sql: (core, batch = BATCH) => `SELECT created_at,user_id,location,world_name,time
+            FROM ${core}_feed_gps WHERE created_at >= @c ORDER BY created_at LIMIT ${batch}`
     },
     join_leave: {
         cols: ['created_at', 'user_id', 'display_name', 'type', 'location', 'time'],
-        sql: () => `SELECT created_at,user_id,display_name,type,location,time
-            FROM gamelog_join_leave WHERE created_at >= @c ORDER BY created_at LIMIT ${BATCH}`
+        sql: (core, batch = BATCH) => `SELECT created_at,user_id,display_name,type,location,time
+            FROM gamelog_join_leave WHERE created_at >= @c ORDER BY created_at LIMIT ${batch}`
     }
 };
 
@@ -87,16 +87,20 @@ async function fetchMembers(ctx, settings) {
 }
 
 // ---------------------------------------------------------------- upload ---
-export async function uploadDeltas(ctx, settings, members, onProgress = () => {}) {
+// opts: { batch, throttleMs, gate } — gate() is awaited before every batch
+// (pause support for the initial full-bandwidth sync).
+export async function uploadDeltas(ctx, settings, members, onProgress = () => {}, opts = {}) {
     const core = ctx.db.corePrefix();
-    const shares = settings.shares || {};
+    const batch = opts.batch || BATCH;
+    const throttleMs = opts.throttleMs ?? THROTTLE_MS;
+    const gate = opts.gate || (() => Promise.resolve());
     const result = { uploaded: 0, filtered: 0 };
 
     for (const [key, spec] of Object.entries(UPLOAD)) {
-        if (shares[key] === false) continue;
         let cursor = await kvGet(ctx, `up_cursor_${key}`, '');
         for (;;) {
-            const raw = await ctx.db.query(spec.sql(core), { '@c': cursor });
+            await gate();
+            const raw = await ctx.db.query(spec.sql(core, batch), { '@c': cursor });
             if (raw.length === 0) break;
             const rows = toObjects(raw, spec.cols);
             const newest = rows[rows.length - 1].created_at;
@@ -109,27 +113,31 @@ export async function uploadDeltas(ctx, settings, members, onProgress = () => {}
                 });
                 result.uploaded += resp.accepted || 0;
             }
-            onProgress(`Upload ${key}: bis ${newest}`);
-            if (newest === cursor && raw.length < BATCH) break;
+            onProgress(`Upload ${key}: bis ${newest}`, result);
+            if (newest === cursor && raw.length < batch) break;
             cursor = newest;
             await kvSet(ctx, `up_cursor_${key}`, cursor);
-            if (raw.length < BATCH) break;
-            await sleep(THROTTLE_MS);
+            if (raw.length < batch) break;
+            if (throttleMs > 0) await sleep(throttleMs);
         }
     }
     return result;
 }
 
 // -------------------------------------------------------------- download ---
-export async function downloadDeltas(ctx, settings, onProgress = () => {}) {
+export async function downloadDeltas(ctx, settings, onProgress = () => {}, opts = {}) {
+    const batch = opts.batch || BATCH;
+    const throttleMs = opts.throttleMs ?? THROTTLE_MS;
+    const gate = opts.gate || (() => Promise.resolve());
     const result = { downloaded: 0 };
     for (const key of Object.keys(POOL_TABLES)) {
         const table = poolTable(ctx, key);
         const cols = UPLOAD[key].cols;
         for (;;) {
+            await gate();
             const cur = await ctx.db.query(`SELECT COALESCE(MAX(remote_id),0) FROM ${table}`);
             const cursor = cur[0][0];
-            const data = await apiFetch(settings, `v1/sync?table=${key}&cursor=${cursor}`);
+            const data = await apiFetch(settings, `v1/sync?table=${key}&cursor=${cursor}&limit=${batch}`);
             for (const row of data.rows) {
                 const colNames = ['remote_id', ...cols, 'contributed_by'];
                 const args = {};
@@ -143,18 +151,21 @@ export async function downloadDeltas(ctx, settings, onProgress = () => {}) {
                 );
             }
             result.downloaded += data.rows.length;
-            if (data.rows.length) onProgress(`Download ${key}: ${result.downloaded}`);
+            if (data.rows.length) onProgress(`Download ${key}: ${result.downloaded}`, result);
             if (data.done) break;
-            await sleep(THROTTLE_MS);
+            if (throttleMs > 0) await sleep(throttleMs);
         }
     }
     return result;
 }
 
-export async function fullSync(ctx, settings, onProgress = () => {}) {
+// opts: { batch, throttleMs, gate } — see uploadDeltas. Initial sync after
+// join runs with { batch: 5000, throttleMs: 0 }, the periodic delta sync
+// keeps the throttled defaults.
+export async function fullSync(ctx, settings, onProgress = () => {}, opts = {}) {
     const members = await fetchMembers(ctx, settings);
-    const up = await uploadDeltas(ctx, settings, members, onProgress);
-    const down = await downloadDeltas(ctx, settings, onProgress);
+    const up = await uploadDeltas(ctx, settings, members, onProgress, opts);
+    const down = await downloadDeltas(ctx, settings, onProgress, opts);
     await kvSet(ctx, 'last_sync', new Date().toJSON());
     return { members: members.list, ...up, ...down };
 }

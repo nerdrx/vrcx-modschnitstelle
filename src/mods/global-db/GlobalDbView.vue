@@ -7,76 +7,144 @@
             <span class="gdb-badge" :class="settings.enabled && settings.token ? 'gdb-badge--on' : ''">
                 {{ settings.enabled && settings.token ? 'Sync aktiv' : 'Nicht verbunden' }}
             </span>
-            <button class="gdb-btn" :disabled="busy" @click="testConnection">Verbindung testen</button>
-            <button class="gdb-btn" :disabled="busy || !settings.token" @click="syncNow">Jetzt syncen</button>
-            <span v-if="busy" style="font-size: 12px; opacity: 0.7">{{ progress }}</span>
+            <span v-if="busy && !init.running" style="font-size: 12px; opacity: 0.7">{{ progress }}</span>
         </div>
 
         <div class="gdb-scroll">
-            <div class="gdb-section">
-                <h3>Einstellungen</h3>
-                <div class="gdb-row">
-                    <label>Server</label>
-                    <input v-model="settings.serverUrl" class="gdb-input" style="min-width: 320px" />
-                </div>
-                <div class="gdb-row">
-                    <label>Token</label>
-                    <input v-model="settings.token" type="password" class="gdb-input" style="min-width: 320px"
-                        placeholder="Pool-Token einfügen" />
-                </div>
-                <div class="gdb-row">
-                    <label>Auto-Sync</label>
-                    <input v-model="settings.enabled" type="checkbox" />
-                    <span style="opacity:.7">alle</span>
-                    <input v-model.number="settings.intervalMin" type="number" min="1" class="gdb-input" style="width: 60px" />
-                    <span style="opacity:.7">Minuten</span>
-                </div>
-                <div class="gdb-row" style="align-items: flex-start">
-                    <label>Ich teile</label>
-                    <div style="display: flex; gap: 14px; flex-wrap: wrap">
-                        <label v-for="(name, key) in SHARE_LABELS" :key="key" class="gdb-check">
-                            <input v-model="settings.shares[key]" type="checkbox" /> {{ name }}
-                        </label>
-                    </div>
-                </div>
-                <div class="gdb-row">
-                    <button class="gdb-btn gdb-btn--primary" :disabled="busy" @click="saveSettings">Speichern</button>
-                    <button class="gdb-btn gdb-btn--danger" :disabled="busy || !settings.token" @click="leavePool">
-                        Pool verlassen &amp; meine Daten löschen
-                    </button>
-                </div>
-                <p class="gdb-note">
-                    Erst-Beitritt: DB-Kopie über die <b>Onboarding-Seite</b>
-                    (<code>{{ (settings.serverUrl || '').replace(/\/$/, '') }}/onboard</code>) hochladen —
-                    danach hält dieser Mod alles automatisch aktuell. Geteilt werden nur
-                    Feed-/Gamelog-Daten von Pool-Mitgliedern. Auth, Memos und Configs nie.
+            <!-- ============================================= Opt-in (kein Token) -->
+            <div v-if="!settings.token" class="gdb-section">
+                <h3>Freundes-Pool beitreten</h3>
+                <p style="font-size: 13px; margin: 0 0 10px">
+                    <b>Ich teile:</b> Status, Bio, Online/Offline, Instanzen, Begegnungen.
                 </p>
+                <p class="gdb-privacy">
+                    Memos, Authentifizierung und Configs verlassen deinen PC niemals.
+                </p>
+                <div class="gdb-row" style="margin-top: 12px">
+                    <button
+                        class="gdb-btn gdb-btn--primary"
+                        :disabled="busy || eligible !== true"
+                        @click="joinNow"
+                    >
+                        Pool beitreten
+                    </button>
+                    <span v-if="eligible === null" style="font-size: 12px; opacity: 0.7">Prüfe Berechtigung…</span>
+                    <span v-else-if="isMember" style="font-size: 12px; opacity: 0.7">
+                        Du bist bereits Mitglied — Token vom anderen PC unter „Erweitert" eintragen.
+                    </span>
+                    <span v-else-if="eligible === false" style="font-size: 12px; opacity: 0.7">
+                        Nicht berechtigt — ein Pool-Mitglied muss dich als VRChat-Freund haben.
+                    </span>
+                </div>
+                <p v-if="joinError" class="gdb-error">{{ joinError }}</p>
+
+                <details class="gdb-details">
+                    <summary>Erweitert (Zweit-PC / Token manuell eintragen)</summary>
+                    <div class="gdb-row" style="margin-top: 10px">
+                        <label>Server</label>
+                        <input v-model="settings.serverUrl" class="gdb-input" style="min-width: 320px" />
+                    </div>
+                    <div class="gdb-row">
+                        <label>Token</label>
+                        <input v-model="manualToken" type="password" class="gdb-input" style="min-width: 320px"
+                            placeholder="Token vom anderen PC einfügen" />
+                    </div>
+                    <div class="gdb-row">
+                        <button class="gdb-btn" :disabled="busy || !manualToken" @click="applyManualToken">Übernehmen</button>
+                    </div>
+                </details>
             </div>
 
-            <div class="gdb-section">
-                <h3>Status</h3>
-                <div class="gdb-row"><label>Letzter Sync</label><span>{{ lastSync || '—' }}</span></div>
-                <div class="gdb-row" style="align-items: flex-start">
-                    <label>Pool-Daten lokal</label>
-                    <div style="display: flex; gap: 16px; flex-wrap: wrap">
-                        <span v-for="(count, key) in counts" :key="key" class="gdb-stat">
-                            {{ SHARE_LABELS[key] || key }}: <b>{{ count }}</b>
+            <!-- ============================================ Mitglied (Token da) -->
+            <template v-else>
+                <div v-if="init.running" class="gdb-section">
+                    <h3>Erst-Sync läuft…</h3>
+                    <div class="gdb-progress"><div class="gdb-progress-bar" :class="{ paused: init.paused }"></div></div>
+                    <div class="gdb-row" style="margin-top: 8px">
+                        <button class="gdb-btn" @click="init.paused = !init.paused">
+                            {{ init.paused ? 'Weiter' : 'Pausieren' }}
+                        </button>
+                        <span style="font-size: 12px; opacity: 0.8">
+                            {{ init.uploaded }} hochgeladen · {{ init.downloaded }} empfangen
                         </span>
                     </div>
+                    <p class="gdb-note">{{ init.label }}</p>
                 </div>
-                <div class="gdb-row" style="align-items: flex-start">
-                    <label>Mitglieder</label>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap">
-                        <span v-for="m in members" :key="m.user_id" class="gdb-member" :title="m.user_id">
-                            {{ m.display_name || m.user_id }}
-                        </span>
-                        <span v-if="members.length === 0" style="opacity: 0.6">— (Verbindung testen)</span>
+
+                <div class="gdb-section">
+                    <h3>Sync-Status</h3>
+                    <div class="gdb-row">
+                        <button class="gdb-btn" :disabled="busy" @click="syncNow">Jetzt syncen</button>
+                        <button class="gdb-btn" :disabled="busy" @click="testConnection">Verbindung testen</button>
+                    </div>
+                    <div class="gdb-row"><label>Letzter Sync</label><span>{{ lastSync || '—' }}</span></div>
+                    <div class="gdb-row" style="align-items: flex-start">
+                        <label>Pool-Daten lokal</label>
+                        <div style="display: flex; gap: 16px; flex-wrap: wrap">
+                            <span v-for="(count, key) in counts" :key="key" class="gdb-stat">
+                                {{ TABLE_LABELS[key] || key }}: <b>{{ count }}</b>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="gdb-row" style="align-items: flex-start">
+                        <label>Mitglieder</label>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+                            <span v-for="m in members" :key="m.user_id" class="gdb-member" :title="m.user_id">
+                                {{ m.display_name || m.user_id }}
+                            </span>
+                            <span v-if="members.length === 0" style="opacity: 0.6">— (Verbindung testen)</span>
+                        </div>
+                    </div>
+                    <p class="gdb-note">
+                        Geteilt werden nur Feed-/Gamelog-Daten von Pool-Mitgliedern.
+                        <span class="gdb-privacy-inline">Memos, Authentifizierung und Configs verlassen deinen PC niemals.</span>
+                    </p>
+                    <div v-if="log.length" class="gdb-log">
+                        <div v-for="(line, i) in log" :key="i">{{ line }}</div>
                     </div>
                 </div>
-                <div v-if="log.length" class="gdb-log">
-                    <div v-for="(line, i) in log" :key="i">{{ line }}</div>
+
+                <div class="gdb-section">
+                    <h3>Konto</h3>
+                    <div class="gdb-row">
+                        <label>Token</label>
+                        <template v-if="!tokenVisible">
+                            <span style="letter-spacing: 2px; opacity: 0.6">••••••••••••</span>
+                            <button class="gdb-btn" @click="tokenVisible = true">Anzeigen</button>
+                        </template>
+                        <template v-else>
+                            <input :value="settings.token" readonly class="gdb-input" style="min-width: 320px"
+                                @focus="$event.target.select()" />
+                            <button class="gdb-btn" @click="tokenVisible = false">Verbergen</button>
+                        </template>
+                        <button class="gdb-btn" @click="copyToken">Kopieren</button>
+                        <span style="font-size: 12px; opacity: 0.6">(für Zweit-PC)</span>
+                    </div>
+                    <div class="gdb-row">
+                        <button class="gdb-btn gdb-btn--danger" :disabled="busy" @click="leavePool">
+                            Pool verlassen &amp; meine Daten löschen
+                        </button>
+                    </div>
+
+                    <details class="gdb-details">
+                        <summary>Erweitert</summary>
+                        <div class="gdb-row" style="margin-top: 10px">
+                            <label>Server</label>
+                            <input v-model="settings.serverUrl" class="gdb-input" style="min-width: 320px" />
+                        </div>
+                        <div class="gdb-row">
+                            <label>Auto-Sync</label>
+                            <input v-model="settings.enabled" type="checkbox" />
+                            <span style="opacity:.7">alle</span>
+                            <input v-model.number="settings.intervalMin" type="number" min="1" class="gdb-input" style="width: 60px" />
+                            <span style="opacity:.7">Minuten</span>
+                        </div>
+                        <div class="gdb-row">
+                            <button class="gdb-btn gdb-btn--primary" :disabled="busy" @click="saveSettings">Speichern</button>
+                        </div>
+                    </details>
                 </div>
-            </div>
+            </template>
         </div>
     </div>
 </template>
@@ -87,12 +155,13 @@
 
     import { kvGet, kvSet, poolCounts, clearPool } from './db';
     import { DEFAULT_SERVER, apiFetch, fullSync } from './sync';
+    import { checkEligible, joinPool, uploadFriendHashes } from './join';
     import { restartTimer, startChatIfConfigured } from './index';
     import { getCtx } from './runtime';
 
     const { t } = useI18n();
 
-    const SHARE_LABELS = {
+    const TABLE_LABELS = {
         status: 'Status',
         bio: 'Bio',
         online_offline: 'Online/Offline',
@@ -104,8 +173,7 @@
         serverUrl: DEFAULT_SERVER,
         token: '',
         enabled: false,
-        intervalMin: 5,
-        shares: { status: true, bio: true, online_offline: true, gps: true, join_leave: true }
+        intervalMin: 5
     });
     const busy = ref(false);
     const progress = ref('');
@@ -113,6 +181,14 @@
     const counts = ref({});
     const members = ref([]);
     const log = ref([]);
+    const eligible = ref(null); // null = checking
+    const isMember = ref(false); // Mitglied ohne lokalen Token (Zweit-PC)
+    const joinError = ref('');
+    const manualToken = ref('');
+    const tokenVisible = ref(false);
+    const init = reactive({ running: false, paused: false, label: '', uploaded: 0, downloaded: 0 });
+
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
     const pushLog = (line) => {
         log.value = [new Date().toLocaleTimeString('de-AT') + '  ' + line, ...log.value].slice(0, 8);
@@ -122,10 +198,24 @@
     async function loadState() {
         const ctx = getCtx();
         const stored = await kvGet(ctx, 'settings', null);
-        if (stored) Object.assign(settings, { shares: settings.shares, ...stored });
-        if (!settings.shares) settings.shares = {};
+        if (stored) {
+            const { shares, ...rest } = stored; // alte shares-Settings ignorieren
+            Object.assign(settings, rest);
+        }
         lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
         counts.value = await poolCounts(ctx);
+        if (!settings.token) {
+            eligible.value = null;
+            isMember.value = false;
+            try {
+                const uid = ctx.stores.user.currentUser?.id;
+                const state = await checkEligible(settings, uid);
+                eligible.value = state.eligible;
+                isMember.value = state.member;
+            } catch {
+                eligible.value = false;
+            }
+        }
     }
 
     async function saveSettings() {
@@ -134,6 +224,99 @@
         restartTimer(ctx, settings.intervalMin);
         startChatIfConfigured(ctx).catch(() => {});
         pushLog('Einstellungen gespeichert.');
+    }
+
+    // ---------------------------------------------------- P1.5 opt-in flow --
+    // Ein Klick: join → Token speichern → Freundes-Hashes hochladen →
+    // Erst-Sync mit voller Bandbreite (pausierbar) → Delta-Sync gedrosselt.
+    async function joinNow() {
+        const ctx = getCtx();
+        joinError.value = '';
+        busy.value = true;
+        try {
+            const me = ctx.stores.user.currentUser;
+            if (!me?.id) throw new Error('VRChat-Login nicht bereit.');
+            const token = await joinPool(settings, me.id, me.displayName || me.username || me.id);
+            settings.token = token;
+            settings.enabled = true;
+            await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
+            pushLog('Beigetreten — Token gespeichert.');
+            try {
+                const n = await uploadFriendHashes(ctx, settings);
+                pushLog(`Freundes-Hashes hochgeladen (${n}).`);
+            } catch (err) {
+                pushLog('Freundes-Hashes fehlgeschlagen: ' + (err.message || err));
+            }
+            await runInitialSync();
+            restartTimer(ctx, settings.intervalMin);
+            startChatIfConfigured(ctx).catch(() => {});
+        } catch (err) {
+            joinError.value = String(err.message || err);
+        } finally {
+            busy.value = false;
+        }
+    }
+
+    async function runInitialSync() {
+        const ctx = getCtx();
+        init.running = true;
+        init.paused = false;
+        init.uploaded = 0;
+        init.downloaded = 0;
+        init.label = 'Starte Erst-Sync…';
+        const gate = async () => {
+            while (init.paused) await sleep(300);
+        };
+        try {
+            const result = await fullSync(
+                ctx,
+                settings,
+                (label, res) => {
+                    init.label = label;
+                    if (res?.uploaded !== undefined) init.uploaded = res.uploaded;
+                    if (res?.downloaded !== undefined) init.downloaded = res.downloaded;
+                },
+                { batch: 5000, throttleMs: 0, gate }
+            );
+            members.value = result.members || [];
+            counts.value = await poolCounts(ctx);
+            lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
+            pushLog(`Erst-Sync fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen.`);
+        } catch (err) {
+            pushLog('Erst-Sync unterbrochen: ' + (err.message || err) + ' — läuft beim nächsten Sync weiter.');
+        } finally {
+            init.running = false;
+        }
+    }
+
+    async function applyManualToken() {
+        const ctx = getCtx();
+        busy.value = true;
+        try {
+            settings.token = manualToken.value.trim();
+            settings.enabled = true;
+            await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
+            await apiFetch(settings, 'v1/members'); // Token validieren
+            manualToken.value = '';
+            pushLog('Token übernommen.');
+            restartTimer(ctx, settings.intervalMin);
+            startChatIfConfigured(ctx).catch(() => {});
+        } catch (err) {
+            settings.token = '';
+            pushLog('Token ungültig: ' + (err.message || err));
+        } finally {
+            busy.value = false;
+        }
+    }
+
+    function copyToken() {
+        try {
+            navigator.clipboard.writeText(settings.token);
+            pushLog('Token kopiert.');
+        } catch {
+            tokenVisible.value = true;
+            pushLog('Kopieren fehlgeschlagen — Token manuell markieren.');
+        }
     }
 
     async function testConnection() {
@@ -177,10 +360,12 @@
             await clearPool(ctx);
             settings.enabled = false;
             settings.token = '';
-            await saveSettings();
+            tokenVisible.value = false;
+            await kvSet(ctx, 'settings', JSON.parse(JSON.stringify(settings)));
             counts.value = await poolCounts(ctx);
             members.value = [];
             pushLog('Pool verlassen — Serverdaten gelöscht, lokale Pool-Kopie geleert.');
+            await loadState();
         } catch (err) {
             pushLog('Fehler beim Verlassen: ' + (err.message || err));
         } finally {
@@ -222,7 +407,6 @@
         color: inherit;
         font-size: 13px;
     }
-    .gdb-check { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
     .gdb-btn {
         padding: 5px 12px;
         border: 1px solid var(--border, #4443);
@@ -253,6 +437,33 @@
         border: 1px solid var(--border, #4443);
     }
     .gdb-note { font-size: 12px; color: var(--muted-foreground, #9f9fa5); margin: 4px 0 0; }
+    .gdb-privacy { color: #e64a4a; font-size: 13px; font-weight: 600; margin: 0; }
+    .gdb-privacy-inline { color: #e64a4a; }
+    .gdb-error { color: #e64a4a; font-size: 12px; margin: 6px 0 0; }
+    .gdb-details { margin-top: 12px; font-size: 13px; }
+    .gdb-details summary { cursor: pointer; color: var(--muted-foreground, #9f9fa5); }
+    .gdb-progress {
+        height: 8px;
+        border-radius: 4px;
+        border: 1px solid var(--border, #4443);
+        overflow: hidden;
+        position: relative;
+    }
+    .gdb-progress-bar {
+        position: absolute;
+        inset: 0;
+        background: repeating-linear-gradient(
+            45deg,
+            var(--accent, #3f3f46) 0 12px,
+            transparent 12px 24px
+        );
+        animation: gdb-slide 1s linear infinite;
+    }
+    .gdb-progress-bar.paused { animation-play-state: paused; opacity: 0.4; }
+    @keyframes gdb-slide {
+        from { background-position: 0 0; }
+        to { background-position: 34px 0; }
+    }
     .gdb-log {
         margin-top: 8px;
         font-size: 11px;
