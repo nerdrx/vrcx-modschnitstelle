@@ -45,12 +45,17 @@ namespace VRCX
         private float _curvature = 0.08f;
         private float _widthMeters = 0.6f;
         private bool _gestureEnabled;
-        private float _laserPitchDeg = 45f; // Index: Ray-Neigung zur Controller-Spitze
-        private float _laserOffXcm = -6f; // Pointer-Offset horizontal (cm, je Hand gespiegelt)
-        private float _laserOffYcm = -3.5f; // Pointer-Offset vertikal (cm)
+        // Laser-Kalibrierung als WINKEL (Grad) statt cm-Offset: ein cm-Versatz
+        // der Ray-Quelle wandert über die Panelfläche (Parallaxe), eine
+        // Winkelkorrektur bleibt über Distanz und Fläche konstant.
+        private float _laserPitchDeg = 45f; // Ray-Neigung nach unten
+        private float _laserYawDeg = -4.5f; // Ray-Drehung seitlich (+ = nach außen, je Hand gespiegelt)
         private bool _dragLock; // Settings offen => Dragbar inaktiv
         // Wrist-Mini: exakt über dem VRCX-Wrist-Overlay + User-Offset
         private bool _wristLock; // Verschieben gesperrt
+        private bool _wristGate; // false = Mini dauerhaft sichtbar, true = Blickwinkel-Gate
+        private string _wristHand = "left"; // bevorzugte Hand, wenn VRCX "beide" erlaubt
+        private bool _bigPlaced; // großes Panel im wrist-Modus frei in der Welt abgelegt
         private float _wristOffX, _wristOffY, _wristOffZ; // cm, Controller-lokal
         private float _wristAngleDeg = 30f; // Sichtbarkeits-Kegel (Blick aufs Handgelenk)
         private DateTime _angleVisibleUntil = DateTime.MinValue;
@@ -153,9 +158,52 @@ namespace VRCX
                 _hapticPulses = 10; // ~10 Frames à 32 ms Buzz
                 return;
             }
-            if (_browser == null || _browser.IsLoading || !_browser.CanExecuteJavascriptInMainFrame)
+            if (!BrowserReady())
+            {
+                // Panel lädt noch: letzten Stand puffern und nach dem Laden
+                // nachliefern — sonst bleibt das Panel leer, bis sich im Mod
+                // zufällig wieder etwas ändert (Diff-Poll).
+                if (function == "update" || function == "config")
+                    lock (_pending) _pending[function] = json;
                 return;
+            }
             _browser.ExecuteScriptAsync($"window.$vrchat && $vrchat.{function}", json);
+        }
+
+        private readonly System.Collections.Generic.Dictionary<string, string> _pending = new();
+
+        private bool BrowserReady()
+        {
+            return _browser != null && !_browser.IsLoading && _browser.CanExecuteJavascriptInMainFrame;
+        }
+
+        /// Gepufferte config/update nach dem Laden des Panels nachreichen.
+        private void FlushPending()
+        {
+            if (!BrowserReady())
+                return;
+            System.Collections.Generic.KeyValuePair<string, string>[] items;
+            lock (_pending)
+            {
+                if (_pending.Count == 0)
+                    return;
+                items = new System.Collections.Generic.KeyValuePair<string, string>[_pending.Count];
+                ((System.Collections.Generic.ICollection<System.Collections.Generic.KeyValuePair<string, string>>)_pending)
+                    .CopyTo(items, 0);
+                _pending.Clear();
+            }
+            foreach (var item in items)
+            {
+                // config zuerst, damit update nicht in eine leere Konfig läuft
+                if (item.Key == "config")
+                    _browser.ExecuteScriptAsync("window.$vrchat && $vrchat.config", item.Value);
+            }
+            foreach (var item in items)
+            {
+                if (item.Key != "config")
+                    _browser.ExecuteScriptAsync($"window.$vrchat && $vrchat.{item.Key}", item.Value);
+            }
+            logger.Info("chat panel: {0} gepufferte Nachrichten nachgereicht", items.Length);
         }
 
         private void ApplyConfig(string json)
@@ -172,6 +220,7 @@ namespace VRCX
                     {
                         _mode = mode;
                         _placeRequested = true;
+                        _bigPlaced = false; // Moduswechsel verwirft die abgelegte Position
                     }
                 }
                 if (root.TryGetProperty("alpha", out var al)) _alpha = Math.Clamp(al.GetSingle(), 0.2f, 1f);
@@ -179,8 +228,7 @@ namespace VRCX
                 if (root.TryGetProperty("width", out var wi)) _widthMeters = Math.Clamp(wi.GetSingle(), 0.2f, 2.5f);
                 if (root.TryGetProperty("gesture", out var ge)) _gestureEnabled = ge.GetBoolean();
                 if (root.TryGetProperty("laserPitch", out var lp)) _laserPitchDeg = Math.Clamp(lp.GetSingle(), -30f, 90f);
-                if (root.TryGetProperty("laserOffX", out var lx)) _laserOffXcm = Math.Clamp(lx.GetSingle(), -10f, 10f);
-                if (root.TryGetProperty("laserOffY", out var ly)) _laserOffYcm = Math.Clamp(ly.GetSingle(), -10f, 10f);
+                if (root.TryGetProperty("laserYaw", out var lyw)) _laserYawDeg = Math.Clamp(lyw.GetSingle(), -30f, 30f);
                 if (root.TryGetProperty("flashSec", out var fs)) _flashSec = Math.Clamp(fs.GetSingle(), 2f, 120f);
                 if (root.TryGetProperty("big", out var bg))
                 {
@@ -198,6 +246,8 @@ namespace VRCX
                 if (root.TryGetProperty("placeHand", out var ph)) _placeHand = ph.GetString() ?? "right";
                 if (root.TryGetProperty("dragLock", out var dl)) _dragLock = dl.GetBoolean();
                 if (root.TryGetProperty("wristLock", out var wl)) _wristLock = wl.GetBoolean();
+                if (root.TryGetProperty("wristGate", out var wg)) _wristGate = wg.GetBoolean();
+                if (root.TryGetProperty("wristHand", out var wh)) _wristHand = wh.GetString() ?? "left";
                 if (root.TryGetProperty("wristAngle", out var wa)) _wristAngleDeg = Math.Clamp(wa.GetSingle(), 10f, 80f);
                 if (root.TryGetProperty("wristOffX", out var wx)) _wristOffX = Math.Clamp(wx.GetSingle(), -40f, 40f);
                 if (root.TryGetProperty("wristOffY", out var wy)) _wristOffY = Math.Clamp(wy.GetSingle(), -40f, 40f);
@@ -257,6 +307,7 @@ namespace VRCX
                 if (wristUntil > _wristUntil)
                     _wristUntil = wristUntil;
                 _overlayHand = overlayHand;
+                FlushPending(); // vor dem Rendern: gepufferten Startzustand nachreichen
                 ProcessInternal(system, overlay, dashboardVisible);
             }
             catch (Exception e)
@@ -272,18 +323,30 @@ namespace VRCX
             else if (_miniPressActive)
                 ProcessMiniPress(system);
 
-            // Minimiert = wirklich unsichtbar (keine Geisterfläche): Mini
-            // erscheint im Flash-Fenster nach neuer Nachricht, im
-            // VRCX-Wrist-Fenster oder beim Blick aufs Handgelenk (wrist-Modus).
+            // Minimiert: im wrist-Modus ist der Mini standardmäßig DAUERHAFT am
+            // Handgelenk sichtbar. Nur mit eingeschaltetem Blickwinkel-Gate
+            // (⚙ bzw. Desktop-Settings) erscheint er wie bisher nur im
+            // Flash-Fenster, im VRCX-Wrist-Fenster oder beim Hinsehen.
+            // hud/world bleiben unsichtbar bis Flash/Geste (keine Geisterfläche).
             var wantVisible = _enabled && !dashboardVisible;
             if (wantVisible && !_big && !_placing && !_dragging && !_wristMoving)
             {
                 var now = DateTime.UtcNow;
-                if (_mode == "wrist")
+                if (_mode != "wrist")
+                {
+                    wantVisible = now <= _flashUntil;
+                }
+                else if (_wristGate)
+                {
                     UpdateWristAngleVisibility(system);
-                wantVisible = now <= _flashUntil ||
-                              (_mode == "wrist" &&
-                               (now <= _wristUntil || now <= _angleVisibleUntil));
+                    wantVisible = now <= _flashUntil || now <= _wristUntil ||
+                                  now <= _angleVisibleUntil;
+                }
+                else
+                {
+                    PickWristHand(system);
+                    wantVisible = _wristIndex != OpenVR.k_unTrackedDeviceIndexInvalid;
+                }
             }
 
             if (!wantVisible)
@@ -438,6 +501,36 @@ namespace VRCX
             return new Vector3(_wristOffX / 100f, _wristOffY / 100f, _wristOffZ / 100f);
         }
 
+        /// Ohne Blickwinkel-Gate: Hand fest wählen (VRCX-Overlay-Hand hat
+        /// Vorrang, sonst die in den Settings bevorzugte Seite). Ohne gültige
+        /// Controller-Pose bleibt der Mini aus — sonst hätte er keine Transform.
+        private void PickWristHand(CVRSystem system)
+        {
+            var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
+            system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
+            var wantLeft = _wristHand != "right";
+            if (_overlayHand == 1) wantLeft = true;
+            if (_overlayHand == 2) wantLeft = false;
+
+            var fallback = OpenVR.k_unTrackedDeviceIndexInvalid;
+            for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
+            {
+                var role = system.GetControllerRoleForTrackedDeviceIndex(i);
+                var isLeft = role == ETrackedControllerRole.LeftHand;
+                var isRight = role == ETrackedControllerRole.RightHand;
+                if ((!isLeft && !isRight) || !poses[i].bPoseIsValid)
+                    continue;
+                if (fallback == OpenVR.k_unTrackedDeviceIndexInvalid)
+                    fallback = i;
+                if (isLeft == wantLeft)
+                {
+                    _wristIndex = i;
+                    return;
+                }
+            }
+            _wristIndex = fallback;
+        }
+
         /// Sichtbarkeit per Handgelenkwinkel (wie OVR Toolkit): Mini zeigt sich,
         /// wenn seine Fläche zum HMD gedreht ist. Wählt zugleich die Hand.
         private void UpdateWristAngleVisibility(CVRSystem system)
@@ -501,9 +594,10 @@ namespace VRCX
 
             // Zielpunkt = Laserpunkt der ziehenden Hand in fester Distanz
             var mm = poses[_wristMoveIdx].mDeviceToAbsoluteTracking;
-            var src = LaserSource(mm,
-                system.GetControllerRoleForTrackedDeviceIndex(_wristMoveIdx) == ETrackedControllerRole.LeftHand);
-            var target = src + LaserDirection(mm) * _wristMoveDist;
+            var moveLeft = system.GetControllerRoleForTrackedDeviceIndex(_wristMoveIdx) ==
+                ETrackedControllerRole.LeftHand;
+            var src = LaserSource(mm, moveLeft);
+            var target = src + LaserDirection(mm, moveLeft) * _wristMoveDist;
 
             // In Controller-Space der Wrist-Hand umrechnen => neuer Offset
             var wristM = ToMatrix4x4(poses[_wristIndex].mDeviceToAbsoluteTracking);
@@ -609,7 +703,7 @@ namespace VRCX
 
                 var m = poses[i].mDeviceToAbsoluteTracking;
                 var src = LaserSource(m, role == ETrackedControllerRole.LeftHand);
-                var dir = LaserDirection(m);
+                var dir = LaserDirection(m, role == ETrackedControllerRole.LeftHand);
                 // Drag: Griffpunkt beibehalten; Platzieren: 1 m vor dem Laser
                 var pos = _dragging
                     ? src + dir * _dragDist + _dragOffset
@@ -643,10 +737,21 @@ namespace VRCX
                         if (!trigger)
                         {
                             _dragging = false;
-                            _mode = "world"; // bleibt, wo losgelassen
-                            _browser?.ExecuteScriptAsync(
-                                "window.$vrchat && $vrchat.config", "{\"mode\":\"world\"}");
-                            logger.Info("chat panel dragged (world)");
+                            if (_mode == "wrist")
+                            {
+                                // Im wrist-Modus darf das Ablegen des großen
+                                // Panels den Modus NICHT auf world kippen —
+                                // sonst verschwindet der Handgelenk-Mini.
+                                _bigPlaced = true;
+                                logger.Info("chat panel dragged (wrist, groß abgelegt)");
+                            }
+                            else
+                            {
+                                _mode = "world"; // bleibt, wo losgelassen
+                                _browser?.ExecuteScriptAsync(
+                                    "window.$vrchat && $vrchat.config", "{\"mode\":\"world\"}");
+                                logger.Info("chat panel dragged (world)");
+                            }
                         }
                     }
                     else if (trigger && !_placeTriggerDown)
@@ -668,7 +773,7 @@ namespace VRCX
         /// Aktuelle Panel-Position in Welt-Koordinaten (für den Drag-Griffpunkt).
         private Vector3 CurrentPanelPos(CVRSystem system)
         {
-            if (_mode == "world")
+            if (_mode == "world" || _bigPlaced)
                 return _lastPanelPos;
             // hud (Groß): head-locked Offset in Welt umrechnen
             var poses = new TrackedDevicePose_t[OpenVR.k_unTrackedDeviceIndex_Hmd + 1];
@@ -703,6 +808,31 @@ namespace VRCX
         private void ApplyTransform(CVRSystem system, CVROverlay overlay)
         {
             overlay.SetOverlayWidthInMeters(_handle, _widthMeters);
+            if (_bigPlaced && _mode != "world")
+            {
+                // wrist-Modus mit frei abgelegtem großem Panel: an der
+                // abgelegten Weltposition halten, Billboard zum HMD.
+                var poses = new TrackedDevicePose_t[OpenVR.k_unTrackedDeviceIndex_Hmd + 1];
+                system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
+                var hmdPose = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
+                var hmdPos = hmdPose.bPoseIsValid
+                    ? new Vector3(hmdPose.mDeviceToAbsoluteTracking.m3,
+                        hmdPose.mDeviceToAbsoluteTracking.m7, hmdPose.mDeviceToAbsoluteTracking.m11)
+                    : _lastPanelPos + new Vector3(0, 0, 1);
+                var bz = Vector3.Normalize(hmdPos - _lastPanelPos);
+                var bx = Vector3.Normalize(Vector3.Cross(new Vector3(0, 1, 0), bz));
+                if (float.IsNaN(bx.X)) bx = new Vector3(1, 0, 0);
+                var by = Vector3.Cross(bz, bx);
+                var bm = new Matrix4x4(
+                    bx.X, bx.Y, bx.Z, 0,
+                    by.X, by.Y, by.Z, 0,
+                    bz.X, bz.Y, bz.Z, 0,
+                    _lastPanelPos.X, _lastPanelPos.Y, _lastPanelPos.Z, 1);
+                var bhm34 = ToHmdMatrix34(bm);
+                overlay.SetOverlayTransformAbsolute(_handle,
+                    ETrackingUniverseOrigin.TrackingUniverseStanding, ref bhm34);
+                return;
+            }
             if (_mode == "world")
             {
                 var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
@@ -767,19 +897,13 @@ namespace VRCX
         private readonly bool[] _triggerDown = new bool[2];
         private bool _pointerWasOnPanel;
 
-        /// Ray-Ursprung mit einstellbaren Offsets (cm): X gespiegelt je Hand
-        /// (+ = nach außen), Y global (+ = nach oben). Defaults 0/0 —
-        /// Kalibrierung im Panel (⚙).
-        private Vector3 LaserSource(HmdMatrix34_t m, bool isLeft)
+        /// Ray-Ursprung = Controller-Pose. Die Kalibrierung sitzt bewusst NICHT
+        /// hier: ein cm-Versatz der Quelle erzeugt einen distanzabhängigen
+        /// Bildversatz (Parallaxe) und "wandert" damit über die Panelfläche.
+        /// Korrigiert wird stattdessen die Richtung (Pitch/Yaw in Grad).
+        private static Vector3 LaserSource(HmdMatrix34_t m, bool isLeft)
         {
-            var pos = new Vector3(m.m3, m.m7, m.m11);
-            if (_laserOffXcm == 0f && _laserOffYcm == 0f)
-                return pos;
-            var xAxis = Vector3.Normalize(new Vector3(m.m0, m.m4, m.m8));
-            var yAxis = Vector3.Normalize(new Vector3(m.m1, m.m5, m.m9));
-            return pos
-                + xAxis * ((isLeft ? -1f : 1f) * _laserOffXcm / 100f)
-                + yAxis * (_laserOffYcm / 100f);
+            return new Vector3(m.m3, m.m7, m.m11);
         }
 
         /// SteamVR-Tastatur-Events — aus Overlay- UND System-Queue (VRCXVRCef,
@@ -803,23 +927,40 @@ namespace VRCX
                 return;
             var sb = new StringBuilder(1024);
             OpenVR.Overlay?.GetKeyboardText(sb, 1024);
-            logger.Info("keyboard event {0}, text len {1}", type, sb.Length);
-            if (sb.Length > 0)
-                _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.keyboardDone", sb.ToString());
+            // GetKeyboardText liefert bei der Minimal-Tastatur regelmäßig nur
+            // ein '\0' zurück (Länge 1). Ungefiltert hat das den kompletten
+            // Entwurf durch ein unsichtbares Steuerzeichen ersetzt — deshalb
+            // hier hart auf druckbaren Text reduzieren und sonst nichts senden.
+            var text = sb.ToString();
+            var nul = text.IndexOf('\0');
+            if (nul >= 0)
+                text = text.Substring(0, nul);
+            text = new string(Array.FindAll(text.ToCharArray(), ch => ch >= ' '));
+            logger.Info("keyboard event {0}, raw len {1}, nutzbar {2}", type, sb.Length, text.Length);
+            if (text.Length > 0)
+                _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.keyboardDone", text);
         }
 
-        /// Ray-Richtung mit einstellbarer Neigung (Index-Controller: rohe Pose
-        /// zeigt nicht zur Spitze — Standard ~45° nach unten gekippt).
-        private Vector3 LaserDirection(HmdMatrix34_t m)
+        /// Ray-Richtung mit einstellbarer Neigung UND Seitwärtsdrehung
+        /// (Index-Controller: rohe Pose zeigt nicht zur Spitze — Standard ~45°
+        /// nach unten). Yaw ist je Hand gespiegelt (+ = nach außen), damit die
+        /// Kalibrierung für beide Controller gilt.
+        /// dir_local = RotY(yaw) * (0, -sin p, -cos p)
+        ///           = (-cos p * sin y, -sin p, -cos p * cos y)
+        private Vector3 LaserDirection(HmdMatrix34_t m, bool isLeft)
         {
             var p = _laserPitchDeg * (float)(Math.PI / 180f);
-            var s = (float)Math.Sin(p);
-            var c = (float)Math.Cos(p);
-            // dir_local = (0, -sin p, -cos p) in Controller-Space
+            var y = (isLeft ? -1f : 1f) * _laserYawDeg * (float)(Math.PI / 180f);
+            var sp = (float)Math.Sin(p);
+            var cp = (float)Math.Cos(p);
+            var lx = -cp * (float)Math.Sin(y);
+            var ly = -sp;
+            var lz = -cp * (float)Math.Cos(y);
+            // Controller-Space -> Welt (Spalten der Pose: x=m0/m4/m8, y=m1/m5/m9, z=m2/m6/m10)
             return Vector3.Normalize(new Vector3(
-                -s * m.m1 - c * m.m2,
-                -s * m.m5 - c * m.m6,
-                -s * m.m9 - c * m.m10));
+                lx * m.m0 + ly * m.m1 + lz * m.m2,
+                lx * m.m4 + ly * m.m5 + lz * m.m6,
+                lx * m.m8 + ly * m.m9 + lz * m.m10));
         }
 
         private void ProcessLaser(CVRSystem system, CVROverlay overlay)
@@ -847,7 +988,7 @@ namespace VRCX
                 if (!poses[i].bPoseIsValid)
                     continue;
                 var m = poses[i].mDeviceToAbsoluteTracking;
-                var dir = LaserDirection(m);
+                var dir = LaserDirection(m, role == ETrackedControllerRole.LeftHand);
                 var src = LaserSource(m, role == ETrackedControllerRole.LeftHand);
                 var parms = new VROverlayIntersectionParams_t
                 {
@@ -916,7 +1057,7 @@ namespace VRCX
                 {
                     var pm = poses[bestIdx].mDeviceToAbsoluteTracking;
                     var psrc = LaserSource(pm, bestHand == 0);
-                    var pdir = LaserDirection(pm);
+                    var pdir = LaserDirection(pm, bestHand == 0);
                     var panelPos = CurrentPanelPos(system);
                     _dragDist = Math.Clamp(Vector3.Distance(psrc, panelPos), 0.35f, 3f);
                     _dragOffset = panelPos - (psrc + pdir * _dragDist);

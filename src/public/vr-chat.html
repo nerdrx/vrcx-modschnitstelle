@@ -130,20 +130,20 @@
         <span style="margin-left:16px">Größe</span>
         <div class="hbtn" data-width="-0.15">−</div>
         <div class="hbtn" data-width="0.15">+</div>
-        <span style="margin-left:16px">Laser</span>
-        <div class="hbtn" data-pitch="-2">−</div>
-        <span id="pitchval">45°</span>
-        <div class="hbtn" data-pitch="2">+</div>
-        <span style="margin-left:16px" title="+ = nach außen (je Hand gespiegelt)">H</span>
-        <div class="hbtn" data-offx="-0.5">−</div>
-        <span id="offxval">0</span>
-        <div class="hbtn" data-offx="0.5">+</div>
-        <span style="margin-left:16px" title="+ = nach oben">V</span>
-        <div class="hbtn" data-offy="-0.5">−</div>
-        <span id="offyval">0</span>
-        <div class="hbtn" data-offy="0.5">+</div>
+        <span style="margin-left:16px" title="Laser-Neigung nach unten (Grad)">Laser ↕</span>
+        <div class="hbtn" data-pitch="-0.5">−</div>
+        <span id="pitchval">45.0°</span>
+        <div class="hbtn" data-pitch="0.5">+</div>
+        <span style="margin-left:16px" title="Laser seitlich (Grad, + = nach außen, je Hand gespiegelt)">Laser ↔</span>
+        <div class="hbtn" data-yaw="-0.5">−</div>
+        <span id="yawval">0.0°</span>
+        <div class="hbtn" data-yaw="0.5">+</div>
         <span style="margin-left:16px" title="Wrist-Mini verschieben sperren">Wrist-Lock</span>
         <div id="wristlockbtn" class="hbtn">aus</div>
+        <span style="margin-left:16px" title="Mini nur zeigen, wenn du aufs Handgelenk schaust">Blick-Gate</span>
+        <div id="wristgatebtn" class="hbtn">aus</div>
+        <span style="margin-left:16px" title="Handgelenk-Seite für den Mini">Hand</span>
+        <div id="wristhandbtn" class="hbtn">L</div>
     </div>
 </div>
 <div id="bubble">
@@ -175,10 +175,20 @@
     const state = {
         me: '', ampel: 'green', channels: [], active: 'global',
         big: false, autoShow: true, mode: 'wrist', wristLock: false,
-        alpha: 0.9, curvature: 0.08, width: 0.6, laserPitch: 45,
-        laserOffX: -6, laserOffY: -3.5,
-        draft: '', lastUnread: 0, lastMsg: null
+        wristGate: false, wristHand: 'left',
+        alpha: 0.9, curvature: 0.08, width: 0.6,
+        // Laser-Kalibrierung in GRAD (Neigung + Seitwärtsdrehung) — ein
+        // cm-Offset der Strahlquelle wandert über die Panelfläche, ein
+        // Winkel nicht.
+        laserPitch: 45, laserYaw: -4.5,
+        draft: '', lastUnread: 0, lastMsg: null,
+        gotUpdate: false
     };
+    // Nur druckbare Zeichen aus der SteamVR-Tastatur übernehmen: sie liefert
+    // regelmäßig '\0' o. Ä., was den Entwurf sonst durch ein unsichtbares
+    // Steuerzeichen ersetzt hat.
+    const CTRL = /[\u0000-\u001f\u007f]/g;
+    const printable = (s) => (s || '').replace(CTRL, '');
     const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','😭','😱','🥳','😴','👍','👎',
         '❤️','🔥','✨','🎉','💀','🙏','👋','💜','😈','🍕','🎮','📍'];
 
@@ -246,11 +256,13 @@
 
         $('modebtn').textContent =
             state.mode === 'world' ? 'World' : state.mode === 'hud' ? 'HUD' : 'Wrist';
-        $('pitchval').textContent = Math.round(state.laserPitch) + '°';
-        $('offxval').textContent = state.laserOffX.toFixed(1);
-        $('offyval').textContent = state.laserOffY.toFixed(1);
+        $('pitchval').textContent = state.laserPitch.toFixed(1) + '°';
+        $('yawval').textContent = state.laserYaw.toFixed(1) + '°';
         $('wristlockbtn').textContent = state.wristLock ? 'AN' : 'aus';
         $('wristlockbtn').classList.toggle('active', state.wristLock);
+        $('wristgatebtn').textContent = state.wristGate ? 'AN' : 'aus';
+        $('wristgatebtn').classList.toggle('active', state.wristGate);
+        $('wristhandbtn').textContent = state.wristHand === 'right' ? 'R' : 'L';
 
         const box = $('msgs');
         const ch = chan();
@@ -301,11 +313,26 @@
         }
     }
 
+    /// Entwurf abschicken — von Senden-Button UND von Enter auf der
+    /// SteamVR-Tastatur (Zeichenstrom liefert '\n').
+    function doSend() {
+        const ch = chan();
+        const text = printable(state.draft).trim();
+        if (!text || !ch) {
+            render();
+            return;
+        }
+        act({ type: 'send', channel: ch.channel, text });
+        state.draft = '';
+        render();
+    }
+
     // ------------------------------------------------------- $vrchat API --
     window.$vrchat = {
         update(json) {
             try {
                 const data = typeof json === 'string' ? JSON.parse(json) : json;
+                state.gotUpdate = true; // stoppt den refresh-Retry
                 state.me = data.me || state.me;
                 state.ampel = data.ampel || 'green';
                 state.quickReplies = data.quickReplies || state.quickReplies;
@@ -340,27 +367,35 @@
                 if (c.autoShow !== undefined) state.autoShow = c.autoShow;
                 if (c.big !== undefined) state.big = c.big;
                 if (c.laserPitch !== undefined) state.laserPitch = c.laserPitch;
-                if (c.laserOffX !== undefined) state.laserOffX = c.laserOffX;
-                if (c.laserOffY !== undefined) state.laserOffY = c.laserOffY;
+                if (c.laserYaw !== undefined) state.laserYaw = c.laserYaw;
                 if (c.wristLock !== undefined) state.wristLock = c.wristLock;
+                if (c.wristGate !== undefined) state.wristGate = c.wristGate;
+                if (c.wristHand !== undefined) state.wristHand = c.wristHand;
                 if (c.quickReplies !== undefined) state.quickReplies = c.quickReplies;
                 render();
             } catch (e) {}
         },
         keyboardDone(text) {
-            // Zeichenstrom (keyboardChar) ist die primäre Quelle. Done nur
-            // übernehmen, wenn wirklich Text kommt — das Häkchen darf die
-            // Chatbox nie leeren.
-            const t = (text || '').trim();
+            // Zeichenstrom (keyboardChar) ist die primäre Quelle. GetKeyboardText
+            // liefert bei der Minimal-Tastatur meist nur ein '\0' — ungefiltert
+            // hat das den Entwurf durch ein unsichtbares Steuerzeichen ersetzt
+            // (Text "weg", Symbol im Feld). Nur druckbaren Text übernehmen.
+            const t = printable(text).trim();
             if (t) state.draft = t;
             render();
         },
         keyboardChar(text) {
-            // Live-Zeichenstrom der SteamVR-Tastatur (\b = löschen)
+            // Live-Zeichenstrom der SteamVR-Tastatur (\b = löschen,
+            // Enter = senden). Alle übrigen Steuerzeichen werden verworfen.
+            let submit = false;
             for (const ch of text || '') {
-                if (ch === '\b') state.draft = state.draft.slice(0, -1);
-                else if (ch === '\n' || ch === '\r') continue;
-                else state.draft += ch;
+                if (ch === '\b' || ch === '\u007f') state.draft = state.draft.slice(0, -1);
+                else if (ch === '\n' || ch === '\r') submit = true;
+                else if (ch >= ' ') state.draft += ch;
+            }
+            if (submit) {
+                doSend();
+                return;
             }
             render();
         },
@@ -390,13 +425,7 @@
     $('bubble').onclick = () => $vrchat.gestureToggle();
     $('mini').onclick = () => $vrchat.gestureToggle();
     $('inputfield').onclick = () => act({ type: 'keyboard', text: state.draft });
-    $('send').onclick = () => {
-        const ch = chan();
-        if (!state.draft || !ch) return;
-        act({ type: 'send', channel: ch.channel, text: state.draft });
-        state.draft = '';
-        render();
-    };
+    $('send').onclick = () => doSend();
     $('modebtn').onclick = () => {
         state.mode = state.mode === 'wrist' ? 'hud' : state.mode === 'hud' ? 'world' : 'wrist';
         cfg({ mode: state.mode, place: true });
@@ -448,10 +477,10 @@
             render();
         };
     }
-    for (const el of document.querySelectorAll('[data-offx]')) {
+    for (const el of document.querySelectorAll('[data-yaw]')) {
         el.onclick = () => {
-            state.laserOffX = Math.min(10, Math.max(-10, state.laserOffX + parseFloat(el.dataset.offx)));
-            cfg({ laserOffX: state.laserOffX });
+            state.laserYaw = Math.min(30, Math.max(-30, state.laserYaw + parseFloat(el.dataset.yaw)));
+            cfg({ laserYaw: state.laserYaw });
             render();
         };
     }
@@ -460,18 +489,29 @@
         cfg({ wristLock: state.wristLock });
         render();
     };
-    for (const el of document.querySelectorAll('[data-offy]')) {
-        el.onclick = () => {
-            state.laserOffY = Math.min(10, Math.max(-10, state.laserOffY + parseFloat(el.dataset.offy)));
-            cfg({ laserOffY: state.laserOffY });
-            render();
-        };
-    }
+    $('wristgatebtn').onclick = () => {
+        state.wristGate = !state.wristGate;
+        cfg({ wristGate: state.wristGate });
+        render();
+    };
+    $('wristhandbtn').onclick = () => {
+        state.wristHand = state.wristHand === 'right' ? 'left' : 'right';
+        cfg({ wristHand: state.wristHand });
+        render();
+    };
 
     render();
-    // Frischen State vom Mod anfordern (Panel startet sonst leer, bis sich
-    // etwas ändert — z. B. nach Overlay-Neustart).
-    act({ type: 'refresh' });
+    // Frischen State vom Mod anfordern. Das Panel lädt oft VOR dem Mod —
+    // dann existiert window.__vrcxChatAction noch nicht und der erste
+    // refresh verpufft; danach pusht der Mod nur noch Diffs und das Panel
+    // bleibt leer. Deshalb wiederholen, bis das erste update ankommt.
+    let refreshTries = 0;
+    const askRefresh = () => {
+        act({ type: 'refresh' });
+        if (state.gotUpdate || ++refreshTries > 30) return;
+        setTimeout(askRefresh, 2000);
+    };
+    askRefresh();
 })();
 </script>
 </body>

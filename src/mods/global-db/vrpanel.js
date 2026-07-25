@@ -26,12 +26,16 @@ export const DEFAULT_VR_PANEL = {
     vrWidth: 0.6,
     vrAutoShow: true, // neue Nachricht: Mini-Flash (wrist) bzw. aufklappen
     vrGesture: true, // Controller-Geste (Grip/A lang drücken) togglet Groß
-    vrLaserPitch: 45, // Laser-Neigung (Index-Controller)
-    vrLaserOffX: -6, // Pointer-Offset horizontal in cm (+ = außen, je Hand gespiegelt) — Index-kalibriert
-    vrLaserOffY: -3.5, // Pointer-Offset vertikal in cm (+ = oben) — Index-kalibriert
+    // Laser-Kalibrierung in GRAD. Ein cm-Offset der Strahlquelle erzeugt einen
+    // distanzabhängigen Bildversatz und "wandert" über die Panelfläche; eine
+    // Winkelkorrektur bleibt überall konstant.
+    vrLaserPitch: 45, // Laser-Neigung nach unten (Grad)
+    vrLaserYaw: -4.5, // Laser seitlich (Grad, + = nach außen, je Hand gespiegelt)
     vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
     vrWristLock: false, // Wrist-Mini verschieben gesperrt
-    vrWristAngle: 30, // Sichtbarkeitswinkel Handgelenk (Grad)
+    vrWristGate: false, // true = Mini nur beim Blick aufs Handgelenk, false = dauerhaft
+    vrWristHand: 'left', // bevorzugte Seite, wenn VRCX beide Hände erlaubt
+    vrWristAngle: 30, // Sichtbarkeitswinkel Handgelenk (Grad, nur mit Gate)
     vrWristOffX: 0, // Wrist-Mini-Offset (cm, Controller-lokal)
     vrWristOffY: 0,
     vrWristOffZ: 0,
@@ -96,8 +100,48 @@ export function buildPayload(settings) {
     };
 }
 
+/**
+ * Migration der Laser-Kalibrierung: bis P2-Runde 5 wurden H/V als cm-Offset
+ * der Strahlquelle gespeichert. Das ist ein Parallaxe-Fehler (wandert über
+ * die Panelfläche), deshalb jetzt Winkel. Umrechnung bei ~1 m Panel-Distanz:
+ * 1 cm entspricht atan(0.01) ≈ 0,573°.
+ *   H  (+ = außen)     -> vrLaserYaw   (+ = außen)
+ *   V  (+ = oben)      -> vrLaserPitch (Pitch kippt nach unten => Vorzeichen dreht)
+ * Pure Funktion, damit sie testbar bleibt.
+ */
+export const CM_PER_DEG = 0.5729578; // atan(0.01) in Grad
+
+export function migrateLaserCalibration(cs) {
+    const out = { ...cs };
+    let changed = false;
+    if (out.vrLaserYaw === undefined && typeof out.vrLaserOffX === 'number') {
+        out.vrLaserYaw = Math.round(out.vrLaserOffX * CM_PER_DEG * 10) / 10;
+        changed = true;
+    }
+    if (typeof out.vrLaserOffY === 'number') {
+        const base = typeof out.vrLaserPitch === 'number'
+            ? out.vrLaserPitch
+            : DEFAULT_VR_PANEL.vrLaserPitch;
+        out.vrLaserPitch = Math.round((base - out.vrLaserOffY * CM_PER_DEG) * 10) / 10;
+        changed = true;
+    }
+    if (changed) {
+        delete out.vrLaserOffX;
+        delete out.vrLaserOffY;
+    }
+    return { settings: out, changed };
+}
+
 async function pushConfig(ctx) {
-    const cs = await kvGet(ctx, 'chat_settings', {});
+    const stored = await kvGet(ctx, 'chat_settings', {});
+    const mig = migrateLaserCalibration(stored);
+    let cs = mig.settings;
+    if (mig.changed) {
+        await kvSet(ctx, 'chat_settings', cs);
+        ctx.log(
+            `Laser-Kalibrierung migriert: Yaw ${cs.vrLaserYaw}°, Pitch ${cs.vrLaserPitch}°`
+        );
+    }
     const s = { ...DEFAULT_VR_PANEL, ...cs };
     vrCall('config', {
         enabled: !!s.vrPanel && chatState.enabled,
@@ -108,10 +152,11 @@ async function pushConfig(ctx) {
         autoShow: s.vrAutoShow,
         gesture: s.vrGesture,
         laserPitch: s.vrLaserPitch,
-        laserOffX: s.vrLaserOffX,
-        laserOffY: s.vrLaserOffY,
+        laserYaw: s.vrLaserYaw,
         flashSec: s.vrFlashSec,
         wristLock: s.vrWristLock,
+        wristGate: s.vrWristGate,
+        wristHand: s.vrWristHand,
         wristAngle: s.vrWristAngle,
         wristOffX: s.vrWristOffX,
         wristOffY: s.vrWristOffY,
@@ -160,9 +205,10 @@ function onAction(ctx) {
                 if (a.curvature !== undefined) cs.vrCurvature = a.curvature;
                 if (a.width !== undefined) cs.vrWidth = a.width;
                 if (a.laserPitch !== undefined) cs.vrLaserPitch = a.laserPitch;
-                if (a.laserOffX !== undefined) cs.vrLaserOffX = a.laserOffX;
-                if (a.laserOffY !== undefined) cs.vrLaserOffY = a.laserOffY;
+                if (a.laserYaw !== undefined) cs.vrLaserYaw = a.laserYaw;
                 if (a.wristLock !== undefined) cs.vrWristLock = a.wristLock;
+                if (a.wristGate !== undefined) cs.vrWristGate = a.wristGate;
+                if (a.wristHand !== undefined) cs.vrWristHand = a.wristHand;
                 if (a.wristOffX !== undefined) cs.vrWristOffX = a.wristOffX;
                 if (a.wristOffY !== undefined) cs.vrWristOffY = a.wristOffY;
                 if (a.wristOffZ !== undefined) cs.vrWristOffZ = a.wristOffZ;
