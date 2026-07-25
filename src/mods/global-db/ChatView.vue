@@ -51,6 +51,27 @@
                 <input type="checkbox" v-model="st.settings.vrGesture" @change="saveVrSettings" />
                 VR: Geste
             </label>
+            <span v-if="st.settings.vrPanel" class="tgl" title="Wo das Panel sitzt: am Handgelenk, kopffest oder frei in der Welt">
+                VR: Position
+                <select v-model="st.settings.vrMode" class="tgl-select" @change="saveVrSettings">
+                    <option value="wrist">Handgelenk</option>
+                    <option value="hud">Kopffest (HUD)</option>
+                    <option value="world">Frei in der Welt</option>
+                </select>
+            </span>
+            <span v-if="st.settings.vrPanel && st.settings.vrMode === 'wrist'" class="tgl"
+                title="Welches Handgelenk den Mini trägt">
+                VR: Hand
+                <select v-model="st.settings.vrWristHand" class="tgl-select" @change="saveVrSettings">
+                    <option value="left">links</option>
+                    <option value="right">rechts</option>
+                </select>
+            </span>
+            <label v-if="st.settings.vrPanel && st.settings.vrMode === 'wrist'" class="tgl"
+                title="Aus: Mini ist dauerhaft am Handgelenk. An: erscheint nur, wenn du hinschaust bzw. bei neuer Nachricht">
+                <input type="checkbox" v-model="st.settings.vrWristGate" @change="saveVrSettings" />
+                VR: nur beim Hinsehen
+            </label>
             <span v-if="st.settings.vrPanel" class="tgl" title="Mini-Anzeigedauer bei neuer Nachricht (Sekunden)">
                 Mini
                 <input v-model.number="st.settings.vrFlashSec" type="number" min="2" max="120"
@@ -225,7 +246,11 @@ import {
     sendReaction,
     sendTyping
 } from './chat';
-import { DEFAULT_VR_PANEL, refreshVrPanelConfig } from './vrpanel';
+import {
+    DEFAULT_VR_PANEL,
+    migrateLaserCalibration,
+    refreshVrPanelConfig
+} from './vrpanel';
 
 const ctx = getCtx();
 const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
@@ -348,6 +373,14 @@ function saveSettings() {
 
 // P2: VR-Panel-Einstellungen — Defaults sicherstellen, speichern, Panel-Config pushen
 function ensureVrDefaults() {
+    // Alte cm-Laserkalibrierung in Winkel überführen, bevor Defaults greifen —
+    // sonst schreibt der nächste Toggle die veralteten Keys zurück.
+    const mig = migrateLaserCalibration(st.settings);
+    if (mig.changed) {
+        Object.assign(st.settings, mig.settings);
+        delete st.settings.vrLaserOffX;
+        delete st.settings.vrLaserOffY;
+    }
     for (const [k, v] of Object.entries(DEFAULT_VR_PANEL)) {
         if (st.settings[k] === undefined) st.settings[k] = v;
     }
