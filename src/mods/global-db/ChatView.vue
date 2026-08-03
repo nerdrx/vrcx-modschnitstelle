@@ -25,6 +25,10 @@
                 <input type="checkbox" v-model="st.settings.vrNotySound" @change="saveVrSettings" />
                 Ton
             </label>
+            <button v-if="st.settings.vrNotySound" class="btn" title="Töne und Vibration einstellen"
+                @click="soundPanel = !soundPanel">
+                Töne …
+            </button>
             <label class="tgl" title="Windows-Toast / VR-Overlay / OVR-Toolkit">
                 <input type="checkbox" v-model="st.settings.vrNotyVisual" @change="saveVrSettings" />
                 Benachrichtigung
@@ -178,6 +182,49 @@
             </span>
             <span class="spacer"></span>
             <span v-if="st.lastError" class="err">{{ st.lastError }}</span>
+        </div>
+        <div v-if="soundPanel" class="sound-panel">
+            <div class="sp-row">
+                <strong>Töne</strong>
+                <span class="sp-hint">Klick auf ▶ hört den Ton probeweise ab.</span>
+                <span class="spacer"></span>
+                <button class="btn" @click="soundPanel = false">schließen</button>
+            </div>
+            <div v-for="ev in SOUND_EVENTS" :key="ev.key" class="sp-row">
+                <span class="sp-label">{{ ev.label }}</span>
+                <select v-model="st.settings[ev.key]" class="tgl-select" @change="saveVrSettings">
+                    <option v-for="s in BUILTIN_SOUNDS" :key="s.id" :value="s.id">{{ s.label }}</option>
+                    <option value="custom" :disabled="!hasCustomSound">
+                        Eigener Ton{{ customLabel }}
+                    </option>
+                    <option value="none">stumm</option>
+                </select>
+                <button class="btn" title="Anhören" @click="preview(ev.key)">▶</button>
+                <span class="sp-label">Vibration</span>
+                <select v-model="st.settings[ev.haptic]" class="tgl-select" @change="saveVrSettings">
+                    <option v-for="p in HAPTIC_PATTERNS" :key="p.id" :value="p.id">{{ p.label }}</option>
+                </select>
+                <button class="btn" title="Vibration testen" @click="previewHaptic(ev.key)">≈</button>
+            </div>
+            <div class="sp-row">
+                <span class="sp-label">Lautstärke</span>
+                <input v-model.number="st.settings.soundVolume" type="range" min="0" max="1"
+                    step="0.05" @change="saveVrSettings" />
+                <span class="sp-val">{{ Math.round((st.settings.soundVolume ?? 0.6) * 100) }} %</span>
+                <span class="sp-label">Vibrationsstärke</span>
+                <input v-model.number="st.settings.vrHapticStrength" type="range" min="0.05" max="1"
+                    step="0.05" @change="saveVrSettings" />
+                <span class="sp-val">{{ Math.round((st.settings.vrHapticStrength ?? 0.75) * 100) }} %</span>
+            </div>
+            <div class="sp-row">
+                <span class="sp-label">Eigener Ton</span>
+                <input ref="soundFileEl" type="file" accept="audio/*" class="sp-file"
+                    @change="onSoundFile" />
+                <button v-if="hasCustomSound" class="btn" @click="preview('custom')">▶ anhören</button>
+                <button v-if="hasCustomSound" class="btn" @click="clearCustomSound">entfernen</button>
+                <span v-if="soundError" class="err">{{ soundError }}</span>
+                <span v-else class="sp-hint">audio/*, max. 512 KB — wird lokal gespeichert.</span>
+            </div>
         </div>
         <div v-if="!st.enabled" class="chat-hint">
             Pool-Chat ist inaktiv. Aktiviere den Global-DB-Sync (Server-URL +
@@ -385,14 +432,24 @@ import {
     resolveEmbed
 } from './media';
 import {
+    BUILTIN_SOUNDS,
+    DEFAULT_SOUNDS,
+    isValidSoundDataUrl,
+    playSound,
+    readSoundFile
+} from './sounds';
+import {
     DEFAULT_VR_PANEL,
     GESTURE_BUTTONS,
+    HAPTIC_PATTERNS,
     gestureButtonLabel,
+    hapticPatternFor,
     learnGesture,
     migrateGestureButton,
     migrateLaserCalibration,
     migrateVrModes,
-    refreshVrPanelConfig
+    refreshVrPanelConfig,
+    vrHaptic
 } from './vrpanel';
 
 const ctx = getCtx();
@@ -474,6 +531,69 @@ function onEmbedError(ev, key) {
     const entry = embeds.value[key];
     if (!entry || !entry.still || ev.target.src === entry.still) return;
     ev.target.src = entry.still;
+}
+
+// P3: Töne und Vibration je Ereignisart. Ein einziger fester Beep ließ nicht
+// erkennen, ob eine Pool-Nachricht, eine DM oder eine Einladung kam.
+const soundPanel = ref(false);
+const soundError = ref('');
+const soundFileEl = ref(null);
+const SOUND_EVENTS = [
+    { key: 'soundGlobal', haptic: 'vrHapticPattern', label: 'Pool-Nachricht', event: 'global' },
+    { key: 'soundDm', haptic: 'vrHapticDm', label: 'Direktnachricht', event: 'dm' },
+    { key: 'soundInvite', haptic: 'vrHapticInvite', label: 'Join-Einladung', event: 'invite' }
+];
+const hasCustomSound = computed(() => isValidSoundDataUrl(st.settings.soundCustomData));
+const customLabel = computed(() =>
+    st.settings.soundCustomName ? ` (${st.settings.soundCustomName})` : ''
+);
+
+function preview(key) {
+    // Über den echten Abspielpfad testen, damit die Vorschau nicht versehentlich
+    // etwas anderes hört als die Benachrichtigung später spielt.
+    const evSpec = SOUND_EVENTS.find((e) => e.key === key);
+    if (!evSpec) {
+        // 'custom': direkt den eigenen Ton, unabhängig von der Zuordnung
+        playSound({ ...st.settings, soundGlobal: 'custom' }, 'global');
+        return;
+    }
+    playSound(st.settings, evSpec.event);
+}
+
+function previewHaptic(key) {
+    const evSpec = SOUND_EVENTS.find((e) => e.key === key);
+    vrHaptic(
+        st.settings.vrHapticHand || 'both',
+        hapticPatternFor(st.settings, evSpec ? evSpec.event : 'global'),
+        st.settings.vrHapticStrength
+    );
+}
+
+async function onSoundFile(ev) {
+    soundError.value = '';
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    try {
+        const res = await readSoundFile(file);
+        st.settings.soundCustomData = res.dataUrl;
+        st.settings.soundCustomName = res.name;
+        await saveVrSettings();
+    } catch (err) {
+        soundError.value = String(err.message || err);
+    } finally {
+        if (soundFileEl.value) soundFileEl.value.value = '';
+    }
+}
+
+async function clearCustomSound() {
+    st.settings.soundCustomData = '';
+    st.settings.soundCustomName = '';
+    // Zuordnungen, die auf den entfernten Ton zeigten, auf den Standard holen —
+    // sonst wäre das Ereignis unbeabsichtigt stumm.
+    for (const e of SOUND_EVENTS) {
+        if (st.settings[e.key] === 'custom') st.settings[e.key] = DEFAULT_SOUNDS[e.key];
+    }
+    await saveVrSettings();
 }
 
 function openUrl(url) {
@@ -582,7 +702,11 @@ function ensureVrDefaults() {
     }
     const gest = migrateGestureButton(st.settings);
     if (gest.changed) Object.assign(st.settings, gest.settings);
-    for (const [k, v] of Object.entries({ ...DEFAULT_VR_PANEL, ...DEFAULT_MEDIA })) {
+    for (const [k, v] of Object.entries({
+        ...DEFAULT_VR_PANEL,
+        ...DEFAULT_MEDIA,
+        ...DEFAULT_SOUNDS
+    })) {
         if (st.settings[k] === undefined) st.settings[k] = v;
     }
 }
@@ -693,6 +817,25 @@ onUnmounted(() => {
 }
 .spacer { flex: 1; }
 .err { color: #e74c3c; font-size: 12px; }
+.sound-panel {
+    border: 1px solid var(--border, #444);
+    border-radius: 8px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.sp-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 12px;
+}
+.sp-label { color: var(--muted-foreground, #999); min-width: 96px; }
+.sp-val { min-width: 44px; color: var(--muted-foreground, #999); }
+.sp-hint { color: var(--muted-foreground, #888); font-size: 11px; }
+.sp-file { font-size: 11px; color: var(--foreground, inherit); max-width: 260px; }
 .chat-hint {
     padding: 14px;
     border: 1px dashed var(--border, #444);
