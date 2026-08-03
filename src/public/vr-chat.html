@@ -38,6 +38,12 @@
     .msg .who { font-size: 20px; color: #9aa0ae; margin-bottom: 2px; }
     .msg.system { align-self: center; background: none; color: #9aa0ae; font-size: 22px; font-style: italic; }
     .msg .invite { color: #51e57e; font-weight: 600; }
+    /* P3: Bilder/GIFs im Panel. Der Mod schickt bereits aufgelöste URLs mit,
+       die Seite selbst macht keine Netzaufrufe. */
+    .msg .media { display: block; max-width: 100%; max-height: 260px; border-radius: 12px;
+        margin-top: 6px; background: #1c1c22; }
+    #mini .media { display: block; max-width: 100%; max-height: 300px; border-radius: 16px;
+        margin-top: 10px; background: #1c1c22; }
     #typing { min-height: 30px; font-size: 22px; color: #9aa0ae; padding: 0 20px; }
 
     /* ---------- quick replies + input ---------- */
@@ -174,6 +180,7 @@
     </div>
     <div id="miniWho" class="who"></div>
     <div id="miniTxt" class="txt">Keine neuen Nachrichten</div>
+    <img id="miniMedia" class="media" style="display:none" />
     <div id="miniMoveText">wird verschoben…</div>
     <div id="miniSent">Gesendet ✓</div>
     <div id="miniQuick"></div>
@@ -224,6 +231,12 @@
     }
 
     // ------------------------------------------------------------- render --
+    /** true, wenn die Nachricht nur aus URLs besteht (dann reicht das Bild). */
+    function isOnlyUrls(text) {
+        const rest = (text || '').replace(/\bhttps?:\/\/[^\s<>"']+/gi, '').trim();
+        return rest === '';
+    }
+
     function chan() {
         return state.channels.find((c) => c.channel === state.active) || state.channels[0];
     }
@@ -249,10 +262,25 @@
         }
         if (mini) {
             const m = state.lastMsg;
+            const mMedia = (m && m.media) || [];
             $('miniWho').textContent = m ? m.name : '';
             $('miniTxt').textContent = m
-                ? (m.kind === 'invite' ? '📍 Join-Einladung' : m.text)
+                ? (m.kind === 'invite'
+                    ? '📍 Join-Einladung'
+                    : (mMedia.length && isOnlyUrls(m.text) ? '🖼️ Bild' : m.text))
                 : 'Keine neuen Nachrichten';
+            const mi = $('miniMedia');
+            if (mMedia.length) {
+                if (mi.dataset.url !== mMedia[0]) {
+                    mi.dataset.url = mMedia[0];
+                    mi.src = mMedia[0];
+                }
+                mi.style.display = 'block';
+                mi.onerror = () => { mi.style.display = 'none'; };
+            } else {
+                mi.style.display = 'none';
+                mi.dataset.url = '';
+            }
             renderMiniQuick();
         }
         if (!state.big) return;
@@ -308,7 +336,18 @@
             } else {
                 d.innerHTML = '<div class="who"></div><div class="txt"></div>';
                 d.querySelector('.who').textContent = m.mine ? '' : m.name;
-                d.querySelector('.txt').textContent = m.text;
+                // Bei reinen Medien-Nachrichten die nackte URL weglassen —
+                // das Bild steht ohnehin darunter.
+                const media = m.media || [];
+                d.querySelector('.txt').textContent =
+                    media.length && isOnlyUrls(m.text) ? '' : m.text;
+                for (const url of media) {
+                    const img = document.createElement('img');
+                    img.className = 'media';
+                    img.src = url;
+                    img.onerror = () => img.remove();
+                    d.appendChild(img);
+                }
             }
             box.appendChild(d);
         }

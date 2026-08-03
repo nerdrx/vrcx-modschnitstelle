@@ -17,6 +17,7 @@ import {
     sendTyping
 } from './chat';
 import { kvGet, kvSet } from './db';
+import { DEFAULT_MEDIA, parseMessage, resolveEmbed } from './media';
 
 export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
@@ -85,8 +86,42 @@ function vrcStatus() {
     }
 }
 
+// P3: aufgelöste Betrachter-Links (Tenor/Giphy) für das VR-Panel. Das Panel
+// ist eine statische Seite ohne eigene Netzlogik, deshalb löst der Mod auf und
+// schickt die fertige Bild-URL mit.
+const vrEmbeds = {};
+
+/**
+ * Bild-URLs einer Nachricht für das Panel. Direkte Bilder gehen sofort mit,
+ * Betrachter-Seiten erst, sobald oEmbed geantwortet hat (der nächste
+ * 1-s-Diff-Push nimmt sie dann auf).
+ */
+export function mediaUrlsFor(text, allowEmbeds) {
+    const out = [];
+    for (const part of parseMessage(text)) {
+        if (part.type === 'image') {
+            out.push(part.value);
+        } else if (part.type === 'embed' && allowEmbeds) {
+            if (vrEmbeds[part.value]) {
+                out.push(vrEmbeds[part.value]);
+            } else if (vrEmbeds[part.value] === undefined) {
+                vrEmbeds[part.value] = null; // nur einmal anfragen
+                resolveEmbed(part.value)
+                    .then((url) => {
+                        if (url) vrEmbeds[part.value] = url;
+                    })
+                    .catch(() => {});
+            }
+        }
+    }
+    return out;
+}
+
 /** Kompakter chatState-Auszug für das Panel (letzte 30 Nachrichten je Kanal). */
 export function buildPayload(settings) {
+    const s = { ...DEFAULT_MEDIA, ...(chatState.settings || {}) };
+    const showMedia = s.mediaShow !== false && s.mediaInVr !== false;
+    const allowEmbeds = s.mediaEmbeds !== false;
     const channels = [];
     const pushChan = (channel, label) => {
         const ch = chatState.channels[channel];
@@ -101,9 +136,15 @@ export function buildPayload(settings) {
             messages: (ch?.messages || []).slice(-30).map((m) => ({
                 id: m.id,
                 name: displayName(m.from_user),
-                text: m.kind === 'invite' ? m.text : m.text,
+                text: m.text,
                 kind: m.kind,
-                mine: m.from_user === chatState.me
+                mine: m.from_user === chatState.me,
+                // Höchstens zwei Bilder je Nachricht — das Panel ist 1024 px
+                // hoch, mehr würde die Nachrichtenliste unlesbar machen.
+                media:
+                    showMedia && m.kind !== 'invite'
+                        ? mediaUrlsFor(m.text, allowEmbeds).slice(0, 2)
+                        : []
             }))
         });
     };

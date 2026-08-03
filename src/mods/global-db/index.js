@@ -11,6 +11,7 @@ import { initTables, kvGet, kvSet } from './db';
 import { fullSync } from './sync';
 import { chatState, displayName, initChat, isDnd, stopChat } from './chat';
 import { checkEligible, uploadFriendHashes } from './join';
+import { mediaSummary } from './media';
 import { startVrPanel, stopVrPanel, vrHaptic } from './vrpanel';
 import { setCtx } from './runtime';
 
@@ -95,8 +96,10 @@ function onChatMessage(ctx) {
             if (chatOpen) return;
             const from = displayName(ev.from_user);
             const scope = ev.channel === 'global' ? 'Pool' : 'DM';
+            // Reine Bild-Nachrichten würden sonst als nackte URL im Toast
+            // stehen — mediaSummary macht daraus "🖼️ Bild".
             const body =
-                ev.kind === 'invite' ? 'Join-Einladung 📍' : ev.text;
+                ev.kind === 'invite' ? 'Join-Einladung 📍' : mediaSummary(ev.text);
             const s = chatState.settings;
             // Separat togglebar: Ton / visuelle Benachrichtigung / Haptik
             if (s.vrNotySound !== false) playBeep();
