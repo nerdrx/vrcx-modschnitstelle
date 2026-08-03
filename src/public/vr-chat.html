@@ -90,8 +90,18 @@
         height: 40px; font-size: 30px; text-align: center; line-height: 40px; padding: 0 10px; }
     #mini .head .title { font-size: 34px; color: #9aa0ae; flex: 1; }
     #mini .who { font-size: 34px; color: #9aa0ae; }
-    #mini .txt { font-size: 44px; line-height: 1.25; word-wrap: break-word; max-height: 620px; overflow: hidden; }
+    #mini .txt { font-size: 44px; line-height: 1.25; word-wrap: break-word; max-height: 380px; overflow: hidden; }
     #mini .hint { font-size: 28px; color: #666; }
+    /* Schnellantworten direkt am Handgelenk — der eigentliche Zweck des Minis:
+       antworten, ohne das große Panel aufzumachen. */
+    #miniQuick { display: flex; flex-wrap: wrap; gap: 14px; margin-top: auto; }
+    #miniQuick .mq { flex: 1 1 45%; min-height: 96px; display: flex; align-items: center;
+        justify-content: center; text-align: center; background: #2c4a8f; border-radius: 20px;
+        font-size: 38px; padding: 10px 16px; word-break: break-word; }
+    #miniQuick .mq:hover { outline: 4px solid #6f9bff; }
+    #miniSent { display: none; color: #51e57e; font-size: 36px; font-weight: 700; text-align: center; }
+    #mini.sent #miniSent { display: block; }
+    #mini.sent #miniQuick { display: none; }
 
     /* ---------- laser cursor ---------- */
     #cursor { display: none; position: absolute; width: 22px; height: 22px; border-radius: 50%;
@@ -165,6 +175,8 @@
     <div id="miniWho" class="who"></div>
     <div id="miniTxt" class="txt">Keine neuen Nachrichten</div>
     <div id="miniMoveText">wird verschoben…</div>
+    <div id="miniSent">Gesendet ✓</div>
+    <div id="miniQuick"></div>
     <div class="hint">Antippen: öffnen · Halten: verschieben</div>
 </div>
 <div id="cursor"></div>
@@ -189,7 +201,7 @@
         // cm-Offset der Strahlquelle wandert über die Panelfläche, ein
         // Winkel nicht.
         laserPitch: 41.5, laserYaw: 5.9,
-        draft: '', lastUnread: 0, lastMsg: null,
+        draft: '', lastUnread: 0, lastMsg: null, lastChan: '',
         // Zeichen, die seit dem letzten Öffnen der SteamVR-Tastatur über den
         // Zeichenstrom kamen. Solange > 0 ist der Stream maßgeblich und der
         // (unzuverlässige) Done-Text wird ignoriert.
@@ -241,6 +253,7 @@
             $('miniTxt').textContent = m
                 ? (m.kind === 'invite' ? '📍 Join-Einladung' : m.text)
                 : 'Keine neuen Nachrichten';
+            renderMiniQuick();
         }
         if (!state.big) return;
 
@@ -322,6 +335,39 @@
         $('send').classList.toggle('disabled', !state.draft);
     }
 
+    /**
+     * Schnellantworten im Mini: der Sinn des Handgelenk-Panels ist, ohne das
+     * große Fenster zu antworten. Ziel ist der Kanal der zuletzt eingegangenen
+     * fremden Nachricht, sonst Global. stopPropagation, damit der Klick nicht
+     * zusätzlich das große Panel aufklappt (der ganze Mini ist klickbar).
+     */
+    function renderMiniQuick() {
+        const box = $('miniQuick');
+        const list = (state.quickReplies || []).slice(0, 4);
+        const sig = list.join('');
+        if (box.dataset.sig === sig) return; // nur bei Änderung neu bauen
+        box.dataset.sig = sig;
+        box.innerHTML = '';
+        for (const q of list) {
+            const b = document.createElement('div');
+            b.className = 'mq';
+            b.textContent = q;
+            b.onclick = (ev) => {
+                ev.stopPropagation();
+                sendQuickFromMini(q);
+            };
+            box.appendChild(b);
+        }
+    }
+
+    let sentTimer = null;
+    function sendQuickFromMini(text) {
+        act({ type: 'send', channel: state.lastChan || 'global', text });
+        $('mini').classList.add('sent');
+        clearTimeout(sentTimer);
+        sentTimer = setTimeout(() => $('mini').classList.remove('sent'), 2000);
+    }
+
     function markRead() {
         const ch = chan();
         if (ch && ch.unread && state.big) {
@@ -359,11 +405,23 @@
                 if (!state.channels.some((c) => c.channel === state.active) && state.channels[0]) {
                     state.active = state.channels[0].channel;
                 }
-                // letzte fremde Nachricht (für Mini-Ansicht)
+                // Neueste fremde Nachricht über ALLE Kanäle (nach id, nicht
+                // nach Schleifenreihenfolge) — sie bestimmt Anzeige und
+                // Zielkanal der Schnellantworten im Mini.
+                let newest = null;
+                let newestChan = '';
                 for (const c of state.channels) {
                     for (const m of c.messages || []) {
-                        if (!m.mine && m.kind !== 'system') state.lastMsg = m;
+                        if (m.mine || m.kind === 'system') continue;
+                        if (!newest || m.id > newest.id) {
+                            newest = m;
+                            newestChan = c.channel;
+                        }
                     }
+                }
+                if (newest) {
+                    state.lastMsg = newest;
+                    state.lastChan = newestChan;
                 }
                 state.lastUnread = totalUnread();
                 if (state.autoShow && !state.big && state.lastUnread > prevUnread) {
