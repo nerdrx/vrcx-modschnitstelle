@@ -144,7 +144,11 @@
         <span style="margin-left:16px" title="Mini nur zeigen, wenn du aufs Handgelenk schaust">Blick-Gate</span>
         <div id="wristgatebtn" class="hbtn">aus</div>
         <span style="margin-left:16px" title="Handgelenk-Seite für den Mini">Hand</span>
-        <div id="wristhandbtn" class="hbtn">L</div>
+        <div id="wristhandbtn" class="hbtn">auto</div>
+        <span style="margin-left:16px" title="Blickwinkel-Kegel: größer = Mini erscheint früher">Winkel</span>
+        <div class="hbtn" data-angle="-5">−</div>
+        <span id="angleval">30°</span>
+        <div class="hbtn" data-angle="5">+</div>
     </div>
 </div>
 <div id="bubble">
@@ -179,7 +183,7 @@
         // Mini (Handgelenk/Kopf) und großes Panel (Kopf/Welt) werden
         // unabhängig positioniert.
         miniMode: 'wrist', bigMode: 'hud',
-        wristGate: false, wristHand: 'left',
+        wristGate: false, wristHand: 'auto', wristAngle: 30,
         alpha: 0.9, curvature: 0.08, width: 0.6,
         // Laser-Kalibrierung in GRAD (Neigung + Seitwärtsdrehung) — ein
         // cm-Offset der Strahlquelle wandert über die Panelfläche, ein
@@ -259,7 +263,8 @@
         }
 
         $('minimodebtn').textContent =
-            'Mini: ' + (state.miniMode === 'hud' ? 'Kopf' : 'Wrist');
+            'Mini: ' + (state.miniMode === 'hud' ? 'Kopf'
+                : state.miniMode === 'world' ? 'Welt' : 'Wrist');
         $('bigmodebtn').textContent =
             'Panel: ' + (state.bigMode === 'world' ? 'Welt' : 'Kopf');
         $('pitchval').textContent = state.laserPitch.toFixed(1) + '°';
@@ -268,7 +273,9 @@
         $('wristlockbtn').classList.toggle('active', state.wristLock);
         $('wristgatebtn').textContent = state.wristGate ? 'AN' : 'aus';
         $('wristgatebtn').classList.toggle('active', state.wristGate);
-        $('wristhandbtn').textContent = state.wristHand === 'right' ? 'R' : 'L';
+        $('wristhandbtn').textContent =
+            state.wristHand === 'right' ? 'R' : state.wristHand === 'left' ? 'L' : 'auto';
+        $('angleval').textContent = Math.round(state.wristAngle) + '°';
 
         const box = $('msgs');
         const ch = chan();
@@ -378,6 +385,8 @@
                 if (c.wristLock !== undefined) state.wristLock = c.wristLock;
                 if (c.wristGate !== undefined) state.wristGate = c.wristGate;
                 if (c.wristHand !== undefined) state.wristHand = c.wristHand;
+                if (c.wristAngle !== undefined) state.wristAngle = c.wristAngle;
+                if (c.gestureMask !== undefined) state.gestureMask = c.gestureMask;
                 if (c.quickReplies !== undefined) state.quickReplies = c.quickReplies;
                 render();
             } catch (e) {}
@@ -419,6 +428,10 @@
         moving(flag) {
             $('mini').classList.toggle('moving', !!flag);
         },
+        gestureLearned(mask) {
+            state.gestureMask = Number(mask) || state.gestureMask;
+            render();
+        },
         gestureToggle() {
             state.big = !state.big;
             cfg({ big: state.big });
@@ -434,7 +447,8 @@
     $('inputfield').onclick = () => act({ type: 'keyboard', text: state.draft });
     $('send').onclick = () => doSend();
     $('minimodebtn').onclick = () => {
-        state.miniMode = state.miniMode === 'wrist' ? 'hud' : 'wrist';
+        state.miniMode = state.miniMode === 'wrist' ? 'hud'
+            : state.miniMode === 'hud' ? 'world' : 'wrist';
         cfg({ miniMode: state.miniMode });
         render();
     };
@@ -507,10 +521,19 @@
         render();
     };
     $('wristhandbtn').onclick = () => {
-        state.wristHand = state.wristHand === 'right' ? 'left' : 'right';
+        state.wristHand = state.wristHand === 'auto' ? 'left'
+            : state.wristHand === 'left' ? 'right' : 'auto';
         cfg({ wristHand: state.wristHand });
         render();
     };
+    for (const el of document.querySelectorAll('[data-angle]')) {
+        el.onclick = () => {
+            state.wristAngle = Math.min(90, Math.max(5,
+                state.wristAngle + parseFloat(el.dataset.angle)));
+            cfg({ wristAngle: state.wristAngle });
+            render();
+        };
+    }
 
     render();
     // Frischen State vom Mod anfordern. Das Panel lädt oft VOR dem Mod —

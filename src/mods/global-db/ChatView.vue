@@ -47,17 +47,68 @@
                 <input type="checkbox" v-model="st.settings.vrAutoShow" @change="saveVrSettings" />
                 VR: Auto-Show
             </label>
-            <label v-if="st.settings.vrPanel" class="tgl" title="Grip/A-Taste lang drücken öffnet/schließt den großen Chat">
+            <label v-if="st.settings.vrPanel" class="tgl" title="Controller-Taste öffnet/schließt den großen Chat">
                 <input type="checkbox" v-model="st.settings.vrGesture" @change="saveVrSettings" />
                 VR: Geste
             </label>
-            <span v-if="st.settings.vrPanel" class="tgl" title="Wo die kleine Vorschau sitzt">
+            <template v-if="st.settings.vrPanel && st.settings.vrGesture">
+                <span class="tgl" title="Welche Controller-Taste die Geste auslöst">
+                    Taste
+                    <select v-model.number="st.settings.vrGestureMask" class="tgl-select" @change="saveVrSettings">
+                        <option v-for="b in GESTURE_BUTTONS" :key="b.mask" :value="b.mask">
+                            {{ b.label }}
+                        </option>
+                        <option v-if="!knownGestureMask" :value="st.settings.vrGestureMask">
+                            {{ gestureButtonLabel(st.settings.vrGestureMask) }}
+                        </option>
+                    </select>
+                </span>
+                <button class="btn" :class="{ learning: gestureLearning }"
+                    title="In VR die gewünschte Taste drücken — sie wird übernommen"
+                    @click="startLearnGesture">
+                    {{ gestureLearning ? 'Taste drücken…' : 'Taste lernen' }}
+                </button>
+                <span class="tgl" title="Auf welcher Hand die Geste zählt">
+                    Hand
+                    <select v-model="st.settings.vrGestureHand" class="tgl-select" @change="saveVrSettings">
+                        <option value="both">beide</option>
+                        <option value="left">links</option>
+                        <option value="right">rechts</option>
+                    </select>
+                </span>
+                <span class="tgl" title="Halten oder zweimal kurz tippen">
+                    Auslösen
+                    <select v-model="st.settings.vrGestureMode" class="tgl-select" @change="saveVrSettings">
+                        <option value="hold">halten</option>
+                        <option value="double">doppelt tippen</option>
+                    </select>
+                </span>
+                <span v-if="st.settings.vrGestureMode === 'hold'" class="tgl"
+                    title="Wie lange gehalten werden muss (ms) — länger heißt weniger Fehlauslösungen">
+                    Haltezeit
+                    <input v-model.number="st.settings.vrGestureHold" type="number" min="200" max="4000"
+                        step="100" class="tgl-num wide" @change="saveVrSettings" />ms
+                </span>
+            </template>
+            <span v-if="st.settings.vrPanel" class="tgl"
+                title="Wo die kleine Vorschau sitzt. Kopffest und Frei lassen sich per Langdruck auf den Mini verschieben.">
                 VR: Mini
                 <select v-model="st.settings.vrMiniMode" class="tgl-select" @change="saveVrSettings">
                     <option value="wrist">Handgelenk</option>
                     <option value="hud">Kopffest</option>
+                    <option value="world">Frei in der Welt</option>
                 </select>
             </span>
+            <span v-if="st.settings.vrPanel && st.settings.vrMiniMode !== 'wrist'" class="tgl"
+                title="Größe der Mini-Fläche in Metern">
+                Mini-Größe
+                <input v-model.number="st.settings.vrMiniWidth" type="number" min="0.1" max="1.5"
+                    step="0.05" class="tgl-num wide" @change="saveVrSettings" />m
+            </span>
+            <button v-if="st.settings.vrPanel && st.settings.vrMiniMode === 'hud'" class="btn"
+                title="Kopffesten Mini wieder auf die Standardposition setzen" @click="resetMiniOffset">
+                Mini zentrieren
+            </button>
             <span v-if="st.settings.vrPanel" class="tgl"
                 title="Wo der große Chat sitzt — unabhängig vom Mini. Kopffest lässt sich per Ziehleiste verschieben.">
                 VR: Panel
@@ -74,6 +125,7 @@
                 title="Welches Handgelenk den Mini trägt">
                 VR: Hand
                 <select v-model="st.settings.vrWristHand" class="tgl-select" @change="saveVrSettings">
+                    <option value="auto">automatisch</option>
                     <option value="left">links</option>
                     <option value="right">rechts</option>
                 </select>
@@ -83,6 +135,13 @@
                 <input type="checkbox" v-model="st.settings.vrWristGate" @change="saveVrSettings" />
                 VR: nur beim Hinsehen
             </label>
+            <span v-if="st.settings.vrPanel && st.settings.vrMiniMode === 'wrist' && st.settings.vrWristGate"
+                class="tgl"
+                title="Blickwinkel-Kegel: kleiner heißt, du musst genauer hinschauen; größer heißt, der Mini erscheint früher">
+                Blickwinkel
+                <input v-model.number="st.settings.vrWristAngle" type="number" min="5" max="90"
+                    class="tgl-num" @change="saveVrSettings" />°
+            </span>
             <span v-if="st.settings.vrPanel" class="tgl" title="Mini-Anzeigedauer bei neuer Nachricht (Sekunden)">
                 Mini
                 <input v-model.number="st.settings.vrFlashSec" type="number" min="2" max="120"
@@ -259,6 +318,9 @@ import {
 } from './chat';
 import {
     DEFAULT_VR_PANEL,
+    GESTURE_BUTTONS,
+    gestureButtonLabel,
+    learnGesture,
     migrateLaserCalibration,
     migrateVrModes,
     refreshVrPanelConfig
@@ -411,6 +473,34 @@ function resetHudOffset() {
     st.settings.vrHudOffZ = DEFAULT_VR_PANEL.vrHudOffZ;
     saveVrSettings();
 }
+
+/** Verschobenen kopffesten Mini zurücksetzen. */
+function resetMiniOffset() {
+    st.settings.vrMiniOffX = DEFAULT_VR_PANEL.vrMiniOffX;
+    st.settings.vrMiniOffY = DEFAULT_VR_PANEL.vrMiniOffY;
+    st.settings.vrMiniOffZ = DEFAULT_VR_PANEL.vrMiniOffZ;
+    saveVrSettings();
+}
+
+// Gesten-Taste: Auswahl aus bekannten Masken oder in VR anlernen. Das Overlay
+// meldet die gelernte Maske über die normale config-Aktion zurück, deshalb
+// beobachten wir hier einfach die Einstellung.
+const gestureLearning = ref(false);
+const knownGestureMask = computed(() =>
+    GESTURE_BUTTONS.some((b) => b.mask === st.settings.vrGestureMask)
+);
+
+function startLearnGesture() {
+    gestureLearning.value = true;
+    learnGesture();
+}
+
+watch(
+    () => st.settings.vrGestureMask,
+    () => {
+        gestureLearning.value = false;
+    }
+);
 async function saveVrSettings() {
     ensureVrDefaults();
     await kvSet(ctx, 'chat_settings', { ...st.settings }).catch((e) =>
@@ -650,6 +740,11 @@ onUnmounted(() => {
     padding: 2px 6px;
 }
 .tgl-num { width: 48px; }
+.tgl-num.wide { width: 62px; }
+.btn.learning {
+    border-color: #f1c40f;
+    color: #f1c40f;
+}
 .emoji-panel {
     display: flex;
     flex-wrap: wrap;

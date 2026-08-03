@@ -52,7 +52,8 @@ describe('migrateLaserCalibration', () => {
 describe('DEFAULT_VR_PANEL', () => {
     it('zeigt den Wrist-Mini standardmäßig dauerhaft (Gate aus)', () => {
         expect(DEFAULT_VR_PANEL.vrWristGate).toBe(false);
-        expect(DEFAULT_VR_PANEL.vrWristHand).toBe('left');
+        // 'auto' folgt der VRCX-Overlay-Hand; sie darf aber nicht filtern.
+        expect(DEFAULT_VR_PANEL.vrWristHand).toBe('auto');
         expect(DEFAULT_VR_PANEL.vrMiniMode).toBe('wrist');
     });
 

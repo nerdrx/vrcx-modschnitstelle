@@ -39,7 +39,7 @@ namespace VRCX
         private volatile bool _enabled;
         // Mini und großes Panel werden getrennt positioniert: der Mini kann am
         // Handgelenk sitzen, während das große Panel frei in der Welt steht.
-        private string _miniMode = "wrist"; // "wrist" | "hud"
+        private string _miniMode = "wrist"; // "wrist" | "hud" | "world"
         private string _bigMode = "hud"; // "hud" (kopffest, verschiebbar) | "world"
         private string _placeHand = "right"; // Hand fürs Platzieren/Draggen
         private bool _dragging; // Dragbar: Panel folgt bis Trigger-Release
@@ -60,7 +60,15 @@ namespace VRCX
         // Wrist-Mini: exakt über dem VRCX-Wrist-Overlay + User-Offset
         private bool _wristLock; // Verschieben gesperrt
         private bool _wristGate; // false = Mini dauerhaft sichtbar, true = Blickwinkel-Gate
-        private string _wristHand = "left"; // bevorzugte Hand, wenn VRCX "beide" erlaubt
+        // "auto" folgt der VRCX-Overlay-Hand, "left"/"right" überstimmen sie.
+        // Wichtig: der VRCX-Wert darf NICHT hart filtern, sonst lässt sich der
+        // Chat-Mini nie auf die andere Hand legen.
+        private string _wristHand = "auto";
+        // Mini in "hud" (HMD-lokal, Meter) bzw. "world" (Weltposition)
+        private Vector3 _miniOffset = new Vector3(0f, -0.22f, -0.6f);
+        private Vector3 _miniWorldPos = new Vector3(0f, 1.2f, -0.8f);
+        private bool _miniWorldPlaced;
+        private float _miniWidth = 0.26f;
         private float _wristOffX, _wristOffY, _wristOffZ; // cm, Controller-lokal
         private float _wristAngleDeg = 30f; // Sichtbarkeits-Kegel (Blick aufs Handgelenk)
         private DateTime _angleVisibleUntil = DateTime.MinValue;
@@ -90,9 +98,19 @@ namespace VRCX
         private string _pendingKeyboardText;
         private bool _keyboardRequested;
 
-        // gesture: long-press grip/A on either hand toggles minimize
+        // Geste: Taste, Hand, Haltezeit und Auslöseart sind konfigurierbar —
+        // Grip auf beiden Händen kollidiert im Spiel ständig mit dem Greifen.
         private readonly double[] _pressStart = new double[2];
+        private readonly double[] _lastTapAt = new double[2];
         private double _lastGestureAt;
+        private ulong _gestureMask = 4UL; // Default: Grip
+        private string _gestureHand = "both"; // "both" | "left" | "right"
+        private float _gestureHoldMs = 1000f;
+        private string _gestureMode = "hold"; // "hold" | "double" (Doppeltipp)
+        private bool _learningGesture; // Lernmodus: nächste Taste übernehmen
+
+        // Trigger nie als Geste zulassen — er bedient das Panel.
+        private const ulong TRIGGER_MASK = 1UL << (int)EVRButtonId.k_EButton_SteamVR_Trigger;
 
         public VRCXVRChatPanel(bool isLegacy)
         {
@@ -151,6 +169,12 @@ namespace VRCX
         {
             if (function == "config")
                 ApplyConfig(json);
+            if (function == "learnGesture")
+            {
+                _learningGesture = true;
+                logger.Info("gesture learn mode aktiv");
+                return;
+            }
             if (function == "haptic")
             {
                 try
@@ -267,8 +291,21 @@ namespace VRCX
                 if (root.TryGetProperty("dragLock", out var dl)) _dragLock = dl.GetBoolean();
                 if (root.TryGetProperty("wristLock", out var wl)) _wristLock = wl.GetBoolean();
                 if (root.TryGetProperty("wristGate", out var wg)) _wristGate = wg.GetBoolean();
-                if (root.TryGetProperty("wristHand", out var wh)) _wristHand = wh.GetString() ?? "left";
-                if (root.TryGetProperty("wristAngle", out var wa)) _wristAngleDeg = Math.Clamp(wa.GetSingle(), 10f, 80f);
+                if (root.TryGetProperty("wristHand", out var wh)) _wristHand = wh.GetString() ?? "auto";
+                if (root.TryGetProperty("wristAngle", out var wa)) _wristAngleDeg = Math.Clamp(wa.GetSingle(), 5f, 90f);
+                if (root.TryGetProperty("gestureMask", out var gm)) _gestureMask = gm.GetUInt64();
+                if (root.TryGetProperty("gestureHand", out var gh)) _gestureHand = gh.GetString() ?? "both";
+                if (root.TryGetProperty("gestureHold", out var gho))
+                    _gestureHoldMs = Math.Clamp(gho.GetSingle(), 200f, 4000f);
+                if (root.TryGetProperty("gestureMode", out var gmo)) _gestureMode = gmo.GetString() ?? "hold";
+                if (root.TryGetProperty("miniOffX", out var mox))
+                    _miniOffset.X = Math.Clamp(mox.GetSingle(), -150f, 150f) / 100f;
+                if (root.TryGetProperty("miniOffY", out var moy))
+                    _miniOffset.Y = Math.Clamp(moy.GetSingle(), -150f, 150f) / 100f;
+                if (root.TryGetProperty("miniOffZ", out var moz))
+                    _miniOffset.Z = Math.Clamp(moz.GetSingle(), -300f, -10f) / 100f;
+                if (root.TryGetProperty("miniWidth", out var mw))
+                    _miniWidth = Math.Clamp(mw.GetSingle(), 0.1f, 1.5f);
                 if (root.TryGetProperty("wristOffX", out var wx)) _wristOffX = Math.Clamp(wx.GetSingle(), -40f, 40f);
                 if (root.TryGetProperty("wristOffY", out var wy)) _wristOffY = Math.Clamp(wy.GetSingle(), -40f, 40f);
                 if (root.TryGetProperty("wristOffZ", out var wz)) _wristOffZ = Math.Clamp(wz.GetSingle(), -40f, 40f);
@@ -322,8 +359,9 @@ namespace VRCX
         {
             try
             {
-                if (wristIndex != OpenVR.k_unTrackedDeviceIndexInvalid)
-                    _wristIndex = wristIndex;
+                // wristIndex NICHT übernehmen: das ist die Hand, die zuletzt
+                // die VRCX-Menütaste gedrückt hat, und sie würde die eigene
+                // Seitenwahl jedes Mal überschreiben.
                 if (wristUntil > _wristUntil)
                     _wristUntil = wristUntil;
                 _overlayHand = overlayHand;
@@ -354,7 +392,10 @@ namespace VRCX
                 var now = DateTime.UtcNow;
                 if (_miniMode != "wrist")
                 {
-                    wantVisible = now <= _flashUntil;
+                    // Kopffest / frei in der Welt: der Mini ist eine bewusst
+                    // platzierte Fläche und bleibt sichtbar (sonst hätte man
+                    // nichts zum Hinziehen).
+                    wantVisible = true;
                 }
                 else if (_wristGate)
                 {
@@ -376,7 +417,7 @@ namespace VRCX
                     overlay.HideOverlay(_handle);
                     _visible = false;
                 }
-                if (_enabled && _gestureEnabled)
+                if (_enabled && (_gestureEnabled || _learningGesture))
                     ProcessGesture(system); // Geste kann Mini/Groß auch aus dem Hidden-Zustand öffnen
                 if (_enabled)
                     ProcessHaptics(system);
@@ -422,8 +463,10 @@ namespace VRCX
             {
                 ApplyMiniTransform(system, overlay); // jede Frame (Hand/HMD folgt)
             }
-            else if (_placeRequested)
+            else if (_placeRequested || _bigMode == "world")
             {
+                // world: jede Frame — sonst bleibt das Billboard beim
+                // Herumgehen in der alten Blickrichtung stehen.
                 ApplyTransform(system, overlay);
                 _placeRequested = false;
             }
@@ -467,23 +510,60 @@ namespace VRCX
                 logger.Info("ShowKeyboardForOverlay: {0}", kerr); // Diagnose
             }
 
-            if (_gestureEnabled)
+            if (_gestureEnabled || _learningGesture)
                 ProcessGesture(system);
             ProcessHaptics(system);
         }
 
         // -------------------------------------------------------- transforms --
-        /// Mini-Ansicht: klein und unten im Blickfeld (hud/world) bzw. am
-        /// Handgelenk neben dem VRCX-Wrist-Overlay (wrist-Modus).
+        /// Fläche an pos, aufrecht, zugewandt zu lookFrom (Billboard).
+        private static Matrix4x4 Billboard(Vector3 pos, Vector3 lookFrom)
+        {
+            var z = Vector3.Normalize(lookFrom - pos);
+            if (float.IsNaN(z.X)) z = new Vector3(0, 0, 1);
+            var x = Vector3.Normalize(Vector3.Cross(new Vector3(0, 1, 0), z));
+            if (float.IsNaN(x.X)) x = new Vector3(1, 0, 0);
+            var y = Vector3.Cross(z, x);
+            return new Matrix4x4(
+                x.X, x.Y, x.Z, 0,
+                y.X, y.Y, y.Z, 0,
+                z.X, z.Y, z.Z, 0,
+                pos.X, pos.Y, pos.Z, 1);
+        }
+
+        /// Mini-Ansicht: am Handgelenk, kopffest oder frei in der Welt.
         private void ApplyMiniTransform(CVRSystem system, CVROverlay overlay)
         {
-            if (_miniMode != "wrist")
+            if (_miniMode == "hud")
             {
-                var mm = Matrix4x4.CreateTranslation(0f, -0.22f, -0.6f);
+                var mm = Matrix4x4.CreateTranslation(_miniOffset);
                 var mh34 = ToHmdMatrix34(mm);
-                overlay.SetOverlayWidthInMeters(_handle, 0.26f);
+                overlay.SetOverlayWidthInMeters(_handle, _miniWidth);
                 overlay.SetOverlayTransformTrackedDeviceRelative(_handle,
                     OpenVR.k_unTrackedDeviceIndex_Hmd, ref mh34);
+                return;
+            }
+            if (_miniMode == "world")
+            {
+                // Frei abgelegt: dauerhaftes Billboarding, damit die Fläche
+                // auch beim Herumgehen lesbar bleibt.
+                var poses = new TrackedDevicePose_t[OpenVR.k_unTrackedDeviceIndex_Hmd + 1];
+                system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
+                var hmdPose = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
+                if (!hmdPose.bPoseIsValid)
+                    return;
+                var hm = ToMatrix4x4(hmdPose.mDeviceToAbsoluteTracking);
+                if (!_miniWorldPlaced)
+                {
+                    var seed = Matrix4x4.CreateTranslation(0f, -0.22f, -0.6f) * hm;
+                    _miniWorldPos = new Vector3(seed.M41, seed.M42, seed.M43);
+                    _miniWorldPlaced = true;
+                }
+                var bhm34 = ToHmdMatrix34(
+                    Billboard(_miniWorldPos, new Vector3(hm.M41, hm.M42, hm.M43)));
+                overlay.SetOverlayWidthInMeters(_handle, _miniWidth);
+                overlay.SetOverlayTransformAbsolute(_handle,
+                    ETrackingUniverseOrigin.TrackingUniverseStanding, ref bhm34);
                 return;
             }
             if (_wristIndex == OpenVR.k_unTrackedDeviceIndexInvalid)
@@ -521,16 +601,24 @@ namespace VRCX
             return new Vector3(_wristOffX / 100f, _wristOffY / 100f, _wristOffZ / 100f);
         }
 
-        /// Ohne Blickwinkel-Gate: Hand fest wählen (VRCX-Overlay-Hand hat
-        /// Vorrang, sonst die in den Settings bevorzugte Seite). Ohne gültige
+        /// Welche Seite der Wrist-Mini nutzen soll. "auto" folgt der
+        /// VRCX-Overlay-Hand; eine explizite Wahl überstimmt sie. Der
+        /// VRCX-Wert darf hier nicht filtern — sonst blockiert eine dort auf
+        /// "rechts" gestellte Overlay-Hand die linke Seite dauerhaft.
+        private bool WantLeftWrist()
+        {
+            if (_wristHand == "left") return true;
+            if (_wristHand == "right") return false;
+            return _overlayHand != 2; // auto: 2 = rechts, sonst links
+        }
+
+        /// Ohne Blickwinkel-Gate: Hand fest wählen. Ohne gültige
         /// Controller-Pose bleibt der Mini aus — sonst hätte er keine Transform.
         private void PickWristHand(CVRSystem system)
         {
             var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
             system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
-            var wantLeft = _wristHand != "right";
-            if (_overlayHand == 1) wantLeft = true;
-            if (_overlayHand == 2) wantLeft = false;
+            var wantLeft = WantLeftWrist();
 
             var fallback = OpenVR.k_unTrackedDeviceIndexInvalid;
             for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
@@ -571,13 +659,9 @@ namespace VRCX
                 var isRight = role == ETrackedControllerRole.RightHand;
                 if (!isLeft && !isRight)
                     continue;
-                if (_overlayHand == 1 && !isLeft) continue;
-                if (_overlayHand == 2 && !isRight) continue;
-                // Seitenwahl gilt auch mit Blickwinkel-Gate — sonst blieb die
-                // Hand-Umschaltung wirkungslos, weil hier einfach die erste
-                // passend gedrehte Hand gewonnen hat.
-                if (_wristHand == "left" && !isLeft) continue;
-                if (_wristHand == "right" && !isRight) continue;
+                // Seitenwahl gilt auch mit Blickwinkel-Gate (siehe WantLeftWrist).
+                if (isLeft != WantLeftWrist())
+                    continue;
                 if (!poses[i].bPoseIsValid)
                     continue;
 
@@ -602,7 +686,9 @@ namespace VRCX
         {
             var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
             system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
-            if (!poses[_wristMoveIdx].bPoseIsValid || _wristIndex == OpenVR.k_unTrackedDeviceIndexInvalid)
+            var needWrist = _miniMode == "wrist";
+            if (!poses[_wristMoveIdx].bPoseIsValid ||
+                (needWrist && _wristIndex == OpenVR.k_unTrackedDeviceIndexInvalid))
             {
                 EndWristMove();
                 return;
@@ -624,7 +710,28 @@ namespace VRCX
             var src = LaserSource(mm, moveLeft);
             var target = src + LaserDirection(mm, moveLeft) * _wristMoveDist;
 
-            // In Controller-Space der Wrist-Hand umrechnen => neuer Offset
+            if (_miniMode == "world")
+            {
+                _miniWorldPos = target;
+                _miniWorldPlaced = true;
+                return;
+            }
+            if (_miniMode == "hud")
+            {
+                // Zielpunkt in HMD-lokale Koordinaten — der Mini bleibt kopffest
+                var hmdPose = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
+                if (!hmdPose.bPoseIsValid ||
+                    !Matrix4x4.Invert(ToMatrix4x4(hmdPose.mDeviceToAbsoluteTracking), out var invHmd))
+                    return;
+                var lp = Vector3.Transform(target, invHmd);
+                _miniOffset = new Vector3(
+                    Math.Clamp(lp.X, -1.5f, 1.5f),
+                    Math.Clamp(lp.Y, -1.5f, 1.5f),
+                    Math.Clamp(lp.Z, -3f, -0.1f));
+                return;
+            }
+
+            // wrist: in Controller-Space der Wrist-Hand umrechnen => neuer Offset
             var wristM = ToMatrix4x4(poses[_wristIndex].mDeviceToAbsoluteTracking);
             if (!Matrix4x4.Invert(wristM, out var inv))
                 return;
@@ -658,16 +765,14 @@ namespace VRCX
                 var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
                 system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
                 _wristMoveDist = 0.4f;
-                if (_wristIndex != OpenVR.k_unTrackedDeviceIndexInvalid &&
-                    poses[_miniPressIdx].bPoseIsValid && poses[_wristIndex].bPoseIsValid)
+                if (poses[_miniPressIdx].bPoseIsValid)
                 {
                     var mm = poses[_miniPressIdx].mDeviceToAbsoluteTracking;
                     var src = LaserSource(mm,
                         system.GetControllerRoleForTrackedDeviceIndex(_miniPressIdx) == ETrackedControllerRole.LeftHand);
-                    var wm = ToMatrix4x4(poses[_wristIndex].mDeviceToAbsoluteTracking);
-                    var isLeft = system.GetControllerRoleForTrackedDeviceIndex(_wristIndex) == ETrackedControllerRole.LeftHand;
-                    var oPos = Vector3.Transform(WristBasePos(isLeft) + WristUserOffset(), wm);
-                    _wristMoveDist = Math.Clamp(Vector3.Distance(src, oPos), 0.15f, 1.5f);
+                    var oPos = CurrentMiniPos(system, poses);
+                    if (oPos.HasValue)
+                        _wristMoveDist = Math.Clamp(Vector3.Distance(src, oPos.Value), 0.15f, 2.5f);
                 }
                 _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.moving(true)");
                 return;
@@ -684,18 +789,63 @@ namespace VRCX
             }
         }
 
+        /// Aktuelle Mini-Position in Weltkoordinaten (für den Greifabstand).
+        private Vector3? CurrentMiniPos(CVRSystem system, TrackedDevicePose_t[] poses)
+        {
+            if (_miniMode == "world")
+                return _miniWorldPlaced ? _miniWorldPos : (Vector3?)null;
+            if (_miniMode == "hud")
+            {
+                var hmdPose = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
+                if (!hmdPose.bPoseIsValid)
+                    return null;
+                var w = Matrix4x4.CreateTranslation(_miniOffset) *
+                    ToMatrix4x4(hmdPose.mDeviceToAbsoluteTracking);
+                return new Vector3(w.M41, w.M42, w.M43);
+            }
+            if (_wristIndex == OpenVR.k_unTrackedDeviceIndexInvalid || !poses[_wristIndex].bPoseIsValid)
+                return null;
+            var wm = ToMatrix4x4(poses[_wristIndex].mDeviceToAbsoluteTracking);
+            var isLeft = system.GetControllerRoleForTrackedDeviceIndex(_wristIndex) == ETrackedControllerRole.LeftHand;
+            return Vector3.Transform(WristBasePos(isLeft) + WristUserOffset(), wm);
+        }
+
         private void EndWristMove()
         {
             _wristMoving = false;
             _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.moving(false)");
-            // Offset persistieren (Mod speichert in chat_settings)
-            var json = $"{{\"type\":\"config\",\"wristOffX\":{_wristOffX.ToString(System.Globalization.CultureInfo.InvariantCulture)},\"wristOffY\":{_wristOffY.ToString(System.Globalization.CultureInfo.InvariantCulture)},\"wristOffZ\":{_wristOffZ.ToString(System.Globalization.CultureInfo.InvariantCulture)}}}";
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            string json;
+            if (_miniMode == "hud")
+            {
+                json = "{\"type\":\"config\"" +
+                    ",\"miniOffX\":" + (_miniOffset.X * 100f).ToString("0.#", ci) +
+                    ",\"miniOffY\":" + (_miniOffset.Y * 100f).ToString("0.#", ci) +
+                    ",\"miniOffZ\":" + (_miniOffset.Z * 100f).ToString("0.#", ci) + "}";
+                logger.Info("mini moved (hud): {0:0.00}/{1:0.00}/{2:0.00} m",
+                    _miniOffset.X, _miniOffset.Y, _miniOffset.Z);
+            }
+            else if (_miniMode == "world")
+            {
+                // Weltposition ist sitzungslokal (Raum-Ursprung wandert),
+                // deshalb nichts persistieren.
+                logger.Info("mini moved (world): {0:0.00}/{1:0.00}/{2:0.00}",
+                    _miniWorldPos.X, _miniWorldPos.Y, _miniWorldPos.Z);
+                return;
+            }
+            else
+            {
+                json = "{\"type\":\"config\"" +
+                    ",\"wristOffX\":" + _wristOffX.ToString(ci) +
+                    ",\"wristOffY\":" + _wristOffY.ToString(ci) +
+                    ",\"wristOffZ\":" + _wristOffZ.ToString(ci) + "}";
+                logger.Info("wrist mini moved: X={0} Y={1} Z={2} cm", _wristOffX, _wristOffY, _wristOffZ);
+            }
             OverlayClient.SendMessage(new OverlayMessage
             {
                 Type = OverlayMessageType.ChatAction,
                 Data = json
             });
-            logger.Info("wrist mini moved: X={0} Y={1} Z={2} cm", _wristOffX, _wristOffY, _wristOffZ);
         }
 
         /// Verschobene Position des kopffesten Panels im Mod speichern (cm).
@@ -881,17 +1031,8 @@ namespace VRCX
                     _lastPanelPos = new Vector3(m0.M41, m0.M42, m0.M43);
                     _worldPlaced = true;
                 }
-                var hmdPos = new Vector3(hmd.M41, hmd.M42, hmd.M43);
-                var bz = Vector3.Normalize(hmdPos - _lastPanelPos);
-                var bx = Vector3.Normalize(Vector3.Cross(new Vector3(0, 1, 0), bz));
-                if (float.IsNaN(bx.X)) bx = new Vector3(1, 0, 0);
-                var by = Vector3.Cross(bz, bx);
-                var bm = new Matrix4x4(
-                    bx.X, bx.Y, bx.Z, 0,
-                    by.X, by.Y, by.Z, 0,
-                    bz.X, bz.Y, bz.Z, 0,
-                    _lastPanelPos.X, _lastPanelPos.Y, _lastPanelPos.Z, 1);
-                var bhm34 = ToHmdMatrix34(bm);
+                var bhm34 = ToHmdMatrix34(
+                    Billboard(_lastPanelPos, new Vector3(hmd.M41, hmd.M42, hmd.M43)));
                 overlay.SetOverlayTransformAbsolute(_handle,
                     ETrackingUniverseOrigin.TrackingUniverseStanding, ref bhm34);
             }
@@ -1085,8 +1226,9 @@ namespace VRCX
             var trigger = (state.ulButtonPressed & (1UL << (int)EVRButtonId.k_EButton_SteamVR_Trigger)) != 0;
             if (trigger && !_triggerDown[bestHand])
             {
-                // Wrist-Mini: kurzer Klick öffnet, Langdruck (400 ms) verschiebt
-                if (!_big && _miniMode == "wrist" && !_wristLock)
+                // Mini: kurzer Klick öffnet, Langdruck (400 ms) verschiebt —
+                // in allen drei Modi (Handgelenk, kopffest, frei).
+                if (!_big && !_wristLock)
                 {
                     _miniPressActive = true;
                     _miniPressStartMs = NowMs();
@@ -1126,39 +1268,92 @@ namespace VRCX
                 host.SendMouseWheelEvent(x, y, 0, (int)(ay * 40), CefEventFlags.None);
         }
 
+        /// Geste: konfigurierbare Taste, Hand, Haltezeit und Auslöseart.
+        /// Grip auf beiden Händen ist im Spiel eine Alltagsbewegung — deshalb
+        /// muss sich das umbelegen lassen. Der Lernmodus übernimmt einfach die
+        /// nächste gedrückte Taste (der Trigger ist ausgenommen, er bedient
+        /// das Panel).
         private void ProcessGesture(CVRSystem system)
         {
-            var now = (DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
-            if (now - _lastGestureAt < 1500)
-                return;
+            var now = NowMs();
             var state = new VRControllerState_t();
-            var hand = 0;
-            for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount && hand < 2; ++i)
+            for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
             {
                 var role = system.GetControllerRoleForTrackedDeviceIndex(i);
-                if (role != ETrackedControllerRole.LeftHand && role != ETrackedControllerRole.RightHand)
+                var isLeft = role == ETrackedControllerRole.LeftHand;
+                var isRight = role == ETrackedControllerRole.RightHand;
+                if (!isLeft && !isRight)
                     continue;
-                var idx = role == ETrackedControllerRole.LeftHand ? 0 : 1;
-                hand++;
                 if (!system.GetControllerState(i, ref state, (uint)Marshal.SizeOf(state)))
                     continue;
-                // grip (Vive, mask 4) or A/X (Oculus, mask 128)
-                var pressed = (state.ulButtonPressed & (4UL | 128UL)) != 0;
+
+                if (_learningGesture)
+                {
+                    var learned = state.ulButtonPressed & ~TRIGGER_MASK;
+                    if (learned != 0)
+                    {
+                        // niedrigstes gesetztes Bit => genau eine Taste
+                        _gestureMask = learned & (~learned + 1);
+                        _learningGesture = false;
+                        _lastGestureAt = now;
+                        var msg = "{\"type\":\"config\",\"gestureMask\":" + _gestureMask + "}";
+                        OverlayClient.SendMessage(new OverlayMessage
+                        {
+                            Type = OverlayMessageType.ChatAction,
+                            Data = msg
+                        });
+                        _browser?.ExecuteScriptAsync(
+                            "window.$vrchat && $vrchat.gestureLearned", _gestureMask.ToString());
+                        logger.Info("gesture gelernt: Maske {0}", _gestureMask);
+                    }
+                    continue;
+                }
+
+                if (_gestureHand == "left" && !isLeft) continue;
+                if (_gestureHand == "right" && !isRight) continue;
+                if (now - _lastGestureAt < 1500)
+                    continue;
+
+                var idx = isLeft ? 0 : 1;
+                var pressed = (state.ulButtonPressed & _gestureMask) != 0;
                 if (pressed)
                 {
                     if (_pressStart[idx] == 0)
                         _pressStart[idx] = now;
+                    // Halten: sofort auslösen, sobald die Zeit voll ist
+                    if (_gestureMode == "hold" && now - _pressStart[idx] >= _gestureHoldMs)
+                    {
+                        _pressStart[idx] = double.MaxValue / 2; // nur einmal je Druck
+                        FireGesture(now);
+                    }
                 }
                 else
                 {
-                    if (_pressStart[idx] != 0 && now - _pressStart[idx] >= 1000)
+                    if (_gestureMode == "double" && _pressStart[idx] != 0)
                     {
-                        _lastGestureAt = now;
-                        _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.gestureToggle()");
+                        // Doppeltipp: zweiter kurzer Druck innerhalb 400 ms
+                        if (now - _pressStart[idx] < 300)
+                        {
+                            if (now - _lastTapAt[idx] < 400)
+                            {
+                                _lastTapAt[idx] = 0;
+                                FireGesture(now);
+                            }
+                            else
+                            {
+                                _lastTapAt[idx] = now;
+                            }
+                        }
                     }
                     _pressStart[idx] = 0;
                 }
             }
+        }
+
+        private void FireGesture(double now)
+        {
+            _lastGestureAt = now;
+            _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.gestureToggle()");
         }
 
         private static Matrix4x4 ToMatrix4x4(HmdMatrix34_t m)
