@@ -39,6 +39,29 @@
                 <option value="left">links</option>
                 <option value="right">rechts</option>
             </select>
+            <label class="tgl" title="Bilder und GIFs aus Links direkt im Chat anzeigen. Die Datei bleibt beim ursprünglichen Anbieter — der Pool-Server speichert nur den Link.">
+                <input type="checkbox" v-model="st.settings.mediaShow" @change="saveVrSettings" />
+                Medien
+            </label>
+            <template v-if="st.settings.mediaShow">
+                <label class="tgl" title="Auch mp4/webm einbetten">
+                    <input type="checkbox" v-model="st.settings.mediaVideo" @change="saveVrSettings" />
+                    Videos
+                </label>
+                <label class="tgl" title="Tenor-/Giphy-Seitenlinks in das eigentliche GIF auflösen (ohne API-Key, per oEmbed)">
+                    <input type="checkbox" v-model="st.settings.mediaEmbeds" @change="saveVrSettings" />
+                    GIF-Links auflösen
+                </label>
+                <label class="tgl" title="Medien auch im VR-Panel anzeigen">
+                    <input type="checkbox" v-model="st.settings.mediaInVr" @change="saveVrSettings" />
+                    Medien in VR
+                </label>
+                <span class="tgl" title="Anzeigehöhe im Desktop-Chat">
+                    Höhe
+                    <input v-model.number="st.settings.mediaMaxPx" type="number" min="80" max="900"
+                        step="20" class="tgl-num wide" @change="saveVrSettings" />px
+                </span>
+            </template>
             <label class="tgl" title="Interaktives Chat-Panel als SteamVR-Overlay (Standard: am Handgelenk)">
                 <input type="checkbox" v-model="st.settings.vrPanel" @change="saveVrSettings" />
                 VR-Panel
@@ -234,7 +257,37 @@
                                 </button>
                                 <span class="invite-loc">{{ m.text }}</span>
                             </template>
-                            <template v-else>{{ m.text }}</template>
+                            <template v-else>
+                                <template v-for="(part, pi) in msgParts(m.text)" :key="pi">
+                                    <span v-if="part.type === 'text'">{{ part.value }}</span>
+                                    <img
+                                        v-else-if="part.type === 'image' && st.settings.mediaShow"
+                                        :src="part.value"
+                                        class="msg-media"
+                                        :style="{ maxHeight: st.settings.mediaMaxPx + 'px' }"
+                                        loading="lazy"
+                                        @click="lightbox = part.value"
+                                    />
+                                    <video
+                                        v-else-if="part.type === 'video' && st.settings.mediaShow && st.settings.mediaVideo"
+                                        :src="part.value"
+                                        class="msg-media"
+                                        :style="{ maxHeight: st.settings.mediaMaxPx + 'px' }"
+                                        controls
+                                        loop
+                                        muted
+                                    ></video>
+                                    <img
+                                        v-else-if="part.type === 'embed' && st.settings.mediaShow && embeds[part.value]"
+                                        :src="embeds[part.value]"
+                                        class="msg-media"
+                                        :style="{ maxHeight: st.settings.mediaMaxPx + 'px' }"
+                                        loading="lazy"
+                                        @click="lightbox = embeds[part.value]"
+                                    />
+                                    <a v-else class="msg-link" @click="openUrl(part.value)">{{ part.value }}</a>
+                                </template>
+                            </template>
                         </div>
                         <div v-if="m.kind !== 'system'" class="msg-foot">
                             <span
@@ -262,6 +315,9 @@
                     </div>
 
                     <div v-if="typingText" class="typing">{{ typingText }}</div>
+                </div>
+                <div v-if="lightbox" class="lightbox" @click="lightbox = ''">
+                    <img :src="lightbox" />
                 </div>
                 <div class="quick-row">
                     <button
@@ -323,6 +379,11 @@ import {
     sendTyping
 } from './chat';
 import {
+    DEFAULT_MEDIA,
+    parseMessage,
+    resolveEmbed
+} from './media';
+import {
     DEFAULT_VR_PANEL,
     GESTURE_BUTTONS,
     gestureButtonLabel,
@@ -371,6 +432,46 @@ const typingText = computed(() => {
     }
     return '';
 });
+
+// P3: Medien im Chat. Die Nachricht bleibt Text mit URL — hier wird sie nur
+// für die Anzeige zerlegt. Betrachter-Seiten (Tenor/Giphy) werden per oEmbed
+// nachgeladen, ohne API-Key und ohne Rehosting auf dem Pool-Server.
+const lightbox = ref('');
+const embeds = ref({});
+const partsCache = new Map();
+
+function msgParts(text) {
+    let parts = partsCache.get(text);
+    if (!parts) {
+        parts = parseMessage(text);
+        partsCache.set(text, parts);
+        if (partsCache.size > 500) {
+            partsCache.delete(partsCache.keys().next().value);
+        }
+    }
+    if (st.settings.mediaShow !== false && st.settings.mediaEmbeds !== false) {
+        for (const p of parts) {
+            if (p.type === 'embed' && embeds.value[p.value] === undefined) {
+                embeds.value[p.value] = null; // verhindert Mehrfachabruf
+                resolveEmbed(p.value)
+                    .then((url) => {
+                        if (url) embeds.value = { ...embeds.value, [p.value]: url };
+                    })
+                    .catch(() => {});
+            }
+        }
+    }
+    return parts;
+}
+
+function openUrl(url) {
+    try {
+        if (typeof AppApi !== 'undefined' && AppApi.OpenLink) AppApi.OpenLink(url);
+        else window.open(url, '_blank', 'noopener');
+    } catch (err) {
+        ctx.warn('open link failed:', err);
+    }
+}
 
 const chan = (c) => ensureChannel(c);
 const dmChannel = (uid) => canonDm(st.me, uid);
@@ -467,7 +568,7 @@ function ensureVrDefaults() {
         Object.assign(st.settings, modes.settings);
         delete st.settings.vrMode;
     }
-    for (const [k, v] of Object.entries(DEFAULT_VR_PANEL)) {
+    for (const [k, v] of Object.entries({ ...DEFAULT_VR_PANEL, ...DEFAULT_MEDIA })) {
         if (st.settings[k] === undefined) st.settings[k] = v;
     }
 }
@@ -660,6 +761,31 @@ onUnmounted(() => {
 .msg.mine .msg-body {
     background: color-mix(in srgb, var(--accent, #3498db) 22%, transparent);
 }
+.msg-media {
+    display: block;
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 4px 0;
+    cursor: zoom-in;
+    background: color-mix(in srgb, var(--foreground, #888) 6%, transparent);
+}
+.msg-link {
+    color: var(--accent, #3498db);
+    cursor: pointer;
+    word-break: break-all;
+    text-decoration: underline;
+}
+.lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+    cursor: zoom-out;
+}
+.lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 8px; }
 .blur { filter: blur(5px); transition: filter 0.15s; }
 .blur:hover { filter: none; }
 .read-check { color: var(--accent, #3498db); }
