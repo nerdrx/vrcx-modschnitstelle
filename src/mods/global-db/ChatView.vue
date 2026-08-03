@@ -131,17 +131,23 @@
                 </select>
             </span>
             <label v-if="st.settings.vrPanel && st.settings.vrMiniMode === 'wrist'" class="tgl"
-                title="Aus: Mini ist dauerhaft am Handgelenk. An: erscheint nur, wenn du hinschaust bzw. bei neuer Nachricht">
+                title="Aus: der Mini hängt dauerhaft am Handgelenk — beim Wegdrehen siehst du nur seine Rückseite, die ist naturgemäß unsichtbar. An: er erscheint erst innerhalb des Blickwinkels und bleibt danach noch die Nachleuchtzeit stehen.">
                 <input type="checkbox" v-model="st.settings.vrWristGate" @change="saveVrSettings" />
                 VR: nur beim Hinsehen
             </label>
-            <span v-if="st.settings.vrPanel && st.settings.vrMiniMode === 'wrist' && st.settings.vrWristGate"
-                class="tgl"
-                title="Blickwinkel-Kegel: kleiner heißt, du musst genauer hinschauen; größer heißt, der Mini erscheint früher">
-                Blickwinkel
-                <input v-model.number="st.settings.vrWristAngle" type="number" min="5" max="90"
-                    class="tgl-num" @change="saveVrSettings" />°
-            </span>
+            <template v-if="st.settings.vrPanel && st.settings.vrMiniMode === 'wrist' && st.settings.vrWristGate">
+                <span class="tgl"
+                    title="Blickwinkel-Kegel: kleiner heißt, du musst genauer hinschauen; größer heißt, der Mini erscheint früher">
+                    Blickwinkel
+                    <input v-model.number="st.settings.vrWristAngle" type="number" min="5" max="90"
+                        class="tgl-num" @change="saveVrSettings" />°
+                </span>
+                <span class="tgl" title="Wie lange der Mini nach dem Wegdrehen noch stehen bleibt">
+                    Nachleuchten
+                    <input v-model.number="st.settings.vrWristHold" type="number" min="0" max="10"
+                        step="0.2" class="tgl-num" @change="saveVrSettings" />s
+                </span>
+            </template>
             <span v-if="st.settings.vrPanel" class="tgl" title="Mini-Anzeigedauer bei neuer Nachricht (Sekunden)">
                 Mini
                 <input v-model.number="st.settings.vrFlashSec" type="number" min="2" max="120"

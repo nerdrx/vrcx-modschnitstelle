@@ -54,6 +54,7 @@ export const DEFAULT_VR_PANEL = {
     // 'auto' folgt der VRCX-Overlay-Hand, 'left'/'right' überstimmen sie.
     vrWristHand: 'auto',
     vrWristAngle: 30, // Blickwinkel-Kegel in Grad (kleiner = später sichtbar)
+    vrWristHold: 1.2, // Nachleuchten nach dem Wegdrehen in Sekunden
     vrWristOffX: 0, // Wrist-Mini-Offset (cm, Controller-lokal)
     vrWristOffY: 0,
     vrWristOffZ: 0,
@@ -218,6 +219,7 @@ async function pushConfig(ctx) {
         wristGate: s.vrWristGate,
         wristHand: s.vrWristHand,
         wristAngle: s.vrWristAngle,
+        wristHold: s.vrWristHold,
         wristOffX: s.vrWristOffX,
         wristOffY: s.vrWristOffY,
         wristOffZ: s.vrWristOffZ,
@@ -274,6 +276,7 @@ function onAction(ctx) {
                 if (a.gestureHold !== undefined) cs.vrGestureHold = a.gestureHold;
                 if (a.gestureMode !== undefined) cs.vrGestureMode = a.gestureMode;
                 if (a.wristAngle !== undefined) cs.vrWristAngle = a.wristAngle;
+                if (a.wristHold !== undefined) cs.vrWristHold = a.wristHold;
                 if (a.alpha !== undefined) cs.vrAlpha = a.alpha;
                 if (a.curvature !== undefined) cs.vrCurvature = a.curvature;
                 if (a.width !== undefined) cs.vrWidth = a.width;

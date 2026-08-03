@@ -71,6 +71,7 @@ namespace VRCX
         private float _miniWidth = 0.26f;
         private float _wristOffX, _wristOffY, _wristOffZ; // cm, Controller-lokal
         private float _wristAngleDeg = 30f; // Sichtbarkeits-Kegel (Blick aufs Handgelenk)
+        private float _wristHoldSec = 1.2f; // Nachleuchten nach dem Wegdrehen
         private DateTime _angleVisibleUntil = DateTime.MinValue;
         private int _overlayHand; // VRCX-Setting: 0 beide, 1 links, 2 rechts
         private bool _wristMoving;
@@ -293,6 +294,7 @@ namespace VRCX
                 if (root.TryGetProperty("wristGate", out var wg)) _wristGate = wg.GetBoolean();
                 if (root.TryGetProperty("wristHand", out var wh)) _wristHand = wh.GetString() ?? "auto";
                 if (root.TryGetProperty("wristAngle", out var wa)) _wristAngleDeg = Math.Clamp(wa.GetSingle(), 5f, 90f);
+                if (root.TryGetProperty("wristHold", out var whd)) _wristHoldSec = Math.Clamp(whd.GetSingle(), 0f, 10f);
                 if (root.TryGetProperty("gestureMask", out var gm)) _gestureMask = gm.GetUInt64();
                 if (root.TryGetProperty("gestureHand", out var gh)) _gestureHand = gh.GetString() ?? "both";
                 if (root.TryGetProperty("gestureHold", out var gho))
@@ -601,15 +603,24 @@ namespace VRCX
             return new Vector3(_wristOffX / 100f, _wristOffY / 100f, _wristOffZ / 100f);
         }
 
-        /// Welche Seite der Wrist-Mini nutzen soll. "auto" folgt der
-        /// VRCX-Overlay-Hand; eine explizite Wahl überstimmt sie. Der
-        /// VRCX-Wert darf hier nicht filtern — sonst blockiert eine dort auf
-        /// "rechts" gestellte Overlay-Hand die linke Seite dauerhaft.
-        private bool WantLeftWrist()
+        /// "auto" lässt BEIDE Hände zu — mit Blickwinkel-Gate gewinnt die, auf
+        /// die man schaut, ohne Gate die von VRCX bevorzugte Seite. Eine
+        /// explizite Wahl schränkt auf genau diese Hand ein. Der VRCX-Wert darf
+        /// nie hart filtern, sonst blockiert eine dort auf "rechts" gestellte
+        /// Overlay-Hand die linke Seite dauerhaft.
+        private bool HandAllowed(bool isLeft)
+        {
+            if (_wristHand == "left") return isLeft;
+            if (_wristHand == "right") return !isLeft;
+            return true; // auto
+        }
+
+        /// Bevorzugte Seite, wenn ohne Gate genau eine gewählt werden muss.
+        private bool PreferLeftWrist()
         {
             if (_wristHand == "left") return true;
             if (_wristHand == "right") return false;
-            return _overlayHand != 2; // auto: 2 = rechts, sonst links
+            return _overlayHand != 2; // auto: VRCX-Overlay-Hand als Vorgabe
         }
 
         /// Ohne Blickwinkel-Gate: Hand fest wählen. Ohne gültige
@@ -618,7 +629,7 @@ namespace VRCX
         {
             var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
             system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
-            var wantLeft = WantLeftWrist();
+            var wantLeft = PreferLeftWrist();
 
             var fallback = OpenVR.k_unTrackedDeviceIndexInvalid;
             for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
@@ -627,6 +638,8 @@ namespace VRCX
                 var isLeft = role == ETrackedControllerRole.LeftHand;
                 var isRight = role == ETrackedControllerRole.RightHand;
                 if ((!isLeft && !isRight) || !poses[i].bPoseIsValid)
+                    continue;
+                if (!HandAllowed(isLeft))
                     continue;
                 if (fallback == OpenVR.k_unTrackedDeviceIndexInvalid)
                     fallback = i;
@@ -659,8 +672,9 @@ namespace VRCX
                 var isRight = role == ETrackedControllerRole.RightHand;
                 if (!isLeft && !isRight)
                     continue;
-                // Seitenwahl gilt auch mit Blickwinkel-Gate (siehe WantLeftWrist).
-                if (isLeft != WantLeftWrist())
+                // Seitenwahl gilt auch mit Blickwinkel-Gate; bei "auto" sind
+                // beide Hände zugelassen und die angeschaute gewinnt.
+                if (!HandAllowed(isLeft))
                     continue;
                 if (!poses[i].bPoseIsValid)
                     continue;
@@ -673,7 +687,7 @@ namespace VRCX
                 if (Vector3.Dot(nWorld, toHmd) > cosThresh)
                 {
                     _wristIndex = i;
-                    _angleVisibleUntil = DateTime.UtcNow.AddSeconds(1.2);
+                    _angleVisibleUntil = DateTime.UtcNow.AddSeconds(_wristHoldSec);
                     return;
                 }
             }

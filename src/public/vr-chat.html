@@ -190,6 +190,10 @@
         // Winkel nicht.
         laserPitch: 41.5, laserYaw: 5.9,
         draft: '', lastUnread: 0, lastMsg: null,
+        // Zeichen, die seit dem letzten Öffnen der SteamVR-Tastatur über den
+        // Zeichenstrom kamen. Solange > 0 ist der Stream maßgeblich und der
+        // (unzuverlässige) Done-Text wird ignoriert.
+        kbStreamed: 0,
         gotUpdate: false
     };
     // Nur druckbare Zeichen aus der SteamVR-Tastatur übernehmen: sie liefert
@@ -337,6 +341,7 @@
         }
         act({ type: 'send', channel: ch.channel, text });
         state.draft = '';
+        state.kbStreamed = 0;
         render();
     }
 
@@ -392,12 +397,16 @@
             } catch (e) {}
         },
         keyboardDone(text) {
-            // Zeichenstrom (keyboardChar) ist die primäre Quelle. GetKeyboardText
-            // liefert bei der Minimal-Tastatur meist nur ein '\0' — ungefiltert
-            // hat das den Entwurf durch ein unsichtbares Steuerzeichen ersetzt
-            // (Text "weg", Symbol im Feld). Nur druckbaren Text übernehmen.
+            // GetKeyboardText ist bei der Minimal-Tastatur unbrauchbar: mal
+            // liefert es ein '\0', mal nur das ERSTE getippte Zeichen (Log:
+            // 12x char input, danach "Done, raw len 1"). Beides hat den
+            // Entwurf zerstört. Deshalb gilt: der Zeichenstrom gewinnt, und
+            // Done darf den Entwurf niemals kürzen.
             const t = printable(text).trim();
-            if (t) state.draft = t;
+            if (!t) return render();
+            if (state.kbStreamed > 0) return render(); // Stream ist maßgeblich
+            if (t.length < state.draft.length) return render();
+            state.draft = t;
             render();
         },
         keyboardChar(text) {
@@ -405,6 +414,7 @@
             // Enter = senden). Alle übrigen Steuerzeichen werden verworfen.
             let submit = false;
             for (const ch of text || '') {
+                state.kbStreamed++;
                 if (ch === '\b' || ch === '\u007f') state.draft = state.draft.slice(0, -1);
                 else if (ch === '\n' || ch === '\r') submit = true;
                 else if (ch >= ' ') state.draft += ch;
@@ -444,7 +454,10 @@
     $('minbtn').onclick = () => $vrchat.gestureToggle();
     $('bubble').onclick = () => $vrchat.gestureToggle();
     $('mini').onclick = () => $vrchat.gestureToggle();
-    $('inputfield').onclick = () => act({ type: 'keyboard', text: state.draft });
+    $('inputfield').onclick = () => {
+        state.kbStreamed = 0; // neue Tastatur-Sitzung
+        act({ type: 'keyboard', text: state.draft });
+    };
     $('send').onclick = () => doSend();
     $('minimodebtn').onclick = () => {
         state.miniMode = state.miniMode === 'wrist' ? 'hud'
