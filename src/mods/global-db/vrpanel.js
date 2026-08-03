@@ -20,7 +20,13 @@ import { kvGet, kvSet } from './db';
 
 export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
-    vrMode: 'wrist', // 'wrist' | 'hud' | 'world' — Mini am Handgelenk (Blickwinkel-Anzeige)
+    // Mini und großes Panel sind unabhängig positionierbar — sonst liesse sich
+    // "Mini am Handgelenk + großes Panel frei in der Welt" nicht kombinieren.
+    vrMiniMode: 'wrist', // 'wrist' | 'hud'
+    vrBigMode: 'hud', // 'hud' (kopffest, per Dragbar verschiebbar) | 'world'
+    vrHudOffX: 0, // kopffestes Panel: Offset in cm (HMD-lokal)
+    vrHudOffY: -15,
+    vrHudOffZ: -85,
     vrAlpha: 0.9,
     vrCurvature: 0.08,
     vrWidth: 0.6,
@@ -29,8 +35,8 @@ export const DEFAULT_VR_PANEL = {
     // Laser-Kalibrierung in GRAD. Ein cm-Offset der Strahlquelle erzeugt einen
     // distanzabhängigen Bildversatz und "wandert" über die Panelfläche; eine
     // Winkelkorrektur bleibt überall konstant.
-    vrLaserPitch: 45, // Laser-Neigung nach unten (Grad)
-    vrLaserYaw: -4.5, // Laser seitlich (Grad, + = nach außen, je Hand gespiegelt)
+    vrLaserPitch: 41.5, // Laser-Neigung nach unten (Grad, Index-kalibriert)
+    vrLaserYaw: 5.9, // Laser seitlich (Grad, Index-kalibriert)
     vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
     vrWristLock: false, // Wrist-Mini verschieben gesperrt
     vrWristGate: false, // true = Mini nur beim Blick aufs Handgelenk, false = dauerhaft
@@ -132,20 +138,54 @@ export function migrateLaserCalibration(cs) {
     return { settings: out, changed };
 }
 
+/**
+ * Bis P2-Runde 6 gab es einen einzigen vrMode für Mini UND großes Panel —
+ * damit war "Mini am Handgelenk + Panel frei in der Welt" nicht möglich.
+ * Jetzt zwei unabhängige Felder. Abbildung des alten Werts:
+ *   wrist -> Mini am Handgelenk, Panel kopffest
+ *   hud   -> beides kopffest
+ *   world -> Mini kopffest, Panel frei in der Welt
+ * Pure Funktion (testbar).
+ */
+export function migrateVrModes(cs) {
+    if (cs.vrMode === undefined) return { settings: { ...cs }, changed: false };
+    const out = { ...cs };
+    if (out.vrMiniMode === undefined) {
+        out.vrMiniMode = out.vrMode === 'wrist' ? 'wrist' : 'hud';
+    }
+    if (out.vrBigMode === undefined) {
+        out.vrBigMode = out.vrMode === 'world' ? 'world' : 'hud';
+    }
+    delete out.vrMode;
+    return { settings: out, changed: true };
+}
+
 async function pushConfig(ctx) {
     const stored = await kvGet(ctx, 'chat_settings', {});
-    const mig = migrateLaserCalibration(stored);
-    let cs = mig.settings;
-    if (mig.changed) {
+    const laser = migrateLaserCalibration(stored);
+    const modes = migrateVrModes(laser.settings);
+    const cs = modes.settings;
+    if (laser.changed || modes.changed) {
         await kvSet(ctx, 'chat_settings', cs);
-        ctx.log(
-            `Laser-Kalibrierung migriert: Yaw ${cs.vrLaserYaw}°, Pitch ${cs.vrLaserPitch}°`
-        );
+        if (laser.changed) {
+            ctx.log(
+                `Laser-Kalibrierung migriert: Yaw ${cs.vrLaserYaw}°, Pitch ${cs.vrLaserPitch}°`
+            );
+        }
+        if (modes.changed) {
+            ctx.log(
+                `VR-Positionen migriert: Mini ${cs.vrMiniMode}, Panel ${cs.vrBigMode}`
+            );
+        }
     }
     const s = { ...DEFAULT_VR_PANEL, ...cs };
     vrCall('config', {
         enabled: !!s.vrPanel && chatState.enabled,
-        mode: s.vrMode,
+        miniMode: s.vrMiniMode,
+        bigMode: s.vrBigMode,
+        hudOffX: s.vrHudOffX,
+        hudOffY: s.vrHudOffY,
+        hudOffZ: s.vrHudOffZ,
         alpha: s.vrAlpha,
         curvature: s.vrCurvature,
         width: s.vrWidth,
@@ -200,7 +240,11 @@ function onAction(ctx) {
             } else if (a.type === 'config') {
                 // Panel-seitige Änderungen persistieren
                 const cs = await kvGet(ctx, 'chat_settings', {});
-                if (a.mode !== undefined) cs.vrMode = a.mode;
+                if (a.miniMode !== undefined) cs.vrMiniMode = a.miniMode;
+                if (a.bigMode !== undefined) cs.vrBigMode = a.bigMode;
+                if (a.hudOffX !== undefined) cs.vrHudOffX = a.hudOffX;
+                if (a.hudOffY !== undefined) cs.vrHudOffY = a.hudOffY;
+                if (a.hudOffZ !== undefined) cs.vrHudOffZ = a.hudOffZ;
                 if (a.alpha !== undefined) cs.vrAlpha = a.alpha;
                 if (a.curvature !== undefined) cs.vrCurvature = a.curvature;
                 if (a.width !== undefined) cs.vrWidth = a.width;

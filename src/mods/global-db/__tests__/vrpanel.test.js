@@ -53,7 +53,7 @@ describe('DEFAULT_VR_PANEL', () => {
     it('zeigt den Wrist-Mini standardmäßig dauerhaft (Gate aus)', () => {
         expect(DEFAULT_VR_PANEL.vrWristGate).toBe(false);
         expect(DEFAULT_VR_PANEL.vrWristHand).toBe('left');
-        expect(DEFAULT_VR_PANEL.vrMode).toBe('wrist');
+        expect(DEFAULT_VR_PANEL.vrMiniMode).toBe('wrist');
     });
 
     it('kalibriert den Laser in Grad, nicht mehr in cm', () => {
