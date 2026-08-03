@@ -279,11 +279,12 @@
                                     ></video>
                                     <img
                                         v-else-if="part.type === 'embed' && st.settings.mediaShow && embeds[part.value]"
-                                        :src="embeds[part.value]"
+                                        :src="embeds[part.value].url"
                                         class="msg-media"
                                         :style="{ maxHeight: st.settings.mediaMaxPx + 'px' }"
                                         loading="lazy"
-                                        @click="lightbox = embeds[part.value]"
+                                        @error="onEmbedError($event, part.value)"
+                                        @click="lightbox = embeds[part.value].url"
                                     />
                                     <a v-else class="msg-link" @click="openUrl(part.value)">{{ part.value }}</a>
                                 </template>
@@ -388,6 +389,7 @@ import {
     GESTURE_BUTTONS,
     gestureButtonLabel,
     learnGesture,
+    migrateGestureButton,
     migrateLaserCalibration,
     migrateVrModes,
     refreshVrPanelConfig
@@ -454,14 +456,24 @@ function msgParts(text) {
             if (p.type === 'embed' && embeds.value[p.value] === undefined) {
                 embeds.value[p.value] = null; // verhindert Mehrfachabruf
                 resolveEmbed(p.value)
-                    .then((url) => {
-                        if (url) embeds.value = { ...embeds.value, [p.value]: url };
+                    .then((res) => {
+                        if (res) embeds.value = { ...embeds.value, [p.value]: res };
                     })
                     .catch(() => {});
             }
         }
     }
     return parts;
+}
+
+/**
+ * Die animierte Tenor-URL ist aus dem Standbild abgeleitet und damit geraten.
+ * Lädt sie nicht, fällt die Anzeige auf das gesicherte Standbild zurück.
+ */
+function onEmbedError(ev, key) {
+    const entry = embeds.value[key];
+    if (!entry || !entry.still || ev.target.src === entry.still) return;
+    ev.target.src = entry.still;
 }
 
 function openUrl(url) {
@@ -568,6 +580,8 @@ function ensureVrDefaults() {
         Object.assign(st.settings, modes.settings);
         delete st.settings.vrMode;
     }
+    const gest = migrateGestureButton(st.settings);
+    if (gest.changed) Object.assign(st.settings, gest.settings);
     for (const [k, v] of Object.entries({ ...DEFAULT_VR_PANEL, ...DEFAULT_MEDIA })) {
         if (st.settings[k] === undefined) st.settings[k] = v;
     }
@@ -864,12 +878,19 @@ onUnmounted(() => {
 }
 .msg-system .msg-time { margin-left: 6px; opacity: 0.6; }
 .tgl-select, .tgl-num {
-    background: transparent;
-    color: inherit;
+    background: var(--background, #1f1f24);
+    color: var(--foreground, #eee);
     border: 1px solid var(--border, #4443);
     border-radius: 6px;
     font-size: 12px;
     padding: 2px 6px;
+}
+/* Aufgeklappte Listen zeichnet das Betriebssystem, nicht die Seite: mit
+   transparentem Hintergrund und geerbter Schriftfarbe stand die Liste weiß
+   auf weiß. Beide Farben müssen deshalb explizit auf den Optionen sitzen. */
+.tgl-select option {
+    background: #23232a;
+    color: #eee;
 }
 .tgl-num { width: 48px; }
 .tgl-num.wide { width: 62px; }

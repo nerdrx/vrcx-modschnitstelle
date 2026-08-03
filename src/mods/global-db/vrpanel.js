@@ -107,8 +107,8 @@ export function mediaUrlsFor(text, allowEmbeds) {
             } else if (vrEmbeds[part.value] === undefined) {
                 vrEmbeds[part.value] = null; // nur einmal anfragen
                 resolveEmbed(part.value)
-                    .then((url) => {
-                        if (url) vrEmbeds[part.value] = url;
+                    .then((res) => {
+                        if (res) vrEmbeds[part.value] = res.url;
                     })
                     .catch(() => {});
             }
@@ -219,9 +219,13 @@ async function pushConfig(ctx) {
     const stored = await kvGet(ctx, 'chat_settings', {});
     const laser = migrateLaserCalibration(stored);
     const modes = migrateVrModes(laser.settings);
-    const cs = modes.settings;
-    if (laser.changed || modes.changed) {
+    const gest = migrateGestureButton(modes.settings);
+    const cs = gest.settings;
+    if (laser.changed || modes.changed || gest.changed) {
         await kvSet(ctx, 'chat_settings', cs);
+        if (gest.changed) {
+            ctx.log('Gesten-Taste vom Stick-Klick auf B/Y zurückgesetzt');
+        }
         if (laser.changed) {
             ctx.log(
                 `Laser-Kalibrierung migriert: Yaw ${cs.vrLaserYaw}°, Pitch ${cs.vrLaserPitch}°`
@@ -397,7 +401,34 @@ export const GESTURE_BUTTONS = [
     { mask: 128, label: 'A / X' }
 ];
 
+/** Die Stick-Klick-Maske — nur zur Anzeige, siehe STICK_MASK-Kommentar. */
+export const STICK_MASK = 4294967296;
+
+// Auch Masken benennen, die nicht mehr zur Auswahl stehen: sonst steht in der
+// UI eine nackte Zahl, wenn ein alter Wert gespeichert ist.
+const BUTTON_NAMES = {
+    2: 'B / Y (Menü)',
+    4: 'Grip',
+    128: 'A / X',
+    [STICK_MASK]: 'Stick-Klick (unzuverlässig)'
+};
+
 export function gestureButtonLabel(mask) {
-    const hit = GESTURE_BUTTONS.find((b) => b.mask === mask);
-    return hit ? hit.label : `Taste ${mask}`;
+    return BUTTON_NAMES[mask] || `Unbekannte Taste (${mask})`;
+}
+
+/**
+ * Wer den Stick-Klick belegt hatte, bekam die Geste schon beim blossen Kippen
+ * des Sticks — das Legacy-Input-System meldet die Bewegung auf derselben
+ * Maske. Solche Belegungen einmalig auf B/Y zurücksetzen.
+ * Pure Funktion (testbar).
+ */
+export function migrateGestureButton(cs) {
+    if (cs.vrGestureMask !== STICK_MASK) {
+        return { settings: { ...cs }, changed: false };
+    }
+    return {
+        settings: { ...cs, vrGestureMask: DEFAULT_VR_PANEL.vrGestureMask },
+        changed: true
+    };
 }
