@@ -12,25 +12,9 @@ import { fullSync } from './sync';
 import { chatState, displayName, initChat, isDnd, stopChat } from './chat';
 import { checkEligible, uploadFriendHashes } from './join';
 import { mediaSummary } from './media';
-import { startVrPanel, stopVrPanel, vrHaptic } from './vrpanel';
+import { playSound } from './sounds';
+import { hapticPatternFor, startVrPanel, stopVrPanel, vrHaptic } from './vrpanel';
 import { setCtx } from './runtime';
-
-// Kurzer Benachrichtigungston (WebAudio, kein Asset nötig).
-let audioCtx = null;
-function playBeep() {
-    try {
-        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
-        osc.connect(gain).connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.2);
-    } catch {}
-}
 
 let timer = null;
 
@@ -101,8 +85,20 @@ function onChatMessage(ctx) {
             const body =
                 ev.kind === 'invite' ? 'Join-Einladung 📍' : mediaSummary(ev.text);
             const s = chatState.settings;
+            // Ton, Bild und Vibration lassen sich je Ereignisart unterscheiden:
+            // eine Einladung soll sich anders anfühlen als eine Pool-Nachricht.
+            const soundEvent =
+                ev.kind === 'invite'
+                    ? 'invite'
+                    : ev.channel === 'global'
+                      ? 'global'
+                      : 'dm';
             // Separat togglebar: Ton / visuelle Benachrichtigung / Haptik
-            if (s.vrNotySound !== false) playBeep();
+            if (s.vrNotySound !== false) {
+                if (!playSound(s, soundEvent)) {
+                    ctx.warn('Benachrichtigungston konnte nicht abgespielt werden');
+                }
+            }
             if (s.vrNotyVisual !== false) {
                 ctx.ui.notify({
                     title: `${from} (${scope})`,
@@ -113,7 +109,13 @@ function onChatMessage(ctx) {
                     vr: s.notifyVr !== false
                 });
             }
-            if (s.vrNotyHaptic !== false) vrHaptic(s.vrHapticHand || 'both');
+            if (s.vrNotyHaptic !== false) {
+                vrHaptic(
+                    s.vrHapticHand || 'both',
+                    hapticPatternFor(s, soundEvent),
+                    s.vrHapticStrength
+                );
+            }
         } catch (err) {
             ctx.warn('chat notify failed:', err);
         }

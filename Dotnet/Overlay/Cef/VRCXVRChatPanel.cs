@@ -94,7 +94,12 @@ namespace VRCX
         private DateTime _flashUntil = DateTime.MinValue; // Mini nach neuer Nachricht
         private uint _wristIndex = OpenVR.k_unTrackedDeviceIndexInvalid;
         private DateTime _wristUntil = DateTime.MinValue;
-        private int _hapticPulses;
+        // Haptik: eine Frame-Sequenz statt einer festen Pulszahl, damit sich
+        // Muster (einmal, doppelt, lang, pulsierend) unterscheiden lassen.
+        // Ein Frame ist ~16 ms (60-Hz-Loop).
+        private bool[] _hapticSeq = System.Array.Empty<bool>();
+        private int _hapticStep;
+        private ushort _hapticMicros = 3000; // TriggerHapticPulse: max. 3999 µs
         private string _hapticHand = "both";
         private string _pendingKeyboardText;
         private bool _keyboardRequested;
@@ -178,15 +183,27 @@ namespace VRCX
             }
             if (function == "haptic")
             {
+                var pattern = "single";
                 try
                 {
                     using var doc = JsonDocument.Parse(json);
-                    _hapticHand = doc.RootElement.TryGetProperty("hand", out var h)
+                    var root = doc.RootElement;
+                    _hapticHand = root.TryGetProperty("hand", out var h)
                         ? h.GetString() ?? "both"
                         : "both";
+                    if (root.TryGetProperty("pattern", out var pa))
+                        pattern = pa.GetString() ?? "single";
+                    if (root.TryGetProperty("strength", out var stg))
+                    {
+                        // 0..1 auf den zulässigen Bereich abbilden; OpenVR
+                        // nimmt maximal 3999 µs pro Puls entgegen.
+                        var f = Math.Clamp(stg.GetSingle(), 0.05f, 1f);
+                        _hapticMicros = (ushort)Math.Clamp(f * 3999f, 200f, 3999f);
+                    }
                 }
                 catch { }
-                _hapticPulses = 10; // ~10 Frames à 32 ms Buzz
+                _hapticSeq = HapticPattern(pattern);
+                _hapticStep = 0;
                 return;
             }
             if (!BrowserReady())
@@ -1006,12 +1023,49 @@ namespace VRCX
             return new Vector3(world.M41, world.M42, world.M43);
         }
 
-        /// Buzz auf gewünschter Hand (left/right/both), ~10 Frames.
+        /// Muster als Frame-Sequenz (true = buzzen). Bei ~16 ms je Frame
+        /// entsprechen die Längen unten grob 100 ms bis 500 ms.
+        private static bool[] HapticPattern(string name)
+        {
+            switch (name)
+            {
+                case "double":
+                    return Build(5, 5, 5);
+                case "triple":
+                    return Build(4, 4, 4, 4, 4);
+                case "long":
+                    return Build(30);
+                case "pulse":
+                    return Build(3, 5, 3, 5, 3, 5, 3);
+                default: // "single"
+                    return Build(6);
+            }
+        }
+
+        /// Abwechselnd an/aus, beginnend mit an.
+        private static bool[] Build(params int[] runs)
+        {
+            var total = 0;
+            foreach (var r in runs) total += r;
+            var seq = new bool[total];
+            var pos = 0;
+            var on = true;
+            foreach (var r in runs)
+            {
+                for (var i = 0; i < r; i++) seq[pos++] = on;
+                on = !on;
+            }
+            return seq;
+        }
+
+        /// Buzz auf gewünschter Hand (left/right/both) entlang des Musters.
         private void ProcessHaptics(CVRSystem system)
         {
-            if (_hapticPulses <= 0)
+            if (_hapticStep >= _hapticSeq.Length)
                 return;
-            _hapticPulses--;
+            var active = _hapticSeq[_hapticStep++];
+            if (!active)
+                return;
             for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
             {
                 var role = system.GetControllerRoleForTrackedDeviceIndex(i);
@@ -1021,7 +1075,7 @@ namespace VRCX
                     continue;
                 if (_hapticHand == "left" && !isLeft) continue;
                 if (_hapticHand == "right" && !isRight) continue;
-                system.TriggerHapticPulse(i, 0, 3000);
+                system.TriggerHapticPulse(i, 0, _hapticMicros);
             }
         }
 

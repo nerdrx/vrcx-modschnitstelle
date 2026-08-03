@@ -64,8 +64,31 @@ export const DEFAULT_VR_PANEL = {
     vrNotySound: true,
     vrNotyVisual: true,
     vrNotyHaptic: true,
-    vrHapticHand: 'both' // 'left' | 'right' | 'both'
+    vrHapticHand: 'both', // 'left' | 'right' | 'both'
+    // Muster und Stärke, damit DM, Pool-Nachricht und Einladung am Controller
+    // unterscheidbar sind statt immer derselbe Buzz.
+    vrHapticPattern: 'single', // 'single' | 'double' | 'triple' | 'long' | 'pulse'
+    vrHapticStrength: 0.75, // 0..1
+    vrHapticDm: 'double', // eigenes Muster für Direktnachrichten
+    vrHapticInvite: 'triple' // eigenes Muster für Join-Einladungen
 };
+
+/** Auswahl für die Desktop-UI. */
+export const HAPTIC_PATTERNS = [
+    { id: 'single', label: 'einmal kurz' },
+    { id: 'double', label: 'zweimal' },
+    { id: 'triple', label: 'dreimal' },
+    { id: 'long', label: 'lang' },
+    { id: 'pulse', label: 'pulsierend' }
+];
+
+/** Welches Muster ein Ereignis auslöst ('global' | 'dm' | 'invite'). */
+export function hapticPatternFor(settings, event) {
+    const s = { ...DEFAULT_VR_PANEL, ...(settings || {}) };
+    if (event === 'dm') return s.vrHapticDm || s.vrHapticPattern;
+    if (event === 'invite') return s.vrHapticInvite || s.vrHapticPattern;
+    return s.vrHapticPattern;
+}
 
 let timer = null;
 let lastPayload = '';
@@ -346,9 +369,17 @@ function onAction(ctx) {
     };
 }
 
-/** Haptik-Puls im Overlay-Prozess auslösen (Hand laut Settings). */
-export function vrHaptic(hand) {
-    vrCall('haptic', { hand: hand || 'both' });
+/**
+ * Haptik im Overlay-Prozess auslösen. Muster und Stärke kommen aus den
+ * Settings — ein einzelner fester Buzz war für DM, Pool-Nachricht und
+ * Einladung nicht unterscheidbar.
+ */
+export function vrHaptic(hand, pattern, strength) {
+    vrCall('haptic', {
+        hand: hand || 'both',
+        pattern: pattern || DEFAULT_VR_PANEL.vrHapticPattern,
+        strength: typeof strength === 'number' ? strength : DEFAULT_VR_PANEL.vrHapticStrength
+    });
 }
 
 /** Nach initChat aufrufen. Läuft passiv (1s-Poll + Diff), bis stopVrPanel. */
