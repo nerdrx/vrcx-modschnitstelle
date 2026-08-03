@@ -51,15 +51,26 @@
                 <input type="checkbox" v-model="st.settings.vrGesture" @change="saveVrSettings" />
                 VR: Geste
             </label>
-            <span v-if="st.settings.vrPanel" class="tgl" title="Wo das Panel sitzt: am Handgelenk, kopffest oder frei in der Welt">
-                VR: Position
-                <select v-model="st.settings.vrMode" class="tgl-select" @change="saveVrSettings">
+            <span v-if="st.settings.vrPanel" class="tgl" title="Wo die kleine Vorschau sitzt">
+                VR: Mini
+                <select v-model="st.settings.vrMiniMode" class="tgl-select" @change="saveVrSettings">
                     <option value="wrist">Handgelenk</option>
-                    <option value="hud">Kopffest (HUD)</option>
+                    <option value="hud">Kopffest</option>
+                </select>
+            </span>
+            <span v-if="st.settings.vrPanel" class="tgl"
+                title="Wo der große Chat sitzt — unabhängig vom Mini. Kopffest lässt sich per Ziehleiste verschieben.">
+                VR: Panel
+                <select v-model="st.settings.vrBigMode" class="tgl-select" @change="saveVrSettings">
+                    <option value="hud">Kopffest</option>
                     <option value="world">Frei in der Welt</option>
                 </select>
             </span>
-            <span v-if="st.settings.vrPanel && st.settings.vrMode === 'wrist'" class="tgl"
+            <button v-if="st.settings.vrPanel && st.settings.vrBigMode === 'hud'" class="btn"
+                title="Kopffestes Panel wieder mittig vor den Kopf setzen" @click="resetHudOffset">
+                Panel zentrieren
+            </button>
+            <span v-if="st.settings.vrPanel && st.settings.vrMiniMode === 'wrist'" class="tgl"
                 title="Welches Handgelenk den Mini trägt">
                 VR: Hand
                 <select v-model="st.settings.vrWristHand" class="tgl-select" @change="saveVrSettings">
@@ -67,7 +78,7 @@
                     <option value="right">rechts</option>
                 </select>
             </span>
-            <label v-if="st.settings.vrPanel && st.settings.vrMode === 'wrist'" class="tgl"
+            <label v-if="st.settings.vrPanel && st.settings.vrMiniMode === 'wrist'" class="tgl"
                 title="Aus: Mini ist dauerhaft am Handgelenk. An: erscheint nur, wenn du hinschaust bzw. bei neuer Nachricht">
                 <input type="checkbox" v-model="st.settings.vrWristGate" @change="saveVrSettings" />
                 VR: nur beim Hinsehen
@@ -249,6 +260,7 @@ import {
 import {
     DEFAULT_VR_PANEL,
     migrateLaserCalibration,
+    migrateVrModes,
     refreshVrPanelConfig
 } from './vrpanel';
 
@@ -373,17 +385,31 @@ function saveSettings() {
 
 // P2: VR-Panel-Einstellungen — Defaults sicherstellen, speichern, Panel-Config pushen
 function ensureVrDefaults() {
-    // Alte cm-Laserkalibrierung in Winkel überführen, bevor Defaults greifen —
-    // sonst schreibt der nächste Toggle die veralteten Keys zurück.
-    const mig = migrateLaserCalibration(st.settings);
-    if (mig.changed) {
-        Object.assign(st.settings, mig.settings);
+    // Altbestände (cm-Laserkalibrierung, gemeinsamer vrMode) überführen, bevor
+    // Defaults greifen — sonst schreibt der nächste Toggle die veralteten Keys
+    // zurück und die Migration läuft beim nächsten Start erneut.
+    const laser = migrateLaserCalibration(st.settings);
+    if (laser.changed) {
+        Object.assign(st.settings, laser.settings);
         delete st.settings.vrLaserOffX;
         delete st.settings.vrLaserOffY;
+    }
+    const modes = migrateVrModes(st.settings);
+    if (modes.changed) {
+        Object.assign(st.settings, modes.settings);
+        delete st.settings.vrMode;
     }
     for (const [k, v] of Object.entries(DEFAULT_VR_PANEL)) {
         if (st.settings[k] === undefined) st.settings[k] = v;
     }
+}
+
+/** Verschobenes kopffestes Panel auf die Standardposition zurücksetzen. */
+function resetHudOffset() {
+    st.settings.vrHudOffX = DEFAULT_VR_PANEL.vrHudOffX;
+    st.settings.vrHudOffY = DEFAULT_VR_PANEL.vrHudOffY;
+    st.settings.vrHudOffZ = DEFAULT_VR_PANEL.vrHudOffZ;
+    saveVrSettings();
 }
 async function saveVrSettings() {
     ensureVrDefaults();

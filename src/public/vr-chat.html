@@ -106,7 +106,8 @@
         <div id="ampel" class="dot green"></div>
         <div id="apiwarn" style="display:none;color:#e64a4a;font-size:26px" title="AppApiVr-Bindung fehlgeschlagen">&#9888;</div>
         <div id="tabs"></div>
-        <div id="modebtn" class="hbtn">HUD</div>
+        <div id="minimodebtn" class="hbtn" title="Wo der Mini sitzt">Mini: Wrist</div>
+        <div id="bigmodebtn" class="hbtn" title="Wo dieses große Panel sitzt">Panel: Kopf</div>
         <div id="gearbtn" class="hbtn">&#9881;</div>
         <div id="minbtn" class="hbtn">&#8211;</div>
     </div>
@@ -119,7 +120,7 @@
         <div id="send" class="disabled">Senden</div>
     </div>
     <div id="emojis"></div>
-    <div id="dragbar" title="Ziehen zum Verschieben">&#8230;</div>
+    <div id="dragbar" title="Ziehen zum Verschieben (im Kopf-Modus bleibt das Panel kopffest)">&#8230;</div>
     <div id="settings">
         <span>Deckkraft</span>
         <div class="hbtn" data-alpha="-0.1">−</div>
@@ -174,13 +175,16 @@
     const $ = (id) => document.getElementById(id);
     const state = {
         me: '', ampel: 'green', channels: [], active: 'global',
-        big: false, autoShow: true, mode: 'wrist', wristLock: false,
+        big: false, autoShow: true, wristLock: false,
+        // Mini (Handgelenk/Kopf) und großes Panel (Kopf/Welt) werden
+        // unabhängig positioniert.
+        miniMode: 'wrist', bigMode: 'hud',
         wristGate: false, wristHand: 'left',
         alpha: 0.9, curvature: 0.08, width: 0.6,
         // Laser-Kalibrierung in GRAD (Neigung + Seitwärtsdrehung) — ein
         // cm-Offset der Strahlquelle wandert über die Panelfläche, ein
         // Winkel nicht.
-        laserPitch: 45, laserYaw: -4.5,
+        laserPitch: 41.5, laserYaw: 5.9,
         draft: '', lastUnread: 0, lastMsg: null,
         gotUpdate: false
     };
@@ -254,8 +258,10 @@
             tabs.appendChild(t);
         }
 
-        $('modebtn').textContent =
-            state.mode === 'world' ? 'World' : state.mode === 'hud' ? 'HUD' : 'Wrist';
+        $('minimodebtn').textContent =
+            'Mini: ' + (state.miniMode === 'hud' ? 'Kopf' : 'Wrist');
+        $('bigmodebtn').textContent =
+            'Panel: ' + (state.bigMode === 'world' ? 'Welt' : 'Kopf');
         $('pitchval').textContent = state.laserPitch.toFixed(1) + '°';
         $('yawval').textContent = state.laserYaw.toFixed(1) + '°';
         $('wristlockbtn').textContent = state.wristLock ? 'AN' : 'aus';
@@ -360,7 +366,8 @@
         config(json) {
             try {
                 const c = typeof json === 'string' ? JSON.parse(json) : json;
-                if (c.mode !== undefined) state.mode = c.mode;
+                if (c.miniMode !== undefined) state.miniMode = c.miniMode;
+                if (c.bigMode !== undefined) state.bigMode = c.bigMode;
                 if (c.alpha !== undefined) state.alpha = c.alpha;
                 if (c.curvature !== undefined) state.curvature = c.curvature;
                 if (c.width !== undefined) state.width = c.width;
@@ -426,9 +433,14 @@
     $('mini').onclick = () => $vrchat.gestureToggle();
     $('inputfield').onclick = () => act({ type: 'keyboard', text: state.draft });
     $('send').onclick = () => doSend();
-    $('modebtn').onclick = () => {
-        state.mode = state.mode === 'wrist' ? 'hud' : state.mode === 'hud' ? 'world' : 'wrist';
-        cfg({ mode: state.mode, place: true });
+    $('minimodebtn').onclick = () => {
+        state.miniMode = state.miniMode === 'wrist' ? 'hud' : 'wrist';
+        cfg({ miniMode: state.miniMode });
+        render();
+    };
+    $('bigmodebtn').onclick = () => {
+        state.bigMode = state.bigMode === 'hud' ? 'world' : 'hud';
+        cfg({ bigMode: state.bigMode, place: true });
         render();
     };
     $('emojibtn').onclick = () => {

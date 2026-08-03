@@ -37,7 +37,10 @@ namespace VRCX
 
         // --- config (updated from the mod via chat.config) ---
         private volatile bool _enabled;
-        private string _mode = "hud"; // "hud" | "wrist" | "world"
+        // Mini und großes Panel werden getrennt positioniert: der Mini kann am
+        // Handgelenk sitzen, während das große Panel frei in der Welt steht.
+        private string _miniMode = "wrist"; // "wrist" | "hud"
+        private string _bigMode = "hud"; // "hud" (kopffest, verschiebbar) | "world"
         private string _placeHand = "right"; // Hand fürs Platzieren/Draggen
         private bool _dragging; // Dragbar: Panel folgt bis Trigger-Release
         private uint _dragIdx;
@@ -48,14 +51,16 @@ namespace VRCX
         // Laser-Kalibrierung als WINKEL (Grad) statt cm-Offset: ein cm-Versatz
         // der Ray-Quelle wandert über die Panelfläche (Parallaxe), eine
         // Winkelkorrektur bleibt über Distanz und Fläche konstant.
-        private float _laserPitchDeg = 45f; // Ray-Neigung nach unten
-        private float _laserYawDeg = -4.5f; // Ray-Drehung seitlich (+ = nach außen, je Hand gespiegelt)
+        private float _laserPitchDeg = 41.5f; // Ray-Neigung nach unten (Index-kalibriert)
+        private float _laserYawDeg = 5.9f; // Ray-Drehung seitlich (Index-kalibriert)
+        // Kopffestes großes Panel: per Dragbar verschiebbarer Offset (Meter,
+        // HMD-lokal). Default entspricht der bisherigen festen Position.
+        private Vector3 _hudOffset = new Vector3(0f, -0.15f, -0.85f);
         private bool _dragLock; // Settings offen => Dragbar inaktiv
         // Wrist-Mini: exakt über dem VRCX-Wrist-Overlay + User-Offset
         private bool _wristLock; // Verschieben gesperrt
         private bool _wristGate; // false = Mini dauerhaft sichtbar, true = Blickwinkel-Gate
         private string _wristHand = "left"; // bevorzugte Hand, wenn VRCX "beide" erlaubt
-        private bool _bigPlaced; // großes Panel im wrist-Modus frei in der Welt abgelegt
         private float _wristOffX, _wristOffY, _wristOffZ; // cm, Controller-lokal
         private float _wristAngleDeg = 30f; // Sichtbarkeits-Kegel (Blick aufs Handgelenk)
         private DateTime _angleVisibleUntil = DateTime.MinValue;
@@ -69,6 +74,7 @@ namespace VRCX
         private int _miniPressHand;
         private int _miniPressX, _miniPressY;
         private Vector3 _lastPanelPos = new Vector3(0, 1.2f, -0.8f);
+        private bool _worldPlaced; // world-Modus: Position schon einmal gesetzt
         private float _dragDist = 1f;
         private Vector3 _dragOffset = Vector3.Zero;
         private bool _big; // "Groß"-Modus: volle UI, bleibt bis Minimieren
@@ -213,16 +219,30 @@ namespace VRCX
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
                 if (root.TryGetProperty("enabled", out var en)) _enabled = en.GetBoolean();
-                if (root.TryGetProperty("mode", out var mo))
+                if (root.TryGetProperty("miniMode", out var mm))
                 {
-                    var mode = mo.GetString() ?? "wrist";
-                    if (mode != _mode)
+                    var mini = mm.GetString() ?? "wrist";
+                    if (mini != _miniMode)
                     {
-                        _mode = mode;
+                        _miniMode = mini;
                         _placeRequested = true;
-                        _bigPlaced = false; // Moduswechsel verwirft die abgelegte Position
                     }
                 }
+                if (root.TryGetProperty("bigMode", out var bm))
+                {
+                    var big = bm.GetString() ?? "hud";
+                    if (big != _bigMode)
+                    {
+                        _bigMode = big;
+                        _placeRequested = true;
+                    }
+                }
+                if (root.TryGetProperty("hudOffX", out var hx))
+                    _hudOffset.X = Math.Clamp(hx.GetSingle(), -150f, 150f) / 100f;
+                if (root.TryGetProperty("hudOffY", out var hy))
+                    _hudOffset.Y = Math.Clamp(hy.GetSingle(), -150f, 150f) / 100f;
+                if (root.TryGetProperty("hudOffZ", out var hz))
+                    _hudOffset.Z = Math.Clamp(hz.GetSingle(), -300f, -10f) / 100f;
                 if (root.TryGetProperty("alpha", out var al)) _alpha = Math.Clamp(al.GetSingle(), 0.2f, 1f);
                 if (root.TryGetProperty("curvature", out var cu)) _curvature = Math.Clamp(cu.GetSingle(), 0f, 0.4f);
                 if (root.TryGetProperty("width", out var wi)) _widthMeters = Math.Clamp(wi.GetSingle(), 0.2f, 2.5f);
@@ -332,7 +352,7 @@ namespace VRCX
             if (wantVisible && !_big && !_placing && !_dragging && !_wristMoving)
             {
                 var now = DateTime.UtcNow;
-                if (_mode != "wrist")
+                if (_miniMode != "wrist")
                 {
                     wantVisible = now <= _flashUntil;
                 }
@@ -457,7 +477,7 @@ namespace VRCX
         /// Handgelenk neben dem VRCX-Wrist-Overlay (wrist-Modus).
         private void ApplyMiniTransform(CVRSystem system, CVROverlay overlay)
         {
-            if (_mode != "wrist")
+            if (_miniMode != "wrist")
             {
                 var mm = Matrix4x4.CreateTranslation(0f, -0.22f, -0.6f);
                 var mh34 = ToHmdMatrix34(mm);
@@ -553,6 +573,11 @@ namespace VRCX
                     continue;
                 if (_overlayHand == 1 && !isLeft) continue;
                 if (_overlayHand == 2 && !isRight) continue;
+                // Seitenwahl gilt auch mit Blickwinkel-Gate — sonst blieb die
+                // Hand-Umschaltung wirkungslos, weil hier einfach die erste
+                // passend gedrehte Hand gewonnen hat.
+                if (_wristHand == "left" && !isLeft) continue;
+                if (_wristHand == "right" && !isRight) continue;
                 if (!poses[i].bPoseIsValid)
                     continue;
 
@@ -673,6 +698,21 @@ namespace VRCX
             logger.Info("wrist mini moved: X={0} Y={1} Z={2} cm", _wristOffX, _wristOffY, _wristOffZ);
         }
 
+        /// Verschobene Position des kopffesten Panels im Mod speichern (cm).
+        private void PersistHudOffset()
+        {
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var json = "{\"type\":\"config\"" +
+                ",\"hudOffX\":" + (_hudOffset.X * 100f).ToString("0.#", ci) +
+                ",\"hudOffY\":" + (_hudOffset.Y * 100f).ToString("0.#", ci) +
+                ",\"hudOffZ\":" + (_hudOffset.Z * 100f).ToString("0.#", ci) + "}";
+            OverlayClient.SendMessage(new OverlayMessage
+            {
+                Type = OverlayMessageType.ChatAction,
+                Data = json
+            });
+        }
+
         /// Platzieren: Panel folgt dem Controller-Laser (1 m Distanz, Billboard
         /// zum HMD); Trigger fixiert an der aktuellen Position (world mode).
         private bool _placeTriggerDown;
@@ -737,31 +777,47 @@ namespace VRCX
                         if (!trigger)
                         {
                             _dragging = false;
-                            if (_mode == "wrist")
+                            _placeRequested = true;
+                            if (_bigMode == "world")
                             {
-                                // Im wrist-Modus darf das Ablegen des großen
-                                // Panels den Modus NICHT auf world kippen —
-                                // sonst verschwindet der Handgelenk-Mini.
-                                _bigPlaced = true;
-                                logger.Info("chat panel dragged (wrist, groß abgelegt)");
+                                _worldPlaced = true; // _lastPanelPos steht schon
+                                logger.Info("chat panel dragged (world)");
                             }
                             else
                             {
-                                _mode = "world"; // bleibt, wo losgelassen
-                                _browser?.ExecuteScriptAsync(
-                                    "window.$vrchat && $vrchat.config", "{\"mode\":\"world\"}");
-                                logger.Info("chat panel dragged (world)");
+                                // Kopffest: das Panel bleibt kopffest, es
+                                // wandert nur sein HMD-lokaler Offset mit.
+                                if (hmd.bPoseIsValid &&
+                                    Matrix4x4.Invert(ToMatrix4x4(hmd.mDeviceToAbsoluteTracking), out var invHmd))
+                                {
+                                    var local = Vector3.Transform(_lastPanelPos, invHmd);
+                                    _hudOffset = new Vector3(
+                                        Math.Clamp(local.X, -1.5f, 1.5f),
+                                        Math.Clamp(local.Y, -1.5f, 1.5f),
+                                        Math.Clamp(local.Z, -3f, -0.1f));
+                                    PersistHudOffset();
+                                }
+                                logger.Info("chat panel dragged (hud offset {0:0.00}/{1:0.00}/{2:0.00} m)",
+                                    _hudOffset.X, _hudOffset.Y, _hudOffset.Z);
                             }
                         }
                     }
                     else if (trigger && !_placeTriggerDown)
                     {
-                        // Platzieren: Trigger fixiert
+                        // Platzieren: Trigger fixiert (schaltet aufs freie
+                        // Weltpanel um — der Mini bleibt davon unberührt)
                         _placing = false;
-                        _mode = "world";
+                        _bigMode = "world";
+                        _worldPlaced = true;
                         _big = true;
+                        _placeRequested = true;
                         _browser?.ExecuteScriptAsync(
-                            "window.$vrchat && $vrchat.config", "{\"mode\":\"world\",\"placing\":false}");
+                            "window.$vrchat && $vrchat.config", "{\"bigMode\":\"world\",\"placing\":false}");
+                        OverlayClient.SendMessage(new OverlayMessage
+                        {
+                            Type = OverlayMessageType.ChatAction,
+                            Data = "{\"type\":\"config\",\"bigMode\":\"world\"}"
+                        });
                         logger.Info("chat panel placed (world)");
                     }
                     _placeTriggerDown = trigger;
@@ -773,7 +829,7 @@ namespace VRCX
         /// Aktuelle Panel-Position in Welt-Koordinaten (für den Drag-Griffpunkt).
         private Vector3 CurrentPanelPos(CVRSystem system)
         {
-            if (_mode == "world" || _bigPlaced)
+            if (_bigMode == "world")
                 return _lastPanelPos;
             // hud (Groß): head-locked Offset in Welt umrechnen
             var poses = new TrackedDevicePose_t[OpenVR.k_unTrackedDeviceIndex_Hmd + 1];
@@ -782,7 +838,7 @@ namespace VRCX
             if (!hmd.bPoseIsValid)
                 return _lastPanelPos;
             var hm = ToMatrix4x4(hmd.mDeviceToAbsoluteTracking);
-            var world = Matrix4x4.CreateTranslation(0f, -0.15f, -0.85f) * hm;
+            var world = Matrix4x4.CreateTranslation(_hudOffset) * hm;
             return new Vector3(world.M41, world.M42, world.M43);
         }
 
@@ -808,17 +864,24 @@ namespace VRCX
         private void ApplyTransform(CVRSystem system, CVROverlay overlay)
         {
             overlay.SetOverlayWidthInMeters(_handle, _widthMeters);
-            if (_bigPlaced && _mode != "world")
+            if (_bigMode == "world")
             {
-                // wrist-Modus mit frei abgelegtem großem Panel: an der
-                // abgelegten Weltposition halten, Billboard zum HMD.
-                var poses = new TrackedDevicePose_t[OpenVR.k_unTrackedDeviceIndex_Hmd + 1];
+                // Frei in der Welt: einmal an der abgelegten Position
+                // ausrichten (Billboard zum HMD), danach bleibt es stehen.
+                var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
                 system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
                 var hmdPose = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
-                var hmdPos = hmdPose.bPoseIsValid
-                    ? new Vector3(hmdPose.mDeviceToAbsoluteTracking.m3,
-                        hmdPose.mDeviceToAbsoluteTracking.m7, hmdPose.mDeviceToAbsoluteTracking.m11)
-                    : _lastPanelPos + new Vector3(0, 0, 1);
+                if (!hmdPose.bPoseIsValid)
+                    return;
+                var hmd = ToMatrix4x4(hmdPose.mDeviceToAbsoluteTracking);
+                if (!_worldPlaced)
+                {
+                    // Noch nie platziert: vor dem Kopf einblenden
+                    var m0 = Matrix4x4.CreateTranslation(0f, -0.1f, -0.9f) * hmd;
+                    _lastPanelPos = new Vector3(m0.M41, m0.M42, m0.M43);
+                    _worldPlaced = true;
+                }
+                var hmdPos = new Vector3(hmd.M41, hmd.M42, hmd.M43);
                 var bz = Vector3.Normalize(hmdPos - _lastPanelPos);
                 var bx = Vector3.Normalize(Vector3.Cross(new Vector3(0, 1, 0), bz));
                 if (float.IsNaN(bx.X)) bx = new Vector3(1, 0, 0);
@@ -831,26 +894,10 @@ namespace VRCX
                 var bhm34 = ToHmdMatrix34(bm);
                 overlay.SetOverlayTransformAbsolute(_handle,
                     ETrackingUniverseOrigin.TrackingUniverseStanding, ref bhm34);
-                return;
             }
-            if (_mode == "world")
+            else // hud: kopffest, Position per Dragbar verschiebbar
             {
-                var poses = new TrackedDevicePose_t[OpenVR.k_unMaxTrackedDeviceCount];
-                system.GetDeviceToAbsoluteTrackingPose(ETrackingUniverseOrigin.TrackingUniverseStanding, 0, poses);
-                var hmdPose = poses[OpenVR.k_unTrackedDeviceIndex_Hmd];
-                if (!hmdPose.bPoseIsValid)
-                    return;
-                var hmd = ToMatrix4x4(hmdPose.mDeviceToAbsoluteTracking);
-                var offset = Matrix4x4.CreateTranslation(0f, -0.1f, -0.9f);
-                var m = offset * hmd;
-                _lastPanelPos = new Vector3(m.M41, m.M42, m.M43);
-                var hm34 = ToHmdMatrix34(m);
-                overlay.SetOverlayTransformAbsolute(_handle,
-                    ETrackingUniverseOrigin.TrackingUniverseStanding, ref hm34);
-            }
-            else // hud (head-locked)
-            {
-                var m = Matrix4x4.CreateTranslation(0f, -0.15f, -0.85f);
+                var m = Matrix4x4.CreateTranslation(_hudOffset);
                 var hm34 = ToHmdMatrix34(m);
                 overlay.SetOverlayTransformTrackedDeviceRelative(_handle,
                     OpenVR.k_unTrackedDeviceIndex_Hmd, ref hm34);
@@ -1039,7 +1086,7 @@ namespace VRCX
             if (trigger && !_triggerDown[bestHand])
             {
                 // Wrist-Mini: kurzer Klick öffnet, Langdruck (400 ms) verschiebt
-                if (!_big && _mode == "wrist" && !_wristLock)
+                if (!_big && _miniMode == "wrist" && !_wristLock)
                 {
                     _miniPressActive = true;
                     _miniPressStartMs = NowMs();
