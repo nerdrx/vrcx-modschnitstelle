@@ -22,16 +22,27 @@ export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
     // Mini und großes Panel sind unabhängig positionierbar — sonst liesse sich
     // "Mini am Handgelenk + großes Panel frei in der Welt" nicht kombinieren.
-    vrMiniMode: 'wrist', // 'wrist' | 'hud'
+    vrMiniMode: 'wrist', // 'wrist' | 'hud' (kopffest) | 'world' (frei abgelegt)
     vrBigMode: 'hud', // 'hud' (kopffest, per Dragbar verschiebbar) | 'world'
     vrHudOffX: 0, // kopffestes Panel: Offset in cm (HMD-lokal)
     vrHudOffY: -15,
     vrHudOffZ: -85,
+    vrMiniOffX: 0, // kopffester Mini: Offset in cm (HMD-lokal)
+    vrMiniOffY: -22,
+    vrMiniOffZ: -60,
+    vrMiniWidth: 0.26, // Mini-Breite in Metern (hud/world)
     vrAlpha: 0.9,
     vrCurvature: 0.08,
     vrWidth: 0.6,
     vrAutoShow: true, // neue Nachricht: Mini-Flash (wrist) bzw. aufklappen
-    vrGesture: true, // Controller-Geste (Grip/A lang drücken) togglet Groß
+    // Controller-Geste öffnet/schließt den großen Chat. Taste, Hand, Haltezeit
+    // und Auslöseart sind einstellbar — Grip ist im Spiel eine Alltagsbewegung
+    // und öffnet den Chat sonst ständig ungewollt.
+    vrGesture: true,
+    vrGestureMask: 2, // Tastenmaske (2 = B/Y bzw. Menü, 4 = Grip, 128 = A/X)
+    vrGestureHand: 'both', // 'both' | 'left' | 'right'
+    vrGestureHold: 1000, // Haltezeit in ms (Modus 'hold')
+    vrGestureMode: 'hold', // 'hold' | 'double' (Doppeltipp)
     // Laser-Kalibrierung in GRAD. Ein cm-Offset der Strahlquelle erzeugt einen
     // distanzabhängigen Bildversatz und "wandert" über die Panelfläche; eine
     // Winkelkorrektur bleibt überall konstant.
@@ -40,8 +51,9 @@ export const DEFAULT_VR_PANEL = {
     vrFlashSec: 10, // Mini-Anzeigedauer bei neuer Nachricht
     vrWristLock: false, // Wrist-Mini verschieben gesperrt
     vrWristGate: false, // true = Mini nur beim Blick aufs Handgelenk, false = dauerhaft
-    vrWristHand: 'left', // bevorzugte Seite, wenn VRCX beide Hände erlaubt
-    vrWristAngle: 30, // Sichtbarkeitswinkel Handgelenk (Grad, nur mit Gate)
+    // 'auto' folgt der VRCX-Overlay-Hand, 'left'/'right' überstimmen sie.
+    vrWristHand: 'auto',
+    vrWristAngle: 30, // Blickwinkel-Kegel in Grad (kleiner = später sichtbar)
     vrWristOffX: 0, // Wrist-Mini-Offset (cm, Controller-lokal)
     vrWristOffY: 0,
     vrWristOffZ: 0,
@@ -186,6 +198,14 @@ async function pushConfig(ctx) {
         hudOffX: s.vrHudOffX,
         hudOffY: s.vrHudOffY,
         hudOffZ: s.vrHudOffZ,
+        miniOffX: s.vrMiniOffX,
+        miniOffY: s.vrMiniOffY,
+        miniOffZ: s.vrMiniOffZ,
+        miniWidth: s.vrMiniWidth,
+        gestureMask: s.vrGestureMask,
+        gestureHand: s.vrGestureHand,
+        gestureHold: s.vrGestureHold,
+        gestureMode: s.vrGestureMode,
         alpha: s.vrAlpha,
         curvature: s.vrCurvature,
         width: s.vrWidth,
@@ -245,6 +265,15 @@ function onAction(ctx) {
                 if (a.hudOffX !== undefined) cs.vrHudOffX = a.hudOffX;
                 if (a.hudOffY !== undefined) cs.vrHudOffY = a.hudOffY;
                 if (a.hudOffZ !== undefined) cs.vrHudOffZ = a.hudOffZ;
+                if (a.miniOffX !== undefined) cs.vrMiniOffX = a.miniOffX;
+                if (a.miniOffY !== undefined) cs.vrMiniOffY = a.miniOffY;
+                if (a.miniOffZ !== undefined) cs.vrMiniOffZ = a.miniOffZ;
+                if (a.miniWidth !== undefined) cs.vrMiniWidth = a.miniWidth;
+                if (a.gestureMask !== undefined) cs.vrGestureMask = a.gestureMask;
+                if (a.gestureHand !== undefined) cs.vrGestureHand = a.gestureHand;
+                if (a.gestureHold !== undefined) cs.vrGestureHold = a.gestureHold;
+                if (a.gestureMode !== undefined) cs.vrGestureMode = a.gestureMode;
+                if (a.wristAngle !== undefined) cs.vrWristAngle = a.wristAngle;
                 if (a.alpha !== undefined) cs.vrAlpha = a.alpha;
                 if (a.curvature !== undefined) cs.vrCurvature = a.curvature;
                 if (a.width !== undefined) cs.vrWidth = a.width;
@@ -257,6 +286,10 @@ function onAction(ctx) {
                 if (a.wristOffY !== undefined) cs.vrWristOffY = a.wristOffY;
                 if (a.wristOffZ !== undefined) cs.vrWristOffZ = a.wristOffZ;
                 await kvSet(ctx, 'chat_settings', cs);
+                // Auch den reaktiven State nachziehen, sonst zeigt die
+                // Desktop-UI weiter die alten Werte (z. B. die in VR
+                // angelernte Gesten-Taste).
+                Object.assign(chatState.settings, cs);
             }
         } catch (err) {
             ctx.warn('vr panel action failed:', err.message || err);
@@ -295,4 +328,26 @@ export function stopVrPanel() {
 /** Aus der Settings-UI aufrufen, wenn sich VR-Panel-Einstellungen ändern. */
 export async function refreshVrPanelConfig(ctx) {
     await pushConfig(ctx);
+}
+
+/**
+ * Lernmodus starten: die nächste im VR gedrückte Controller-Taste wird zur
+ * Gesten-Taste. Das Overlay meldet die Maske über die normale config-Aktion
+ * zurück, deshalb reicht hier der Anstoß.
+ */
+export function learnGesture() {
+    vrCall('learnGesture', {});
+}
+
+/** Bekannte Tastenmasken für die Auswahl in der Desktop-UI. */
+export const GESTURE_BUTTONS = [
+    { mask: 2, label: 'B / Y (Menü)' },
+    { mask: 4, label: 'Grip' },
+    { mask: 128, label: 'A / X' },
+    { mask: 4294967296, label: 'Stick-Klick' }
+];
+
+export function gestureButtonLabel(mask) {
+    const hit = GESTURE_BUTTONS.find((b) => b.mask === mask);
+    return hit ? hit.label : `Taste ${mask}`;
 }
