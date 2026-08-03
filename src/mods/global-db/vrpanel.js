@@ -73,8 +73,13 @@ export const DEFAULT_VR_PANEL = {
     vrHapticInvite: 'triple' // eigenes Muster für Join-Einladungen
 };
 
-/** Auswahl für die Desktop-UI. */
+/**
+ * Auswahl für die Desktop-UI. 'none' muss dabei sein: der Haptik-Schalter
+ * wirkt global, aber man will vielleicht nur bei Pool-Nachrichten Ruhe haben
+ * und bei DMs weiterhin spüren, dass etwas kam.
+ */
 export const HAPTIC_PATTERNS = [
+    { id: 'none', label: 'aus' },
     { id: 'single', label: 'einmal kurz' },
     { id: 'double', label: 'zweimal' },
     { id: 'triple', label: 'dreimal' },
@@ -82,12 +87,25 @@ export const HAPTIC_PATTERNS = [
     { id: 'pulse', label: 'pulsierend' }
 ];
 
-/** Welches Muster ein Ereignis auslöst ('global' | 'dm' | 'invite'). */
+/**
+ * Welches Muster ein Ereignis auslöst ('global' | 'dm' | 'invite').
+ * Rückgabe 'none' heißt: nicht vibrieren.
+ */
 export function hapticPatternFor(settings, event) {
     const s = { ...DEFAULT_VR_PANEL, ...(settings || {}) };
-    if (event === 'dm') return s.vrHapticDm || s.vrHapticPattern;
-    if (event === 'invite') return s.vrHapticInvite || s.vrHapticPattern;
+    // Nur auf undefined zurückfallen — ein bewusst gesetztes 'none' darf nicht
+    // wie ein fehlender Wert behandelt werden.
+    const pick = (v) => (v === undefined || v === null || v === '' ? s.vrHapticPattern : v);
+    if (event === 'dm') return pick(s.vrHapticDm);
+    if (event === 'invite') return pick(s.vrHapticInvite);
     return s.vrHapticPattern;
+}
+
+/** true, wenn für dieses Ereignis überhaupt vibriert werden soll. */
+export function hapticEnabledFor(settings, event) {
+    const s = settings || {};
+    if (s.vrNotyHaptic === false) return false;
+    return hapticPatternFor(s, event) !== 'none';
 }
 
 let timer = null;

@@ -13,7 +13,13 @@ import { chatState, displayName, initChat, isDnd, stopChat } from './chat';
 import { checkEligible, uploadFriendHashes } from './join';
 import { mediaSummary } from './media';
 import { playSound } from './sounds';
-import { hapticPatternFor, startVrPanel, stopVrPanel, vrHaptic } from './vrpanel';
+import {
+    hapticEnabledFor,
+    hapticPatternFor,
+    startVrPanel,
+    stopVrPanel,
+    vrHaptic
+} from './vrpanel';
 import { setCtx } from './runtime';
 
 let timer = null;
@@ -109,7 +115,7 @@ function onChatMessage(ctx) {
                     vr: s.notifyVr !== false
                 });
             }
-            if (s.vrNotyHaptic !== false) {
+            if (hapticEnabledFor(s, soundEvent)) {
                 vrHaptic(
                     s.vrHapticHand || 'both',
                     hapticPatternFor(s, soundEvent),

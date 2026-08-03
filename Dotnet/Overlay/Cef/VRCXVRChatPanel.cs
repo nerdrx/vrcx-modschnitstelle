@@ -1029,6 +1029,11 @@ namespace VRCX
         {
             switch (name)
             {
+                case "none":
+                    // Leere Sequenz = still. Der Mod sendet in diesem Fall zwar
+                    // gar nicht erst, aber ein alter Payload darf hier nicht
+                    // versehentlich als "single" durchrutschen.
+                    return System.Array.Empty<bool>();
                 case "double":
                     return Build(5, 5, 5);
                 case "triple":
