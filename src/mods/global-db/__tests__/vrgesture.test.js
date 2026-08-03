@@ -16,6 +16,15 @@ describe('Gesten-Tasten', () => {
         expect(masks).toContain(2); // B/Y
     });
 
+    it('bietet keinen Stick-Klick an — Legacy-Input meldet dort schon das Kippen', () => {
+        const masks = GESTURE_BUTTONS.map((b) => b.mask);
+        expect(masks).not.toContain(4294967296);
+    });
+
+    it('ist standardmäßig aus, weil der Wrist-Mini das Antippen erlaubt', () => {
+        expect(DEFAULT_VR_PANEL.vrGesture).toBe(false);
+    });
+
     it('jede Maske ist genau ein gesetztes Bit', () => {
         for (const b of GESTURE_BUTTONS) {
             expect(b.mask & (b.mask - 1)).toBe(0);

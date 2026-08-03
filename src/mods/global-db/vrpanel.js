@@ -35,10 +35,11 @@ export const DEFAULT_VR_PANEL = {
     vrCurvature: 0.08,
     vrWidth: 0.6,
     vrAutoShow: true, // neue Nachricht: Mini-Flash (wrist) bzw. aufklappen
-    // Controller-Geste öffnet/schließt den großen Chat. Taste, Hand, Haltezeit
-    // und Auslöseart sind einstellbar — Grip ist im Spiel eine Alltagsbewegung
-    // und öffnet den Chat sonst ständig ungewollt.
-    vrGesture: true,
+    // Controller-Geste öffnet/schließt den großen Chat. Standardmäßig AUS:
+    // seit der Mini am Handgelenk zuverlässig sichtbar ist, reicht Antippen —
+    // und jede belegte Taste kollidiert im Spiel früher oder später mit einer
+    // Alltagsbewegung.
+    vrGesture: false,
     vrGestureMask: 2, // Tastenmaske (2 = B/Y bzw. Menü, 4 = Grip, 128 = A/X)
     vrGestureHand: 'both', // 'both' | 'left' | 'right'
     vrGestureHold: 1000, // Haltezeit in ms (Modus 'hold')
@@ -342,12 +343,17 @@ export function learnGesture() {
     vrCall('learnGesture', {});
 }
 
-/** Bekannte Tastenmasken für die Auswahl in der Desktop-UI. */
+/**
+ * Bekannte Tastenmasken für die Auswahl in der Desktop-UI.
+ * Kein Stick-Klick: das Legacy-Input-System meldet beim Index schon eine
+ * Stickbewegung als Druck auf k_EButton_SteamVR_Touchpad, die Geste löste
+ * damit bei jedem zweimaligen Kippen aus. Wer die Taste trotzdem will, kann
+ * sie über den Lernmodus belegen.
+ */
 export const GESTURE_BUTTONS = [
     { mask: 2, label: 'B / Y (Menü)' },
     { mask: 4, label: 'Grip' },
-    { mask: 128, label: 'A / X' },
-    { mask: 4294967296, label: 'Stick-Klick' }
+    { mask: 128, label: 'A / X' }
 ];
 
 export function gestureButtonLabel(mask) {
