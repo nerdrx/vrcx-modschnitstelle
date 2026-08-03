@@ -7,6 +7,7 @@ import {
     mediaSummary,
     parseMessage,
     resolveEmbed,
+    tenorAnimatedFrom,
     urlExtension
 } from '../media';
 
@@ -93,15 +94,55 @@ describe('Vorschau-Text', () => {
     });
 });
 
+describe('Tenor: animierte Variante ableiten', () => {
+    // Tenors oEmbed liefert nur ein statisches PNG. Die animierte Datei liegt
+    // unter derselben Id mit anderem Suffix-Zeichen und Endung .gif.
+    it('macht aus dem Standbild-PNG die GIF-URL', () => {
+        expect(
+            tenorAnimatedFrom('https://media.tenor.com/sz6RV3BjrDcAAAAN/katze.png')
+        ).toBe('https://media.tenor.com/sz6RV3BjrDcAAAAC/katze.gif');
+    });
+
+    it('lässt eine bereits animierte URL unverändert', () => {
+        const gif = 'https://media.tenor.com/xAAAAC/a.gif';
+        expect(tenorAnimatedFrom(gif)).toBe(gif);
+    });
+
+    it('fasst fremde Hosts nicht an', () => {
+        expect(tenorAnimatedFrom('https://example.com/a.png')).toBeNull();
+    });
+
+    it('gibt null zurück, wenn nichts zu ersetzen ist', () => {
+        expect(tenorAnimatedFrom('')).toBeNull();
+        expect(tenorAnimatedFrom(null)).toBeNull();
+    });
+});
+
 describe('oEmbed-Aufloesung', () => {
-    it('loest eine Tenor-Seite in eine direkte URL auf', async () => {
+    it('nimmt bei Giphy die direkte url — dort ist sie schon animiert', async () => {
         clearEmbedCache();
         const fake = async () => ({
             ok: true,
-            json: async () => ({ url: 'https://media.tenor.com/abc.gif' })
+            json: async () => ({ url: 'https://media0.giphy.com/media/abc/giphy.gif' })
         });
-        const out = await resolveEmbed('https://tenor.com/view/x-1', fake);
-        expect(out).toBe('https://media.tenor.com/abc.gif');
+        const out = await resolveEmbed('https://giphy.com/gifs/abc', fake);
+        expect(out.url).toBe('https://media0.giphy.com/media/abc/giphy.gif');
+    });
+
+    it('leitet bei Tenor die Animation ab und merkt sich das Standbild', async () => {
+        clearEmbedCache();
+        // Genau die Form, die Tenor laut Live-Abruf zurückgibt: kein url-Feld.
+        const fake = async () => ({
+            ok: true,
+            json: async () => ({
+                type: 'video',
+                html: '<iframe src="https://tenor.com/embed/123"></iframe>',
+                thumbnail_url: 'https://media.tenor.com/sz6RV3BjrDcAAAAN/katze.png'
+            })
+        });
+        const out = await resolveEmbed('https://tenor.com/view/katze-gif-123', fake);
+        expect(out.url).toBe('https://media.tenor.com/sz6RV3BjrDcAAAAC/katze.gif');
+        expect(out.still).toBe('https://media.tenor.com/sz6RV3BjrDcAAAAN/katze.png');
     });
 
     it('gibt null zurück statt zu werfen, wenn der Abruf scheitert', async () => {
@@ -122,6 +163,17 @@ describe('oEmbed-Aufloesung', () => {
         await resolveEmbed('https://tenor.com/view/x-3', fake);
         await resolveEmbed('https://tenor.com/view/x-3', fake);
         expect(calls).toBe(1);
+    });
+
+    it('nutzt das Standbild, wenn sich nichts ableiten lässt', async () => {
+        clearEmbedCache();
+        const fake = async () => ({
+            ok: true,
+            json: async () => ({ thumbnail_url: 'https://example.com/still.png' })
+        });
+        const out = await resolveEmbed('https://tenor.com/view/x-5', fake);
+        expect(out.url).toBe('https://example.com/still.png');
+        expect(out.still).toBe('https://example.com/still.png');
     });
 
     it('ignoriert unsichere Zieladressen aus der Antwort', async () => {

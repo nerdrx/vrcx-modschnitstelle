@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
     DEFAULT_VR_PANEL,
     GESTURE_BUTTONS,
-    gestureButtonLabel
+    STICK_MASK,
+    gestureButtonLabel,
+    migrateGestureButton
 } from '../vrpanel';
 
 // Grip auf beiden Händen ist im Spiel eine Alltagsbewegung und öffnete den
@@ -30,6 +32,23 @@ describe('Gesten-Tasten', () => {
             expect(b.mask & (b.mask - 1)).toBe(0);
             expect(b.mask).toBeGreaterThan(0);
         }
+    });
+
+    it('benennt auch die nicht mehr wählbare Stick-Maske im Klartext', () => {
+        // Sonst stand in der UI nur "Taste 4294967296".
+        expect(gestureButtonLabel(STICK_MASK)).toContain('Stick-Klick');
+    });
+
+    it('setzt eine gespeicherte Stick-Belegung auf B/Y zurück', () => {
+        const { settings, changed } = migrateGestureButton({ vrGestureMask: STICK_MASK });
+        expect(changed).toBe(true);
+        expect(settings.vrGestureMask).toBe(2);
+    });
+
+    it('lässt eine gültige Belegung in Ruhe', () => {
+        const { settings, changed } = migrateGestureButton({ vrGestureMask: 4 });
+        expect(changed).toBe(false);
+        expect(settings.vrGestureMask).toBe(4);
     });
 
     it('benennt bekannte Tasten und fällt sonst auf die Maske zurück', () => {

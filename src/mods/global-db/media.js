@@ -128,10 +128,35 @@ export function mediaSummary(text) {
 }
 
 /**
+ * Tenors oEmbed liefert KEIN url-Feld, sondern nur ein iframe-html und ein
+ * statisches PNG als thumbnail_url — deshalb wurde bisher ein Standbild
+ * statt des animierten GIFs angezeigt.
+ *
+ * Die Medien-URLs folgen dem Muster
+ *   https://media.tenor.com/<id>AAAA<X>/<name>.<ext>
+ * wobei <X> das Format codiert: N = statisches PNG, C = volles GIF.
+ * Das Schema ist reverse-engineered und nicht dokumentiert, kann sich also
+ * ändern — deshalb wird die abgeleitete URL nur als Kandidat behandelt und
+ * das Standbild als Rückfallebene mitgeführt.
+ */
+export function tenorAnimatedFrom(thumbUrl) {
+    if (!thumbUrl || !/(^|\.)tenor\.com/i.test(thumbUrl)) return null;
+    if (/\.gif($|\?)/i.test(thumbUrl)) return thumbUrl;
+    const swapped = thumbUrl
+        .replace(/(AAAA)[A-Za-z0-9](\/)/, '$1C$2')
+        .replace(/\.(png|jpe?g|webp)($|\?)/i, '.gif$2');
+    return swapped !== thumbUrl && isSafeUrl(swapped) ? swapped : null;
+}
+
+/**
  * Betrachter-Seite (Tenor/Giphy) in eine direkte Medien-URL auflösen — über
  * oEmbed, das keinen API-Key braucht. Schlägt der Abruf fehl, bleibt es bei
  * einem normalen Link; das ist kein Fehlerfall, sondern der Normalzustand
  * ohne Netz.
+ *
+ * Rückgabe: { url, still } — url ist die beste Vermutung (bei Tenor die
+ * abgeleitete Animation), still das gesicherte Standbild für den
+ * onerror-Fallback der Anzeige. null, wenn nichts Brauchbares kam.
  */
 const embedCache = new Map();
 
@@ -145,8 +170,12 @@ export async function resolveEmbed(url, fetchImpl) {
         const res = await doFetch(spec.endpoint + encodeURIComponent(url));
         if (!res.ok) throw new Error(String(res.status));
         const data = await res.json();
-        const direct = data.url || data.thumbnail_url || null;
-        const out = direct && isSafeUrl(direct) ? direct : null;
+        // Giphy liefert in url bereits das animierte GIF, Tenor gar kein url.
+        const direct = isSafeUrl(data.url || '') ? data.url : null;
+        const still = isSafeUrl(data.thumbnail_url || '') ? data.thumbnail_url : null;
+        const animated = direct || tenorAnimatedFrom(still);
+        const best = animated || still;
+        const out = best ? { url: best, still: still || best } : null;
         embedCache.set(url, out);
         return out;
     } catch {
