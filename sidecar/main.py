@@ -514,6 +514,16 @@ def main():
         asyncio.run(sidecar.run())
     except KeyboardInterrupt:
         logger.info("Sidecar stopped by user.")
+    except OSError as e:
+        # WinError 10048 / EADDRINUSE: es laeuft bereits eine Instanz.
+        # Das ist kein Fehler — VRCX (oder ein Client) nutzt einfach die
+        # laufende Instanz. Sauber und leise beenden statt Traceback.
+        if getattr(e, "errno", None) in (10048, 98):
+            logger.info(
+                "Sidecar laeuft bereits auf %s:%s — diese zweite Instanz beendet sich.",
+                HOST, PORT)
+            sys.exit(0)
+        raise
 
 if __name__ == "__main__":
     main()
