@@ -140,6 +140,41 @@ def setup_stt_model():
     except Exception as e:
         print(f"[WARN] Failed to preload Whisper model via Python package: {e}")
 
+def setup_translator_models():
+    """Downloads and installs Argos Translate models via the official package index.
+
+    Note: direct URL downloads from argos-net.com return 403 for generic
+    user agents, so we use the argostranslate package API instead. It
+    verifies package integrity internally and installs into the argos
+    data directory. Required pairs: de->en (base), en->ru and en->ja
+    (targets; de->ru and de->ja pivot over en), en->de (reverse pivot).
+    """
+    import argostranslate.package
+    import argostranslate.translate
+
+    required_pairs = [("de", "en"), ("en", "ru"), ("en", "ja"), ("en", "de")]
+
+    installed = {l.code for l in argostranslate.translate.get_installed_languages()}
+    if {"de", "en", "ru", "ja"}.issubset(installed):
+        print("[OK] Argos Translate models already installed.")
+        return
+
+    argostranslate.package.update_package_index()
+    available = argostranslate.package.get_available_packages()
+
+    for from_code, to_code in required_pairs:
+        match = [p for p in available if p.from_code == from_code and p.to_code == to_code]
+        if not match:
+            print(f"[WARN] No argos package for {from_code}->{to_code} in index.")
+            continue
+        print(f"Installing argos package {from_code}->{to_code} ...")
+        try:
+            match[0].install()
+        except Exception as e:
+            print(f"[WARN] Could not install {from_code}->{to_code}: {e}")
+
+    print("[OK] Argos Translate models installed.")
+
 def main():
     print("===================================================")
     print(" VRCX Voice-Sidecar Model & Binary Downloader")
@@ -149,6 +184,7 @@ def main():
     setup_piper_binary()
     setup_tts_voices()
     setup_stt_model()
+    setup_translator_models()
 
     print("\n[SUCCESS] All models and binaries downloaded successfully.")
 
