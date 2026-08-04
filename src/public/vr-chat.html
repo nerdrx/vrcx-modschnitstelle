@@ -165,6 +165,9 @@
         <div class="hbtn" data-angle="-5">−</div>
         <span id="angleval">30°</span>
         <div class="hbtn" data-angle="5">+</div>
+        <span style="margin-left:16px" title="Live-Übersetzer: dein Mikro → VRChat-Chatbox (per OSC)">Übersetzer</span>
+        <div id="trbtn" class="hbtn">aus</div>
+        <div id="trlangbtn" class="hbtn" title="Zielsprache">EN</div>
     </div>
 </div>
 <div id="bubble">
@@ -186,6 +189,9 @@
     <div id="miniQuick"></div>
     <div class="hint">Antippen: öffnen · Halten: verschieben</div>
 </div>
+<div id="pttInd" style="display:none; position:fixed; top:10px; left:50%; transform:translateX(-50%);
+    background:#c0392b; color:#fff; padding:8px 22px; border-radius:16px; font-size:26px;
+    font-weight:600; z-index:99; box-shadow:0 0 18px rgba(192,57,43,.8)">&#127908; Aufnahme…</div>
 <div id="cursor"></div>
 
 <script>
@@ -203,6 +209,8 @@
         // unabhängig positioniert.
         miniMode: 'wrist', bigMode: 'hud',
         wristGate: false, wristHand: 'auto', wristAngle: 30,
+        // P4: Voice — PTT-Indikator + Translator-Schalter im ⚙
+        ptt: false, pttEnabled: false, translatorEnabled: false, translatorTarget: 'en',
         alpha: 0.9, curvature: 0.08, width: 0.6,
         // Laser-Kalibrierung in GRAD (Neigung + Seitwärtsdrehung) — ein
         // cm-Offset der Strahlquelle wandert über die Panelfläche, ein
@@ -318,6 +326,9 @@
         $('wristlockbtn').classList.toggle('active', state.wristLock);
         $('wristgatebtn').textContent = state.wristGate ? 'AN' : 'aus';
         $('wristgatebtn').classList.toggle('active', state.wristGate);
+        $('trbtn').textContent = state.translatorEnabled ? 'AN' : 'aus';
+        $('trbtn').classList.toggle('active', state.translatorEnabled);
+        $('trlangbtn').textContent = (state.translatorTarget || 'en').toUpperCase();
         $('wristhandbtn').textContent =
             state.wristHand === 'right' ? 'R' : state.wristHand === 'left' ? 'L' : 'auto';
         $('angleval').textContent = Math.round(state.wristAngle) + '°';
@@ -490,8 +501,27 @@
                 if (c.wristAngle !== undefined) state.wristAngle = c.wristAngle;
                 if (c.gestureMask !== undefined) state.gestureMask = c.gestureMask;
                 if (c.quickReplies !== undefined) state.quickReplies = c.quickReplies;
+                if (c.translatorEnabled !== undefined) state.translatorEnabled = c.translatorEnabled;
+                if (c.translatorTarget !== undefined) state.translatorTarget = c.translatorTarget;
+                if (c.pttEnabled !== undefined) state.pttEnabled = c.pttEnabled;
                 render();
             } catch (e) {}
+        },
+        // P4: Diktat (PTT) landet im Entwurf — Leerzeichen-getrennt anhängen.
+        insertText(json) {
+            try {
+                const d = typeof json === 'string' ? JSON.parse(json) : json;
+                const t = printable(d.text || '').trim();
+                if (!t) return;
+                state.draft = state.draft ? state.draft + ' ' + t : t;
+                render();
+            } catch (e) {}
+        },
+        // P4: Mikro-Indikator, solange die PTT-Taste gehalten wird.
+        ptt(active) {
+            state.ptt = active === true || active === 'true';
+            const el = $('pttInd');
+            if (el) el.style.display = state.ptt ? 'block' : 'none';
         },
         keyboardDone(text) {
             // GetKeyboardText ist bei der Minimal-Tastatur unbrauchbar: mal
@@ -634,6 +664,18 @@
         state.wristHand = state.wristHand === 'auto' ? 'left'
             : state.wristHand === 'left' ? 'right' : 'auto';
         cfg({ wristHand: state.wristHand });
+        render();
+    };
+    // P4: Live-Translator aus dem Panel steuern (persistiert im Mod)
+    $('trbtn').onclick = () => {
+        state.translatorEnabled = !state.translatorEnabled;
+        act({ type: 'config', translatorEnabled: state.translatorEnabled });
+        render();
+    };
+    $('trlangbtn').onclick = () => {
+        state.translatorTarget = state.translatorTarget === 'en' ? 'ru'
+            : state.translatorTarget === 'ru' ? 'ja' : 'en';
+        act({ type: 'config', translatorTarget: state.translatorTarget });
         render();
     };
     for (const el of document.querySelectorAll('[data-angle]')) {

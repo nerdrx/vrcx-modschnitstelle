@@ -180,6 +180,52 @@
                 <input v-model.number="st.settings.vrFlashSec" type="number" min="2" max="120"
                     class="tgl-num" @change="saveVrSettings" />s
             </span>
+            <!-- P4: Voice-Sidecar — Diktat (PTT), Vorlesen (TTS), Live-Übersetzer -->
+            <label class="tgl" title="Voice-Sidecar: Diktat, Vorlesen und Live-Übersetzer (läuft lokal)">
+                <input type="checkbox" v-model="st.settings.voiceEnabled" @change="saveVoiceSettings" />
+                Voice
+            </label>
+            <template v-if="st.settings.voiceEnabled">
+                <span class="tgl" title="Ordner des Voice-Sidecars (enthält start.cmd)">
+                    Pfad
+                    <input v-model="st.settings.sidecarPath" type="text" class="tgl-num"
+                        style="width: 200px" placeholder="…\sidecar" @change="saveVoiceSettings" />
+                </span>
+                <label class="tgl" title="Push-to-Talk im VR-Panel: Taste halten = Diktat in den Entwurf">
+                    <input type="checkbox" v-model="st.settings.vrPtt" @change="saveVoiceSettings" />
+                    PTT
+                </label>
+                <span v-if="st.settings.vrPtt" class="tgl" title="Welche Hand die PTT-Taste hält (B/Y bzw. Menü)">
+                    <select v-model="st.settings.vrPttHand" class="tgl-select" @change="saveVoiceSettings">
+                        <option value="left">links</option>
+                        <option value="right">rechts</option>
+                        <option value="both">beide</option>
+                    </select>
+                </span>
+                <label class="tgl" title="Pool-Nachrichten vorlesen">
+                    <input type="checkbox" v-model="st.settings.ttsGlobal" @change="saveVoiceSettings" />
+                    Vorlesen: Pool
+                </label>
+                <label class="tgl" title="Direktnachrichten vorlesen">
+                    <input type="checkbox" v-model="st.settings.ttsDm" @change="saveVoiceSettings" />
+                    DM
+                </label>
+                <label class="tgl" title="Live-Übersetzer: dein Mikro → VRChat-Chatbox (per OSC, Port 9000)">
+                    <input type="checkbox" v-model="st.settings.translatorEnabled" @change="saveVoiceSettings" />
+                    Übersetzer
+                </label>
+                <span v-if="st.settings.translatorEnabled" class="tgl" title="Zielsprache">
+                    <select v-model="st.settings.translatorTarget" class="tgl-select" @change="saveVoiceSettings">
+                        <option value="en">EN</option>
+                        <option value="ru">RU</option>
+                        <option value="ja">JA</option>
+                    </select>
+                </span>
+                <span class="tgl" :class="{ err: !sidecarState.connected }"
+                    title="Verbindungsstatus zum Voice-Sidecar (ws://127.0.0.1:34710)">
+                    {{ sidecarState.connected ? '● Sidecar verbunden' : '○ Sidecar getrennt' }}
+                </span>
+            </template>
             <span class="spacer"></span>
             <span v-if="st.lastError" class="err">{{ st.lastError }}</span>
         </div>
@@ -412,6 +458,13 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { getCtx } from './runtime';
 import { kvSet } from './db';
+import {
+    DEFAULT_VOICE,
+    applyTranslator,
+    ensureSidecar,
+    sidecarState,
+    stopSidecar
+} from './sidecar';
 import {
     ampel,
     chatState as st,
@@ -705,9 +758,25 @@ function ensureVrDefaults() {
     for (const [k, v] of Object.entries({
         ...DEFAULT_VR_PANEL,
         ...DEFAULT_MEDIA,
-        ...DEFAULT_SOUNDS
+        ...DEFAULT_SOUNDS,
+        ...DEFAULT_VOICE
     })) {
         if (st.settings[k] === undefined) st.settings[k] = v;
+    }
+}
+
+/**
+ * P4: Voice-Einstellungen speichern und sofort anwenden — Sidecar
+ * verbinden/trennen und den Translator-Zustand herstellen.
+ */
+async function saveVoiceSettings() {
+    await saveVrSettings();
+    const ctx2 = getCtx();
+    if (st.settings.voiceEnabled) {
+        await ensureSidecar(ctx2, st.settings);
+        applyTranslator(st.settings);
+    } else {
+        stopSidecar();
     }
 }
 
