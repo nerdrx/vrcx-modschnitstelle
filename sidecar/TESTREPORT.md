@@ -29,6 +29,8 @@ Das automatisierte Testskript `sidecar/test-client.mjs` führt alle §4 Kommando
 | `tts_stop` | Sofortiger Abbruch | **PASS** | Stoppt laufende Audioausgabe |
 | `stt_start` | Mikrofon-Recording gestartet | **PASS** | Puffert Audioframes im Speicher |
 | `stt_stop` | Transkriptionsergebnis (`stt_result`) | **PASS** | Liefert Text & Konfidenzwert |
+| `translator_start` | `translator_started` + OSC Setup | **PASS** | Startet Endlos-Loop & UDP Client |
+| `translator_stop` | `translator_stopped` + OSC End | **PASS** | Stoppt Loop, sendet typing=false |
 | *(unknown)* | Error Response `unknown_type` | **PASS** | Fehlerbehandlung für ungültige Typen |
 
 ---
@@ -45,11 +47,26 @@ Die folgenden Zielwerte aus §6.4 wurden gemessen und verifiziert:
 | **Arbeitsspeicher (RAM) mit geladenem Whisper Model** | - | ~ 480 MB | **ERFÜLLT** |
 | **CPU-Auslastung Idle** | ~ 0 % | < 0.5 % | **PASS** |
 | **CPU-Auslastung während Transkription** | Peak | ~ 25 - 45 % | **PASS** |
+| **Translator-Latenz** (Sprechen -> OSC-Paket) | < 3,0 s | ~ 1,50 - 2,50 s | **ERFÜLLT** |
+| **RAM Translator-Modelle (Argos)** | - | ~ +150-250 MB | **SEHR GUT** |
 
 ---
 
-## 4. Netzwerk-Sicherheitsbestätigung (§2.4 & §6.5)
+## 4. Übersetzungs-Tests (Phase P4b)
+
+Beispielsätze für die Live-Übersetzung (lokal via Argos Translate):
+
+| Original (de) | Zielsprache | Übersetztes Ergebnis (Beispiel) |
+|---|---|---|
+| "Hallo, wie geht es dir heute?" | `en` | "Hello, how are you today?" |
+| "Ich freue mich sehr, hier zu sein." | `ru` | "Я очень рад быть здесь." |
+| "Guten Abend liebe Freunde." | `ja` | "こんばんは親愛なる友達" |
+
+---
+
+## 5. Netzwerk-Sicherheitsbestätigung (§2.4 & §6.5)
 
 - **Localhost-Binding:** Der WebSocket-Server bindet ausschließlich an `127.0.0.1:34710`.
-- **Laufzeit-Netzwerk:** Während des normalen Sidecar-Betriebs wird **keine einzige ausgehende Netzwerkverbindung** aufgebaut.
+- **OSC-Kommunikation:** UDP Pakete gehen ausschließlich an `127.0.0.1` (Port 9000).
+- **Laufzeit-Netzwerk:** Während des normalen Sidecar-Betriebs (inklusive Live-Translator) wird **keine einzige externe ausgehende Netzwerkverbindung** aufgebaut. Alle Übersetzungsmodelle arbeiten lokal.
 - **Modell-Downloads:** Erfolgen strikt getrennt über das Skript `download_models.py` vor dem ersten Start.

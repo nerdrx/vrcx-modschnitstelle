@@ -15,6 +15,9 @@ let results = {
     tts_stop: false,
     stt_start: false,
     stt_stop: false,
+    translator_start: false,
+    translator_mutex_stt: false,
+    translator_stop: false,
     unknown_type_error: false
 };
 
@@ -132,7 +135,47 @@ async function runTests() {
         logResult('stt_stop', false, e.message);
     }
 
-    // Test 8: unknown_type
+    // Test 8: translator_start & OSC UDP Check & translator_stop
+    try {
+        const dgram = await import('node:dgram');
+        const oscServer = dgram.createSocket('udp4');
+        let oscMessages = [];
+        
+        const oscPort = await new Promise((resolve) => {
+            oscServer.bind(0, '127.0.0.1', () => resolve(oscServer.address().port));
+        });
+        
+        oscServer.on('message', (msg) => {
+            oscMessages.push(msg.toString());
+        });
+        
+        const msg = await sendAndReceive(ws, { type: 'translator_start', target: 'en', osc: { port: oscPort } }, m => m.type === 'translator_started', 5000);
+        logResult('translator_start', msg.target === 'en', `(translator_started target=${msg.target})`);
+        
+        // Test Mutex: stt_start should fail while translator is active
+        try {
+            const sttFail = await sendAndReceive(ws, { type: 'stt_start' }, m => m.type === 'error' && m.message === 'translator_active', 2000);
+            logResult('translator_mutex_stt', true, `(stt_start correctly blocked)`);
+        } catch(e) {
+            logResult('translator_mutex_stt', false, e.message);
+        }
+        
+        // Wait briefly, then stop
+        await new Promise(r => setTimeout(r, 1000));
+        const stopMsg = await sendAndReceive(ws, { type: 'translator_stop' }, m => m.type === 'translator_stopped', 5000);
+        
+        // Check if OSC packets were received (at least a typing=false on stop)
+        const hasOsc = oscMessages.some(m => m.includes('/chatbox/typing') || m.includes('/chatbox/input'));
+        logResult('translator_stop', hasOsc, `(translator_stopped received, OSC packets captured: ${oscMessages.length})`);
+        
+        oscServer.close();
+    } catch (e) {
+        logResult('translator_start', false, e.message);
+        logResult('translator_mutex_stt', false, 'skipped');
+        logResult('translator_stop', false, 'skipped');
+    }
+
+    // Test 9: unknown_type
     try {
         const msg = await sendAndReceive(ws, { type: 'unknown_command_abc' }, m => m.type === 'error' && m.message === 'unknown_type');
         logResult('unknown_type_error', true, `(handled unknown_type error: message="${msg.message}")`);

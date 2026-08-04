@@ -17,6 +17,8 @@ import numpy as np
 import sounddevice as sd
 from scipy.io import wavfile
 import websockets
+import queue
+import translator_engine
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="[Sidecar] %(asctime)s - %(levelname)s - %(message)s")
@@ -50,6 +52,13 @@ class VoiceSidecar:
         self.piper_bin_path = None
         self.current_tts_process = None
         self.is_playing_audio = False
+
+        # Translator state
+        self.translator_ready = False
+        self.translator_active = False
+        self.translator_target = None
+        self.osc_chatbox = None
+        self.translator_task = None
 
     def find_piper_binary(self):
         """Locates the Piper executable."""
@@ -105,12 +114,21 @@ class VoiceSidecar:
             device = "cuda" if self.gpu_enabled else "cpu"
             compute_type = "float16" if self.gpu_enabled else "int8"
             
-            self.stt_model = WhisperModel("small", device=device, compute_type=compute_type, download_root=stt_dir)
+            # local_files_only: never contact huggingface at runtime (localhost-only rule);
+            # the model is fetched by download_models.py beforehand.
+            self.stt_model = WhisperModel("small", device=device, compute_type=compute_type, download_root=stt_dir, local_files_only=True)
             self.stt_ready = True
             logger.info("STT Ready (faster-whisper small model loaded).")
         except Exception as e:
             logger.warning(f"STT Not Ready (failed to load model: {e})")
             self.stt_ready = False
+
+        # Check Translator Models
+        self.translator_ready = translator_engine.check_translator_ready()
+        if self.translator_ready:
+            logger.info("Translator Ready (Argos models found).")
+        else:
+            logger.warning("Translator Not Ready (Argos models missing).")
 
     def get_ready_status(self):
         return {
@@ -123,6 +141,11 @@ class VoiceSidecar:
             "stt": {
                 "ready": self.stt_ready,
                 "model": "small" if self.stt_ready else ""
+            },
+            "translator": {
+                "ready": self.translator_ready,
+                "active": self.translator_active,
+                "target": self.translator_target
             },
             "gpu": self.gpu_enabled
         }
@@ -306,6 +329,80 @@ class VoiceSidecar:
             logger.error(f"STT Error: {e}")
             return "", 0.0
 
+    async def run_translator(self, target_lang, source_lang, show_original):
+        self.is_recording = True
+        q = queue.Queue()
+
+        def callback(indata, frames, time, status):
+            if self.is_recording:
+                q.put(indata.copy())
+                
+        try:
+            stream = sd.InputStream(samplerate=self.sample_rate, channels=1, dtype='float32', callback=callback)
+            stream.start()
+        except Exception as e:
+            logger.error(f"Failed to start audio stream for translator: {e}")
+            self.translator_active = False
+            return
+            
+        logger.info(f"Live Translator Loop started (Target: {target_lang}).")
+        
+        accumulated = []
+        silence_chunks = 0
+        is_speaking = False
+        threshold = 0.01 # RMS threshold
+        
+        while self.translator_active:
+            try:
+                chunk = await asyncio.to_thread(q.get, timeout=0.5)
+                rms = np.sqrt(np.mean(chunk**2))
+                
+                if rms > threshold:
+                    if not is_speaking:
+                        is_speaking = True
+                        self.osc_chatbox.set_typing(True)
+                    silence_chunks = 0
+                    accumulated.append(chunk)
+                else:
+                    if is_speaking:
+                        silence_chunks += 1
+                        accumulated.append(chunk)
+                        
+                        # approx 0.8s of silence triggers processing
+                        if silence_chunks > int(self.sample_rate / len(chunk) * 0.8):
+                            is_speaking = False
+                            audio_data = np.concatenate(accumulated, axis=0).flatten()
+                            accumulated = []
+                            asyncio.create_task(self.process_translator_chunk(audio_data, target_lang, source_lang, show_original))
+            except queue.Empty:
+                pass
+                
+        stream.stop()
+        stream.close()
+        self.is_recording = False
+        self.osc_chatbox.set_typing(False)
+        logger.info("Live Translator Loop stopped.")
+
+    async def process_translator_chunk(self, audio_data, target_lang, source_lang, show_original):
+        text, conf = await self.transcribe_audio(audio_data, language=source_lang)
+        if text and conf > 0.4:
+            await self.broadcast({
+                "type": "translator_partial",
+                "original": text
+            })
+            
+            translated_text = await asyncio.to_thread(translator_engine.translate_text, text, target_lang, source_lang)
+            
+            await self.broadcast({
+                "type": "translator_final",
+                "original": text,
+                "translated": translated_text,
+                "target": target_lang
+            })
+            
+            await self.osc_chatbox.send_text(translated_text, show_original, text)
+        self.osc_chatbox.set_typing(False)
+
     async def handle_client(self, websocket):
         logger.info(f"Client connected: {websocket.remote_address}")
         self.connected_clients.add(websocket)
@@ -345,8 +442,44 @@ class VoiceSidecar:
                 elif msg_type == "tts_stop":
                     self.stop_current_tts()
 
+                elif msg_type == "translator_start":
+                    if self.is_recording:
+                        await websocket.send(json.dumps({"type": "error", "message": "stt_active"}))
+                        continue
+                    
+                    target = msg.get("target", "en")
+                    source = msg.get("source", "de")
+                    osc_config = msg.get("osc", {})
+                    host = osc_config.get("host", "127.0.0.1")
+                    port = osc_config.get("port", 9000)
+                    show_orig = msg.get("show_original", False)
+                    
+                    self.translator_target = target
+                    self.osc_chatbox = translator_engine.OscChatbox(host=host, port=port)
+                    self.translator_active = True
+                    
+                    self.translator_task = asyncio.create_task(self.run_translator(target, source, show_orig))
+                    
+                    await websocket.send(json.dumps({
+                        "type": "translator_started",
+                        "target": target
+                    }))
+                    await self.broadcast(self.get_ready_status())
+
+                elif msg_type == "translator_stop":
+                    self.translator_active = False
+                    if self.translator_task:
+                        await self.translator_task
+                        self.translator_task = None
+                    self.translator_target = None
+                    await websocket.send(json.dumps({"type": "translator_stopped"}))
+                    await self.broadcast(self.get_ready_status())
+
                 elif msg_type == "stt_start":
-                    self.start_microphone_recording()
+                    if self.translator_active:
+                        await websocket.send(json.dumps({"type": "error", "message": "translator_active"}))
+                    else:
+                        self.start_microphone_recording()
 
                 elif msg_type == "stt_stop":
                     audio_data = self.stop_microphone_recording()

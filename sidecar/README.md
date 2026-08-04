@@ -45,6 +45,9 @@ Um die Sprachmodelle herunterzuladen:
   - `en_US-lessac-medium` (Englisch)
   Platziert in `sidecar/models/tts/`
 - **STT Modell:** `faster-whisper` (Small Model) in `sidecar/models/stt/`
+- **Translator Modelle (Phase P4b):** `argostranslate` Sprachpakete (de->en, en->ja, en->ru) in `sidecar/models/translator/`.
+  - Quelle: [Argos Open Tech](https://www.argosopentech.com/)
+  - Lizenz: CC0 oder ähnliche Open-Source-Lizenzen (siehe Pakete).
 
 Die Quellen und SHA256-Prüfsummen werden während des Downloads automatisch verifiziert.
 
@@ -74,6 +77,10 @@ Alle Nachrichten sind JSON-Objekte über WebSocket Textframes.
 | `{"type":"tts_stop"}` | Bricht laufende TTS-Wiedergabe ab |
 | `{"type":"stt_start","language":"de"}` | Startet Mikrofonaufnahme |
 | `{"type":"stt_stop"}` | Beendet Aufnahme & führt Transkription durch |
+| `{"type":"translator_start","target":"en"\|"ru"\|"ja","source":"de"?,"osc":{"host":"…"?,"port":9000?}?,"show_original":bool?}` | Startet den Live-Translator-Loop mit Ausgabe an VRChat-Chatbox via OSC |
+| `{"type":"translator_stop"}` | Beendet den Live-Translator-Loop |
+
+*(Zusätzlich werden Broadcast-Events `translator_partial` und `translator_final` an alle Clients gesendet, wenn der Translator aktiv ist.)*
 
 ---
 
