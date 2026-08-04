@@ -14,6 +14,16 @@ import { checkEligible, uploadFriendHashes } from './join';
 import { mediaSummary } from './media';
 import { playSound } from './sounds';
 import {
+    applyTranslator,
+    ensureSidecar,
+    pickTtsVoice,
+    shouldTts,
+    sidecarState,
+    stopSidecar,
+    ttsSpeak,
+    ttsTextFor
+} from './sidecar';
+import {
     hapticEnabledFor,
     hapticPatternFor,
     startVrPanel,
@@ -122,6 +132,14 @@ function onChatMessage(ctx) {
                     s.vrHapticStrength
                 );
             }
+            // P4: Nachricht über den Sidecar vorlesen (Piper). mediaSummary
+            // sorgt dafür, dass keine nackten URLs vorgelesen werden.
+            if (shouldTts(s, soundEvent) && sidecarState.connected) {
+                ttsSpeak(
+                    ttsTextFor(from, body),
+                    pickTtsVoice(sidecarState.voices, 'de')
+                );
+            }
         } catch (err) {
             ctx.warn('chat notify failed:', err);
         }
@@ -137,11 +155,16 @@ export async function startChatIfConfigured(ctx) {
     if (!settings.token || !(await firstSyncDone(ctx))) {
         stopVrPanel();
         stopChat();
+        stopSidecar();
         return;
     }
     const chatSettings = await kvGet(ctx, 'chat_settings', {});
     await initChat(ctx, settings, chatSettings, onChatMessage(ctx));
     await startVrPanel(ctx); // P2: VR-Overlay-Chat-Panel
+    // P4: Voice-Sidecar (TTS/PTT/Translator), wenn aktiviert. Nach dem
+    // Verbinden den Translator-Zustand herstellen (idempotent).
+    await ensureSidecar(ctx, chatSettings);
+    setTimeout(() => applyTranslator(chatState.settings), 3000);
 }
 
 // P1.5: nav entries are only registered AFTER login and only when the user

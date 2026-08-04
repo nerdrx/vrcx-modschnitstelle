@@ -18,6 +18,7 @@ import {
 } from './chat';
 import { kvGet, kvSet } from './db';
 import { DEFAULT_MEDIA, parseMessage, resolveEmbed } from './media';
+import { DEFAULT_VOICE, applyTranslator, sttStart, sttStop } from './sidecar';
 
 export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
@@ -278,8 +279,14 @@ async function pushConfig(ctx) {
             );
         }
     }
-    const s = { ...DEFAULT_VR_PANEL, ...cs };
+    const s = { ...DEFAULT_VR_PANEL, ...DEFAULT_VOICE, ...cs };
     vrCall('config', {
+        // PTT nur aktiv, wenn Voice insgesamt an ist (P4)
+        pttEnabled: !!s.vrPtt && !!s.voiceEnabled,
+        pttMask: s.vrPttMask,
+        pttHand: s.vrPttHand,
+        translatorEnabled: !!s.translatorEnabled,
+        translatorTarget: s.translatorTarget,
         enabled: !!s.vrPanel && chatState.enabled,
         miniMode: s.vrMiniMode,
         bigMode: s.vrBigMode,
@@ -342,6 +349,15 @@ function onAction(ctx) {
                 lastPayload = '';
                 await pushConfig(ctx);
                 pushState();
+            } else if (a.type === 'ptt') {
+                // Push-to-Talk (P4): Flanke vom Overlay. down = Aufnahme an,
+                // up = Ergebnis holen und in den Panel-Entwurf einfügen.
+                if (a.down) {
+                    if (!sttStart('de')) ctx.warn('PTT: Sidecar nicht bereit');
+                } else {
+                    const text = await sttStop();
+                    if (text) vrCall('insertText', { text });
+                }
             } else if (a.type === 'history' && a.channel) {
                 await loadHistory(a.channel);
                 lastPayload = '';
@@ -375,7 +391,18 @@ function onAction(ctx) {
                 if (a.wristOffX !== undefined) cs.vrWristOffX = a.wristOffX;
                 if (a.wristOffY !== undefined) cs.vrWristOffY = a.wristOffY;
                 if (a.wristOffZ !== undefined) cs.vrWristOffZ = a.wristOffZ;
+                // Voice/Translator-Schalter aus dem Panel-⚙ (P4)
+                let voiceChanged = false;
+                if (a.translatorEnabled !== undefined) {
+                    cs.translatorEnabled = a.translatorEnabled;
+                    voiceChanged = true;
+                }
+                if (a.translatorTarget !== undefined) {
+                    cs.translatorTarget = a.translatorTarget;
+                    voiceChanged = true;
+                }
                 await kvSet(ctx, 'chat_settings', cs);
+                if (voiceChanged) applyTranslator(cs);
                 // Auch den reaktiven State nachziehen, sonst zeigt die
                 // Desktop-UI weiter die alten Werte (z. B. die in VR
                 // angelernte Gesten-Taste).

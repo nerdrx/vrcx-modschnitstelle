@@ -113,6 +113,14 @@ namespace VRCX
         private string _gestureHand = "both"; // "both" | "left" | "right"
         private float _gestureHoldMs = 1000f;
         private string _gestureMode = "hold"; // "hold" | "double" (Doppeltipp)
+
+        // Push-to-Talk (P4-Integration): Taste halten = Aufnahme, loslassen =
+        // Diktat landet im Entwurf. Eigene Maske/Hand, damit es nicht mit der
+        // Öffnen-Geste kollidiert. Der Trigger bleibt tabu (bedient das Panel).
+        private bool _pttEnabled = false;
+        private ulong _pttMask = 2UL; // Default: B/Y bzw. Menü
+        private string _pttHand = "left"; // "left" | "right" | "both"
+        private readonly bool[] _pttDown = new bool[2];
         private bool _learningGesture; // Lernmodus: nächste Taste übernehmen
 
         // Trigger nie als Geste zulassen — er bedient das Panel.
@@ -317,6 +325,9 @@ namespace VRCX
                 if (root.TryGetProperty("gestureHold", out var gho))
                     _gestureHoldMs = Math.Clamp(gho.GetSingle(), 200f, 4000f);
                 if (root.TryGetProperty("gestureMode", out var gmo)) _gestureMode = gmo.GetString() ?? "hold";
+                if (root.TryGetProperty("pttEnabled", out var pte)) _pttEnabled = pte.GetBoolean();
+                if (root.TryGetProperty("pttMask", out var ptm)) _pttMask = ptm.GetUInt64() & ~TRIGGER_MASK;
+                if (root.TryGetProperty("pttHand", out var pth)) _pttHand = pth.GetString() ?? "left";
                 if (root.TryGetProperty("miniOffX", out var mox))
                     _miniOffset.X = Math.Clamp(mox.GetSingle(), -150f, 150f) / 100f;
                 if (root.TryGetProperty("miniOffY", out var moy))
@@ -438,6 +449,7 @@ namespace VRCX
                 }
                 if (_enabled && (_gestureEnabled || _learningGesture))
                     ProcessGesture(system); // Geste kann Mini/Groß auch aus dem Hidden-Zustand öffnen
+                ProcessPtt(system); // PTT funktioniert auch bei verstecktem Panel
                 if (_enabled)
                     ProcessHaptics(system);
                 return;
@@ -531,6 +543,7 @@ namespace VRCX
 
             if (_gestureEnabled || _learningGesture)
                 ProcessGesture(system);
+            ProcessPtt(system);
             ProcessHaptics(system);
         }
 
@@ -1427,6 +1440,47 @@ namespace VRCX
         {
             _lastGestureAt = now;
             _browser?.ExecuteScriptAsync("window.$vrchat && $vrchat.gestureToggle()");
+        }
+
+        /// Push-to-Talk (P4): Flanken statt Toggle. Taste gedrückt => Aufnahme
+        /// starten (ChatAction {type:'ptt',down:true}), losgelassen => stoppen.
+        /// Die eigentliche STT-Arbeit macht der Mod im Hauptprozess über den
+        /// Voice-Sidecar; hier wird nur die Taste gelesen und der Zustand ans
+        /// Panel gemeldet (Mikro-Indikator).
+        private void ProcessPtt(CVRSystem system)
+        {
+            if (!_enabled || !_pttEnabled || _pttMask == 0)
+                return;
+            var state = new VRControllerState_t();
+            for (var i = 0u; i < OpenVR.k_unMaxTrackedDeviceCount; ++i)
+            {
+                var role = system.GetControllerRoleForTrackedDeviceIndex(i);
+                var isLeft = role == ETrackedControllerRole.LeftHand;
+                var isRight = role == ETrackedControllerRole.RightHand;
+                if (!isLeft && !isRight)
+                    continue;
+                if (_pttHand == "left" && !isLeft) continue;
+                if (_pttHand == "right" && !isRight) continue;
+                if (!system.GetControllerState(i, ref state, (uint)Marshal.SizeOf(state)))
+                    continue;
+
+                var idx = isLeft ? 0 : 1;
+                var pressed = (state.ulButtonPressed & _pttMask) != 0;
+                if (pressed == _pttDown[idx])
+                    continue;
+                _pttDown[idx] = pressed;
+                // Beide Hände erlaubt: Aufnahme läuft, solange mindestens eine
+                // PTT-Taste unten ist.
+                var anyDown = _pttDown[0] || _pttDown[1];
+                var msg = "{\"type\":\"ptt\",\"down\":" + (anyDown ? "true" : "false") + "}";
+                OverlayClient.SendMessage(new OverlayMessage
+                {
+                    Type = OverlayMessageType.ChatAction,
+                    Data = msg
+                });
+                _browser?.ExecuteScriptAsync(
+                    "window.$vrchat && $vrchat.ptt(" + (anyDown ? "true" : "false") + ")");
+            }
         }
 
         private static Matrix4x4 ToMatrix4x4(HmdMatrix34_t m)
