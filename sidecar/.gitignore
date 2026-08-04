@@ -1,0 +1,9 @@
+# Sidecar local files
+models/
+piper/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.wav
+*.log
