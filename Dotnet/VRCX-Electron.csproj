@@ -99,6 +99,8 @@
     <Compile Remove="AppApi\Cef\**" />
     <Content Remove="Overlay\Cef\**" />
     <Compile Remove="Overlay\Cef\**" />
+    <!-- MOD-API: chat panel partial references VRCXVRChatPanel (Overlay\Cef, Windows-only) -->
+    <Compile Remove="Overlay\AppApiVrChatPanel.cs" />
     <Content Remove="OverlayWebSocket\**" />
     <Compile Remove="OverlayWebSocket\**" />
     <Content Remove="DBMerger\**" />
