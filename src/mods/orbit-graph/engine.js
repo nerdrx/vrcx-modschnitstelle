@@ -67,7 +67,14 @@ export const DEFAULT_OPTIONS = {
     minSharedMinutes: 30,
     /** max number of people besides you; 0 = unlimited */
     topN: 120,
-    friendsOnly: false
+    friendsOnly: false,
+    /**
+     * Rendering-sanity cap: each person keeps only their strongest N
+     * connections to OTHER people (edges to you always survive). Without it
+     * a 120-node graph can carry ~7000 edges and panning turns to jelly.
+     * 0 = unlimited.
+     */
+    maxEdgesPerNode: 8
 };
 
 /** ECharts categories. Non-friends are deliberately the loud ones. */
@@ -493,7 +500,12 @@ export function accumulateCoPresence({ windows, eventsByLocation, self }) {
  * @param {object} options {minSharedMinutes, topN, friendsOnly}
  */
 export function applyFilters(acc, options = {}) {
-    const { minSharedMinutes = 0, topN = 0, friendsOnly = false } = options;
+    const {
+        minSharedMinutes = 0,
+        topN = 0,
+        friendsOnly = false,
+        maxEdgesPerNode = DEFAULT_OPTIONS.maxEdgesPerNode
+    } = options;
     const minSeconds = Math.max(0, minSharedMinutes) * 60;
     const { people, pairs, selfKey } = acc;
 
@@ -509,7 +521,7 @@ export function applyFilters(acc, options = {}) {
     const nodes = selfNode ? [selfNode, ...kept] : kept;
     const keptKeys = new Set(nodes.map((n) => n.key));
 
-    const edges = [];
+    const candidates = [];
     for (const pair of pairs.values()) {
         if (pair.seconds < minSeconds) {
             continue;
@@ -517,9 +529,31 @@ export function applyFilters(acc, options = {}) {
         if (!keptKeys.has(pair.a) || !keptKeys.has(pair.b)) {
             continue;
         }
-        edges.push({ a: pair.a, b: pair.b, seconds: pair.seconds, sessions: pair.sessions });
+        candidates.push({ a: pair.a, b: pair.b, seconds: pair.seconds, sessions: pair.sessions });
     }
-    edges.sort((x, y) => y.seconds - x.seconds);
+    candidates.sort((x, y) => y.seconds - x.seconds);
+
+    // Edge sparsification: walk strongest-first, keep an edge when either
+    // endpoint still has budget, so every node retains its top connections
+    // without the graph drowning in weak pairwise links. Edges to you are
+    // exempt — they carry the primary "time with you" semantics.
+    let edges = candidates;
+    if (maxEdgesPerNode > 0) {
+        const budget = new Map();
+        edges = candidates.filter((e) => {
+            if (e.a === selfKey || e.b === selfKey) {
+                return true;
+            }
+            const left = budget.get(e.a) || 0;
+            const right = budget.get(e.b) || 0;
+            if (left >= maxEdgesPerNode && right >= maxEdgesPerNode) {
+                return false;
+            }
+            budget.set(e.a, left + 1);
+            budget.set(e.b, right + 1);
+            return true;
+        });
+    }
 
     return {
         nodes,
@@ -720,15 +754,154 @@ export function formatDate(iso) {
 }
 
 /**
+ * How many nodes carry a permanent label. Everything else is reachable via
+ * hover/tooltip — hundreds of labels are both unreadable and the single
+ * biggest per-frame cost while panning.
+ */
+export const LABEL_TOP_N = 15;
+
+/** Golden angle — spreads new nodes around an anchor without them stacking. */
+const GOLDEN_ANGLE = 2.399963229728653;
+
+/** Default ring radius for a freshly appearing node. */
+export const NEW_NODE_RING_RADIUS = 48;
+
+/** Centroid of a position map; [0, 0] when there is nothing to average. */
+export function centroidOf(positions) {
+    const entries = positions instanceof Map ? [...positions.values()] : Object.values(positions || {});
+    if (entries.length === 0) {
+        return [0, 0];
+    }
+    let sx = 0;
+    let sy = 0;
+    for (const p of entries) {
+        sx += p[0];
+        sy += p[1];
+    }
+    return [sx / entries.length, sy / entries.length];
+}
+
+/**
+ * Carry the previous layout onto a freshly filtered node list.
+ *
+ * Nodes that survived the filter keep their exact coordinates, so a filter
+ * change is a morph rather than a re-shuffle. Nodes that are new get parked on
+ * a golden-angle ring around their strongest *already positioned* neighbour
+ * (the graph centre when they have none), which keeps them from stacking and
+ * from flying in from the far edge.
+ *
+ * Pure: returns new node objects, never touches the inputs.
+ *
+ * @param {Array} nodes  echarts node objects (need `id`)
+ * @param {Array} links  echarts links ({source, target, seconds})
+ * @param {Map<string, [number, number]>} positions last known layout
+ * @param {object} [options] {center: [x,y], ringRadius: number}
+ * @returns {Array} nodes with finite `x`/`y` on every entry
+ */
+export function applyNodePositions(nodes, links, positions, options = {}) {
+    const pos = positions instanceof Map ? positions : new Map(Object.entries(positions || {}));
+    const center = options.center || centroidOf(pos);
+    const radius = Number.isFinite(options.ringRadius) ? options.ringRadius : NEW_NODE_RING_RADIUS;
+
+    // Strongest neighbour that already has a position, per unplaced node.
+    const anchorOf = new Map();
+    for (const link of links || []) {
+        const weight = link.seconds || 0;
+        const consider = (from, to) => {
+            if (pos.has(from) || !pos.has(to)) {
+                return; // `from` is already placed, or `to` cannot anchor it
+            }
+            const current = anchorOf.get(from);
+            if (!current || weight > current.weight) {
+                anchorOf.set(from, { id: to, weight });
+            }
+        };
+        consider(link.source, link.target);
+        consider(link.target, link.source);
+    }
+
+    // Per-anchor counter so several newcomers spiral out instead of overlapping.
+    const placedAround = new Map();
+
+    return nodes.map((node) => {
+        const known = pos.get(node.id);
+        if (known) {
+            return { ...node, x: known[0], y: known[1] };
+        }
+        const anchorId = anchorOf.get(node.id)?.id;
+        const base = (anchorId && pos.get(anchorId)) || center;
+        const key = anchorId || '';
+        const index = placedAround.get(key) || 0;
+        placedAround.set(key, index + 1);
+        const angle = index * GOLDEN_ANGLE;
+        const r = radius * Math.sqrt(index + 1);
+        return { ...node, x: base[0] + Math.cos(angle) * r, y: base[1] + Math.sin(angle) * r };
+    });
+}
+
+/**
+ * Trailing-edge debounce. Continuous controls (search box, the filter selects)
+ * use this so a burst of changes settles into a single graph update.
+ *
+ * @param {Function} fn
+ * @param {number} [wait] ms of quiet before firing
+ * @returns {Function & {cancel: Function, flush: Function}}
+ */
+export function debounce(fn, wait = 250) {
+    let timer = null;
+    let pending = null;
+    const wrapped = (...args) => {
+        pending = args;
+        if (timer !== null) {
+            clearTimeout(timer);
+        }
+        timer = setTimeout(() => {
+            timer = null;
+            const call = pending;
+            pending = null;
+            fn(...call);
+        }, wait);
+    };
+    wrapped.cancel = () => {
+        if (timer !== null) {
+            clearTimeout(timer);
+            timer = null;
+        }
+        pending = null;
+    };
+    wrapped.flush = () => {
+        if (timer !== null) {
+            clearTimeout(timer);
+            timer = null;
+            const call = pending;
+            pending = null;
+            fn(...call);
+        }
+    };
+    return wrapped;
+}
+
+/**
  * Translate the engine result into ECharts graph series data.
  *
  * @param {{nodes:Array, edges:Array}} graph
- * @param {object} [opts] {search: string}
+ * @param {object} [opts] {search: string, labelTopN: number}
  */
 export function toEchartsGraph(graph, opts = {}) {
     const search = String(opts.search || '')
         .trim()
         .toLowerCase();
+    const labelTopN = Number.isFinite(opts.labelTopN) ? opts.labelTopN : LABEL_TOP_N;
+
+    // Only the heaviest handful of nodes earn a permanent label.
+    const labelled = new Set(
+        graph.nodes
+            .filter((n) => !n.isSelf)
+            .slice()
+            .sort((a, b) => b.secondsWithYou - a.secondsWithYou || a.key.localeCompare(b.key))
+            .slice(0, Math.max(0, labelTopN))
+            .map((n) => n.key)
+    );
 
     const nodes = graph.nodes.map((n) => {
         const category = n.isSelf ? 0 : n.isFriend ? 1 : 2;
@@ -756,12 +929,17 @@ export function toEchartsGraph(graph, opts = {}) {
                 borderColor: hit ? '#ffffff' : n.isSelf ? '#f472b6' : 'transparent',
                 borderWidth: hit ? 3 : n.isSelf ? 3 : 0,
                 opacity: search && !hit ? 0.25 : 1,
-                shadowBlur: n.isSelf ? 22 : hit ? 20 : 6,
+                // A blurred shadow on every node is *the* classic ECharts roam
+                // killer — each one is a separate offscreen blur per frame. Keep
+                // the glow for "You" and for search hits only; hover still glows
+                // via the series emphasis style.
+                shadowBlur: n.isSelf ? 18 : hit ? 12 : 0,
                 shadowColor: color
             },
             // The view decides whether labels render at all; this only marks
-            // the nodes worth labelling when they do.
-            labelShow: Boolean(n.isSelf || hit || n.secondsWithYou > 3600)
+            // the nodes worth labelling when they do: you, search hits, and the
+            // heaviest few. Everyone else is a hover away.
+            labelShow: Boolean(n.isSelf || hit || (labelled.has(n.key) && n.secondsWithYou > 3600))
         };
     });
 
