@@ -1,7 +1,7 @@
 # VRCX with Mods
 
 An **unofficial fork of [VRCX](https://github.com/vrcx-team/VRCX)** that adds a
-small, update-stable **mod/plugin API** — plus two mods built on top of it.
+small, update-stable **mod/plugin API** — plus four mods built on top of it.
 
 *Deutsche Version weiter unten. / German version below.*
 
@@ -33,6 +33,12 @@ selected API helpers), so rebasing onto new VRCX releases is usually painless.
 - **Friend Care** — friendship maintenance: when did you last share an
   instance with each friend, and who has been inactive for a long time.
   Color-coded categories, filters, CSV export.
+- **Global DB** — opt-in trusted-pool sync with pool chat (global + DMs),
+  VR chat panel with wrist mini, media in chat, notification sounds, and an
+  optional voice sidecar (PTT dictation, TTS readout, live translator).
+- **Orbit Graph** — relation graph built from your own gamelog: who shares
+  instances with you (and with each other), friends *and* non-friends,
+  weighted by time actually spent together. Local data only, no API calls.
 
 ## Building
 
@@ -66,7 +72,7 @@ Use at your own risk. Licensed under the [MIT License](LICENSE), same as upstrea
 # VRCX mit Mods (Deutsch)
 
 Ein **inoffizieller Fork von [VRCX](https://github.com/vrcx-team/VRCX)** mit
-einer schlanken, **update-stabilen Mod-/Plugin-Schnittstelle** — plus zwei
+einer schlanken, **update-stabilen Mod-/Plugin-Schnittstelle** — plus vier
 darauf aufbauenden Mods.
 
 Der VRCX-Upstream-Code wird nur an **3 markierten Zeilen** (`// MOD-API`)
@@ -99,6 +105,14 @@ ein Rebase auf neue VRCX-Releases ist dadurch meist schmerzfrei.
 - **Friend Care (Freundschaftspflege)** — wann warst du zuletzt mit jedem
   Freund in einer gemeinsamen Instanz, und wer ist schon lange inaktiv?
   Farbkategorien, Filter, CSV-Export.
+- **Global DB** — Opt-in-Sync über einen Vertrauens-Pool mit Pool-Chat
+  (global + DMs), VR-Chat-Panel mit Wrist-Mini, Medien im Chat,
+  Benachrichtigungstönen und optionalem Voice-Sidecar (PTT-Diktat,
+  TTS-Vorlesen, Live-Übersetzer).
+- **Orbit Graph** — Beziehungsgraph aus dem eigenen Gamelog: wer teilt
+  Instanzen mit dir (und untereinander), Freunde *und* Nicht-Freunde,
+  gewichtet nach tatsächlich gemeinsam verbrachter Zeit. Nur lokale Daten,
+  keine API-Aufrufe.
 
 ## Selbst bauen
 
