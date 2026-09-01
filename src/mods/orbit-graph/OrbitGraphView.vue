@@ -302,6 +302,8 @@
         DEFAULT_OPTIONS,
         RANGE_OPTIONS,
         applyFilters,
+        applyNodePositions,
+        debounce,
         formatDate,
         formatHours,
         loadCoPresence,
@@ -450,6 +452,16 @@
     /** ECharts series data */
     const series = shallowRef({ nodes: [], links: [], categories: [] });
 
+    /**
+     * Last known layout coordinate per node id — the memory that turns a filter
+     * change into a morph. Deliberately NOT reactive (it changes on every frame
+     * of a drag) and deliberately never pruned: a node that comes back when a
+     * filter is relaxed returns to the spot it used to hold.
+     */
+    const layoutPositions = new Map();
+    /** true → let the force simulation lay the graph out from scratch once */
+    let relayout = true;
+
     const stats = computed(
         () =>
             graph.value?.stats || {
@@ -478,6 +490,9 @@
                 return; // a newer run superseded this one
             }
             accumulator.value = acc;
+            // Fresh rows are a genuinely new graph: let the simulation place it
+            // once (synchronously, so it never bounces), then keep that layout.
+            relayout = true;
             refilter();
             computedAt.value = new Date().toLocaleTimeString();
         } catch (e) {
@@ -523,14 +538,32 @@
         filters.friendsOnly = false;
     }
 
+    // Continuous controls coalesce; discrete ones apply at once. Neither ever
+    // re-reads the database — every filter runs over the cached accumulator.
+    const refilterSoon = debounce(() => refilter(), 250);
+    const rebuildSeriesSoon = debounce(() => rebuildSeries(), 250);
+
+    /** Apply now, dropping anything a continuous control had queued. */
+    function refilterNow() {
+        refilterSoon.cancel();
+        refilter();
+    }
+
+    // A new time range means new rows, so this is the one control that reloads.
     watch(
         () => filters.rangeDays,
         () => reload()
     );
-    watch([() => filters.minSharedMinutes, () => filters.topN, () => filters.friendsOnly], () =>
-        refilter()
+    // Continuous controls are registered first, so that an immediate control
+    // changed in the same tick (relaxFilters() moves all three at once) cancels
+    // the queued pass instead of running a redundant one 250ms later.
+    watch([() => filters.minSharedMinutes, () => filters.topN], () => refilterSoon());
+    watch(search, () => rebuildSeriesSoon());
+    // Discrete toggle → immediate; with the carried layout it is calm anyway.
+    watch(
+        () => filters.friendsOnly,
+        () => refilterNow()
     );
-    watch(search, () => rebuildSeries());
     watch(showLabels, () => updateChart());
 
     // ------------------------------------------------------------ chart ----
@@ -647,10 +680,75 @@
         updateChart();
     }
 
+    /** The live graph series model, or null before the first render. */
+    function seriesModel() {
+        try {
+            return chartInstance.value?.getModel()?.getSeriesByIndex(0) || null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Remember where every node currently sits. Called before and after each
+     * setOption, so it also picks up positions the user produced by dragging.
+     */
+    function captureLayout() {
+        const model = seriesModel();
+        if (!model) {
+            return;
+        }
+        try {
+            const data = model.getData();
+            data.each((idx) => {
+                const point = data.getItemLayout(idx);
+                if (point && Number.isFinite(point[0]) && Number.isFinite(point[1])) {
+                    layoutPositions.set(data.getId(idx), [point[0], point[1]]);
+                }
+            });
+        } catch {
+            // model shape changed under us — the next render will re-capture
+        }
+    }
+
+    /**
+     * Current pan/zoom. `setOption(..., notMerge)` rebuilds the series option,
+     * which would otherwise throw the user's view away on every filter change.
+     */
+    function readRoam() {
+        const model = seriesModel();
+        if (!model) {
+            return null;
+        }
+        try {
+            const zoom = model.get('zoom');
+            const center = model.get('center');
+            return {
+                zoom: Number.isFinite(zoom) ? zoom : 1,
+                center: Array.isArray(center) ? center.slice() : null
+            };
+        } catch {
+            return null;
+        }
+    }
+
     function updateChart() {
         if (!chartInstance.value) {
             return;
         }
+        // Pick up drags / the settled simulation before rebuilding the option.
+        captureLayout();
+
+        // Force only when we have nothing to carry over. Every other update
+        // reuses the known coordinates, so surviving nodes do not move at all.
+        const useForce = relayout || layoutPositions.size === 0;
+        relayout = false;
+
+        const nodes = useForce
+            ? series.value.nodes
+            : applyNodePositions(series.value.nodes, series.value.links, layoutPositions);
+        const roam = useForce ? { zoom: 1, center: null } : readRoam();
+
         chartInstance.value.setOption(
             {
                 backgroundColor: 'transparent',
@@ -667,14 +765,26 @@
                 },
                 series: [
                     {
+                        // A stable id keeps ECharts reusing the same view across
+                        // notMerge updates, which is what lets elements
+                        // transition instead of being torn down and rebuilt.
+                        id: 'orbit',
                         name: 'Orbit',
                         type: 'graph',
-                        layout: 'force',
-                        data: series.value.nodes,
+                        layout: useForce ? 'force' : 'none',
+                        data: nodes,
                         links: series.value.links,
                         categories: series.value.categories,
                         roam: true,
                         draggable: true,
+                        zoom: roam?.zoom ?? 1,
+                        ...(roam?.center ? { center: roam.center } : {}),
+                        // One calm transition for everything that did change
+                        // (entering/leaving nodes, sizes, the fit-to-view).
+                        animationDuration: 700,
+                        animationDurationUpdate: 700,
+                        animationEasing: 'cubicOut',
+                        animationEasingUpdate: 'cubicInOut',
                         label: {
                             show: showLabels.value,
                             position: 'right',
@@ -691,29 +801,52 @@
                         lineStyle: { color: 'source', curveness: 0.12 },
                         emphasis: {
                             focus: 'adjacency',
+                            // Keep the repaint inside this series instead of
+                            // letting a hover dirty the whole canvas.
+                            blurScope: 'series',
                             lineStyle: { width: 3.5, opacity: 0.95 },
-                            itemStyle: { shadowBlur: 25 }
+                            itemStyle: { shadowBlur: 20 }
+                        },
+                        blur: {
+                            itemStyle: { opacity: 0.18 },
+                            lineStyle: { opacity: 0.05 },
+                            label: { show: false }
                         },
                         force: {
                             repulsion: 260,
                             gravity: 0.08,
                             edgeLength: [40, 160],
-                            friction: 0.35
+                            friction: 0.35,
+                            // The whole point: settle the simulation in one
+                            // synchronous pass instead of painting ~450 frames
+                            // of it. Nodes appear where they belong.
+                            layoutAnimation: false
                         }
                     }
                 ]
             },
             true
         );
+
+        // The synchronous force pass has finished by now, so this records the
+        // final coordinates for the next update to warm-start from.
+        captureLayout();
     }
 
     function zoomGraph(factor) {
         chartInstance.value?.dispatchAction({ type: 'graphRoam', zoom: factor });
     }
 
+    /**
+     * "Reset view": forget the carried layout and let the simulation tidy the
+     * graph up again from scratch, back at the default pan/zoom. This is the
+     * escape hatch for when a long run of incremental filter changes has left
+     * the arrangement messy.
+     */
     function recenterGraph() {
-        chartInstance.value?.dispatchAction({ type: 'restore' });
-        nextTick(() => updateChart());
+        layoutPositions.clear();
+        relayout = true;
+        updateChart();
     }
 
     function toggleFullscreen() {
@@ -737,6 +870,8 @@
     });
 
     onBeforeUnmount(() => {
+        refilterSoon.cancel();
+        rebuildSeriesSoon.cancel();
         resizeObserver?.disconnect();
         chartInstance.value?.dispose();
         chartInstance.value = null;

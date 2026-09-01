@@ -1,15 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     CATEGORIES,
     DEFAULT_OPTIONS,
+    LABEL_TOP_N,
+    NEW_NODE_RING_RADIUS,
     SESSION_MIN_OVERLAP_SECONDS,
     accumulateCoPresence,
     applyFilters,
+    applyNodePositions,
     buildOrbitGraph,
     buildWindowPresence,
     buildWindows,
+    centroidOf,
     computeGraph,
+    debounce,
     edgeWidth,
     formatHours,
     groupEventsByLocation,
@@ -441,6 +446,49 @@ describe('filters', () => {
         expect(DEFAULT_OPTIONS.friendsOnly).toBe(false);
     });
 
+    it('sparsifies other↔other edges to maxEdgesPerNode, keeps every edge to me', () => {
+        const person = (key, secondsWithYou) => ({
+            key,
+            displayName: key,
+            isSelf: key === 'me',
+            isFriend: false,
+            secondsWithYou,
+            sessionsWithYou: 1
+        });
+        const pair = (a, b, seconds) => [`${a}|${b}`, { a, b, seconds, sessions: 1 }];
+        const acc = {
+            selfKey: 'me',
+            windowCount: 1,
+            secondsInGame: 0,
+            people: new Map(
+                ['me', 'A', 'B', 'C', 'D'].map((k) => [k, person(k, 100000)])
+            ),
+            pairs: new Map([
+                pair('me', 'A', 1000),
+                pair('me', 'B', 1000),
+                pair('me', 'C', 1000),
+                pair('me', 'D', 1000),
+                pair('A', 'B', 600),
+                pair('A', 'C', 500),
+                pair('B', 'C', 400),
+                pair('A', 'D', 300),
+                pair('B', 'D', 200),
+                pair('C', 'D', 100)
+            ])
+        };
+
+        const unlimited = applyFilters(acc, { minSharedMinutes: 0, topN: 0, maxEdgesPerNode: 0 });
+        expect(unlimited.edges).toHaveLength(10);
+
+        const sparse = applyFilters(acc, { minSharedMinutes: 0, topN: 0, maxEdgesPerNode: 1 });
+        const otherEdges = sparse.edges.filter((e) => e.a !== 'me' && e.b !== 'me');
+        const selfEdges = sparse.edges.filter((e) => e.a === 'me' || e.b === 'me');
+        // strongest-first greedy: AB kept, AC kept (C had budget), BC dropped,
+        // AD kept (D had budget), BD/CD dropped
+        expect(selfEdges).toHaveLength(4);
+        expect(otherEdges.map((e) => `${e.a}${e.b}`).sort()).toEqual(['AB', 'AC', 'AD']);
+    });
+
     it('applyFilters works on a hand-built accumulator', () => {
         const acc = accumulateCoPresence({
             windows: buildWindows(LOCATION_ROWS, { nowMs: NOW }),
@@ -612,5 +660,203 @@ describe('presentation helpers', () => {
 
     it('day fixture sanity', () => {
         expect(T(10)).toContain(DAY);
+    });
+
+    it('keeps the heavy node glow but drops it from the crowd', () => {
+        const series = toEchartsGraph(graphOf());
+        const me = series.nodes.find((n) => n.displayName === 'Me');
+        expect(me.itemStyle.shadowBlur).toBeGreaterThan(0);
+        for (const node of series.nodes.filter((n) => !n.isSelf)) {
+            expect(node.itemStyle.shadowBlur).toBe(0);
+        }
+    });
+
+    it('glows search hits so they stay findable', () => {
+        const series = toEchartsGraph(graphOf(), { search: 'ali' });
+        expect(series.nodes.find((n) => n.displayName === 'Alice').itemStyle.shadowBlur).toBeGreaterThan(0);
+        expect(series.nodes.find((n) => n.displayName === 'Bob').itemStyle.shadowBlur).toBe(0);
+    });
+
+    it('caps permanent labels at the heaviest few', () => {
+        const nodes = [{ key: 'me', displayName: 'Me', isSelf: true, secondsWithYou: 99999, sessionsWithYou: 1 }];
+        for (let i = 0; i < 40; i++) {
+            nodes.push({
+                key: `u${i}`,
+                displayName: `U${i}`,
+                isSelf: false,
+                isFriend: false,
+                // all well above the one-hour bar, so only the cap can bite
+                secondsWithYou: 3600 * (100 - i),
+                sessionsWithYou: 5
+            });
+        }
+        const series = toEchartsGraph({ nodes, edges: [] }, { labelTopN: 3 });
+        const labelled = series.nodes.filter((n) => n.labelShow).map((n) => n.displayName);
+        expect(labelled).toEqual(['Me', 'U0', 'U1', 'U2']);
+        expect(LABEL_TOP_N).toBe(15);
+    });
+
+    it('still labels a search hit that is far down the ranking', () => {
+        const nodes = [{ key: 'me', displayName: 'Me', isSelf: true, secondsWithYou: 9, sessionsWithYou: 1 }];
+        for (let i = 0; i < 30; i++) {
+            nodes.push({
+                key: `u${i}`,
+                displayName: `U${i}`,
+                isSelf: false,
+                isFriend: false,
+                secondsWithYou: 3600 * (100 - i),
+                sessionsWithYou: 5
+            });
+        }
+        const series = toEchartsGraph({ nodes, edges: [] }, { labelTopN: 2, search: 'u29' });
+        expect(series.nodes.find((n) => n.displayName === 'U29').labelShow).toBe(true);
+    });
+});
+
+// --------------------------------------------------------- layout carryover --
+
+describe('applyNodePositions', () => {
+    const N = (id) => ({ id, name: id });
+
+    it('keeps every surviving node exactly where it was', () => {
+        const positions = new Map([
+            ['a', [10, 20]],
+            ['b', [30, 40]]
+        ]);
+        const out = applyNodePositions([N('a'), N('b')], [], positions);
+        expect(out.map((n) => [n.x, n.y])).toEqual([
+            [10, 20],
+            [30, 40]
+        ]);
+    });
+
+    it('does not mutate the nodes it is given', () => {
+        const nodes = [N('a')];
+        applyNodePositions(nodes, [], new Map([['a', [5, 5]]]));
+        expect(nodes[0].x).toBeUndefined();
+    });
+
+    it('drops a newcomer next to its strongest positioned neighbour', () => {
+        const positions = new Map([
+            ['a', [0, 0]],
+            ['b', [500, 500]]
+        ]);
+        const links = [
+            { source: 'new', target: 'a', seconds: 10 },
+            { source: 'new', target: 'b', seconds: 900 }
+        ];
+        const [, , fresh] = applyNodePositions([N('a'), N('b'), N('new')], links, positions);
+        // near b (the heavier link), not near a
+        expect(Math.hypot(fresh.x - 500, fresh.y - 500)).toBeLessThan(NEW_NODE_RING_RADIUS * 1.5);
+        expect(Math.hypot(fresh.x, fresh.y)).toBeGreaterThan(300);
+    });
+
+    it('ignores a neighbour that has no position of its own', () => {
+        const positions = new Map([['a', [100, 100]]]);
+        const links = [
+            { source: 'n1', target: 'n2', seconds: 9999 }, // both unplaced
+            { source: 'n1', target: 'a', seconds: 1 }
+        ];
+        const fresh = applyNodePositions([N('a'), N('n1'), N('n2')], links, positions).find((n) => n.id === 'n1');
+        expect(Math.hypot(fresh.x - 100, fresh.y - 100)).toBeLessThan(NEW_NODE_RING_RADIUS * 1.5);
+    });
+
+    it('spreads several newcomers around one anchor instead of stacking them', () => {
+        const positions = new Map([['a', [0, 0]]]);
+        const links = [
+            { source: 'x', target: 'a', seconds: 5 },
+            { source: 'y', target: 'a', seconds: 5 },
+            { source: 'z', target: 'a', seconds: 5 }
+        ];
+        const out = applyNodePositions([N('a'), N('x'), N('y'), N('z')], links, positions);
+        const pts = out.filter((n) => n.id !== 'a').map((n) => `${Math.round(n.x)},${Math.round(n.y)}`);
+        expect(new Set(pts).size).toBe(3);
+    });
+
+    it('falls back to the centroid when a newcomer has no anchor at all', () => {
+        const positions = new Map([
+            ['a', [0, 0]],
+            ['b', [100, 0]]
+        ]);
+        const lonely = applyNodePositions([N('a'), N('b'), N('lonely')], [], positions).find((n) => n.id === 'lonely');
+        expect(Math.hypot(lonely.x - 50, lonely.y)).toBeLessThan(NEW_NODE_RING_RADIUS * 1.5);
+    });
+
+    it('gives every node a finite coordinate even with no history', () => {
+        const out = applyNodePositions([N('a'), N('b')], [], new Map());
+        for (const node of out) {
+            expect(Number.isFinite(node.x)).toBe(true);
+            expect(Number.isFinite(node.y)).toBe(true);
+        }
+    });
+
+    it('accepts a plain object as the position map', () => {
+        const out = applyNodePositions([N('a')], [], { a: [7, 8] });
+        expect([out[0].x, out[0].y]).toEqual([7, 8]);
+    });
+
+    it('averages known positions for the centroid', () => {
+        expect(centroidOf(new Map([['a', [0, 0]], ['b', [10, 20]]]))).toEqual([5, 10]);
+        expect(centroidOf(new Map())).toEqual([0, 0]);
+    });
+});
+
+// ---------------------------------------------------------------- debounce --
+
+describe('debounce', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('fires once after the quiet period', () => {
+        const spy = vi.fn();
+        const d = debounce(spy, 250);
+        d();
+        d();
+        d();
+        expect(spy).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(249);
+        expect(spy).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes the latest arguments through', () => {
+        const spy = vi.fn();
+        const d = debounce(spy, 100);
+        d('first');
+        d('last');
+        vi.advanceTimersByTime(100);
+        expect(spy).toHaveBeenCalledWith('last');
+    });
+
+    it('restarts the clock on every call', () => {
+        const spy = vi.fn();
+        const d = debounce(spy, 100);
+        d();
+        vi.advanceTimersByTime(80);
+        d();
+        vi.advanceTimersByTime(80);
+        expect(spy).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(20);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+
+    it('cancel() drops a pending call', () => {
+        const spy = vi.fn();
+        const d = debounce(spy, 100);
+        d();
+        d.cancel();
+        vi.advanceTimersByTime(500);
+        expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('flush() runs a pending call at once, and is a no-op when idle', () => {
+        const spy = vi.fn();
+        const d = debounce(spy, 100);
+        d('x');
+        d.flush();
+        expect(spy).toHaveBeenCalledWith('x');
+        d.flush();
+        expect(spy).toHaveBeenCalledTimes(1);
     });
 });
