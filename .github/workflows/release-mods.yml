@@ -29,7 +29,8 @@ jobs:
           } else {
             (Get-Content Version -Raw).Trim() + '.m0'
           }
-          Set-Content -NoNewline Version $v
+          Set-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'Version') -Value $v -NoNewline -Encoding utf8
+          if ((Get-Content Version -Raw).Trim() -ne $v) { throw 'Source version stamp failed' }
           "FORK_VERSION=$v" | Out-File -Append $env:GITHUB_ENV
           Write-Host "Fork version: $v"
 
@@ -54,6 +55,17 @@ jobs:
 
       - name: Build Windows app (CEF)
         run: dotnet build Dotnet/VRCX-Cef.csproj -p:Configuration=Release -p:WarningLevel=0 -p:Platform=x64 -p:PlatformTarget=x64 -t:"Clean;Build" -maxcpucount --runtime win-x64 --self-contained
+
+      - name: Verify packaged fork version
+        shell: pwsh
+        run: |
+          if ((Get-Content Version -Raw).Trim() -ne $env:FORK_VERSION) {
+            throw 'Source version changed during the build'
+          }
+          Copy-Item Version build/Cef/Version -Force
+          if ((Get-Content build/Cef/Version -Raw).Trim() -ne $env:FORK_VERSION) {
+            throw 'Packaged version does not match the release'
+          }
 
       # Replace the html junction with real files so NSIS/zip package content
       - name: Materialize html folder
