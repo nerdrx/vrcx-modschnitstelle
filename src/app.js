@@ -1,13 +1,7 @@
 import { VueQueryPlugin } from '@tanstack/vue-query';
 import { createApp } from 'vue';
 
-import {
-    i18n,
-    initComponents,
-    initPlugins,
-    initRouter,
-    initSentry
-} from './plugins';
+import { i18n, initComponents, initPlugins, initRouter, initSentry } from './plugins';
 import { initPiniaPlugins, pinia } from './stores';
 import { queryClient } from './queries';
 import { initMods } from './mods'; // MOD-API
@@ -28,7 +22,7 @@ await initSentry(app);
 
 // MOD-FIX: Polyfill standard Notification API for mods
 if (window.electron && window.electron.desktopNotification) {
-    window.Notification = function(title, options) {
+    window.Notification = function (title, options) {
         window.electron.desktopNotification(title, options?.body || '', options?.icon || '');
         return {
             close: () => {},

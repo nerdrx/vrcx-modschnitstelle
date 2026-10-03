@@ -146,7 +146,6 @@
     import { TooltipWrapper } from '../../components/ui/tooltip';
     import { createColumns } from './columns.jsx';
     import { database } from '../../services/database';
-    import { removeFromArray } from '../../shared/utils';
     import { useVrcxVueTable } from '../../lib/table/useVrcxVueTable';
     import GameLogSessions from './components/GameLogSessions.vue';
 
@@ -157,7 +156,6 @@
     const modalStore = useModalStore();
 
     /**
-     *
      * @param row
      */
     function getGameLogCreatedAt(row) {
@@ -178,7 +176,6 @@
     const gameLogRef = ref(null);
 
     /**
-     *
      * @param row
      */
     function deleteGameLogEntryPrompt(row) {
@@ -192,11 +189,16 @@
     }
 
     /**
-     *
      * @param row
      */
     function deleteGameLogEntry(row) {
-        removeFromArray(gameLogTableData.value, row);
+        const index = gameLogTableData.value.findIndex((entry) => entry === row);
+        if (index !== -1) {
+            gameLogTableData.value = [
+                ...gameLogTableData.value.slice(0, index),
+                ...gameLogTableData.value.slice(index + 1)
+            ];
+        }
         database.deleteGameLogEntry(row);
     }
 
@@ -207,7 +209,6 @@
     });
 
     /**
-     *
      * @param value
      */
     function handleGameLogFilterChange(value) {
@@ -218,19 +219,10 @@
     const pageSizes = computed(() => appearanceSettingsStore.tablePageSizes);
 
     /**
-     *
      * @param row
      */
     function getGameLogRowId(row) {
-        if (row?.rowId != null) return `row:${row.rowId}:${row?.type ?? ''}`;
-
-        const type = row?.type ?? '';
-        const createdAt = row?.created_at ?? row?.createdAt ?? row?.dt ?? '';
-        const userId = row?.userId ?? '';
-        const displayName = row?.displayName ?? '';
-        const location = row?.location ?? '';
-
-        return `${type}:${createdAt}:${userId}:${displayName}:${location}:${Date.now()}`;
+        return `row:${row.rowId}:${row?.type ?? ''}`;
     }
 
     const { table, pagination } = useVrcxVueTable({
@@ -265,7 +257,7 @@
     };
 
     /**
-     * @param {'sessions'|'table'|undefined} mode
+     * @param {'sessions' | 'table' | undefined} mode
      */
     function handleViewModeChange(mode) {
         if (mode === 'sessions' || mode === 'table') {

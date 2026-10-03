@@ -19,11 +19,13 @@
                     :model-value="avatarExportFavoriteGroupSelection"
                     @update:modelValue="handleAvatarExportFavoriteGroupSelect">
                     <SelectTrigger size="sm">
-                        <SelectValue placeholder="All Favorites" />
+                        <SelectValue :placeholder="t('dialog.avatar_export.all_favorites')" />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
-                            <SelectItem :value="AVATAR_EXPORT_ALL_VALUE">All Favorites</SelectItem>
+                            <SelectItem :value="AVATAR_EXPORT_ALL_VALUE">{{
+                                t('dialog.avatar_export.all_favorites')
+                            }}</SelectItem>
                             <SelectItem
                                 v-for="groupAPI in favoriteAvatarGroups"
                                 :key="groupAPI.name"
@@ -39,11 +41,13 @@
                     :model-value="avatarExportLocalFavoriteGroupSelection"
                     @update:modelValue="handleAvatarExportLocalFavoriteGroupSelect">
                     <SelectTrigger size="sm">
-                        <SelectValue placeholder="Select Group" />
+                        <SelectValue :placeholder="t('dialog.avatar_export.select_group')" />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectGroup>
-                            <SelectItem :value="AVATAR_EXPORT_NONE_VALUE">None</SelectItem>
+                            <SelectItem :value="AVATAR_EXPORT_NONE_VALUE">{{
+                                t('dialog.gallery_select.none')
+                            }}</SelectItem>
                             <SelectItem v-for="group in localAvatarFavoriteGroups" :key="group" :value="group">
                                 {{ group }} ({{ localAvatarFavGroupLength(group) }})
                             </SelectItem>
@@ -115,7 +119,6 @@
     ]);
 
     /**
-     *
      * @param label
      * @param checked
      */
@@ -148,9 +151,6 @@
         }
     );
 
-    /**
-     *
-     */
     function showAvatarExportDialog() {
         avatarExportFavoriteGroup.value = null;
         avatarExportLocalFavoriteGroup.value = null;
@@ -160,7 +160,6 @@
     }
 
     /**
-     *
      * @param value
      */
     function handleAvatarExportFavoriteGroupSelect(value) {
@@ -174,7 +173,6 @@
     }
 
     /**
-     *
      * @param value
      */
     function handleAvatarExportLocalFavoriteGroupSelect(value) {
@@ -186,7 +184,6 @@
         selectAvatarExportLocalGroup(value);
     }
     /**
-     *
      * @param event
      */
     function handleCopyAvatarExportData(event) {
@@ -203,9 +200,6 @@
                 toast.error('Copy failed!');
             });
     }
-    /**
-     *
-     */
     function updateAvatarExportDialog() {
         const propsForQuery = exportSelectOptions.value
             .filter((option) => exportSelectedOptions.value.includes(option.label))
@@ -248,7 +242,6 @@
         avatarExportContent.value = lines.reverse().join('\n');
     }
     /**
-     *
      * @param group
      */
     function selectAvatarExportGroup(group) {
@@ -259,7 +252,6 @@
         updateAvatarExportDialog();
     }
     /**
-     *
      * @param group
      */
     function selectAvatarExportLocalGroup(group) {

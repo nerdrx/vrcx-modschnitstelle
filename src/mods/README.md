@@ -1,36 +1,44 @@
 # VRCX Mod System
 
-Eine schlanke, update-stabile Schnittstelle für eigene Erweiterungen ("Mods")
-in diesem VRCX-Fork. Mods leben komplett in `src/mods/` und berühren keinen
-Upstream-Code.
+Eine schlanke Schnittstelle für eigene Erweiterungen ("Mods") in diesem
+VRCX-Fork. Loader, API und Mods leben in `src/mods/`; die Integration berührt
+zusätzlich Renderer- und nativen Overlay-Code.
 
-## Upstream-Berührungspunkte (bewusst minimal)
+## Integrationspunkte
 
-Beim Rebase auf ein neues Upstream-Release können nur diese Stellen
-kollidieren — alles andere sind neue Dateien:
+Beim Rebase können Änderungen an diesen Stellen Konflikte oder Anpassungen
+erfordern:
 
 | Datei | Änderung |
 |---|---|
-| `src/app.js` | `import { initMods } from './mods';` + `await initMods({ app });` vor `app.mount` |
-| `src/plugins/router.js` | `name: 'main-layout'` auf der `/`-Route (für `router.addRoute`) |
+| `src/app.js` | Mod-Loader-Aufruf und Notification-Polyfill |
+| `src/plugins/router.js`, `src/shared/constants/ui.js` | Benannte Layout-Route und reaktive Nav-Einträge für Mod-Views |
+| `src/shared/constants/settings.js` | Stable- und Nightly-Updater verweisen auf `nerdrx/vrcx-modschnitstelle` |
+| `Dotnet/Overlay*`, `Dotnet/AppApi/*`, `src/public/vr-chat.html` | VR-Chat-Panel, Overlay-Nachrichten und Voice-Sidecar |
+| `src-electron/`, `build-scripts/download-dotnet-runtime.js` | Markierte Launcher- und Runtime-Download-Fixes |
 
-Beide Zeilen sind mit `// MOD-API` markiert → nach einem Rebase einfach nach
-`MOD-API` greppen um zu prüfen, ob sie noch da sind.
+Nach einem Rebase alle Integrationsmarkierungen prüfen, nicht nur die Loader-
+und Router-Hooks. Die Mod-Bridge in `src/mods/api.js` greift auf VRCX-Stores,
+Datenbankdienste, Feed-Aktionen, i18n und weitere Interna zu; Änderungen dort
+können ebenfalls Anpassungen erfordern.
 
 ## Update-Workflow (neues VRCX-Release einpflegen)
 
 ```bash
-git remote add upstream https://github.com/vrcx-team/VRCX.git   # einmalig
-git fetch upstream
-git rebase upstream/master        # oder: git merge upstream/master
-grep -rn "MOD-API" src/app.js src/plugins/router.js   # Hooks noch da?
-npx vitest run src/mods           # Mod-Tests grün?
+git remote add vrcx-upstream https://github.com/vrcx-team/VRCX.git  # einmalig
+git fetch vrcx-upstream
+git rebase vrcx-upstream/master  # oder: git merge vrcx-upstream/master
+rg -n 'MOD-API|MOD-FIX' src src-electron Dotnet build-scripts
+npx vitest run src/mods
+npm run prod
+dotnet build Dotnet/VRCX-Cef.csproj -p:Configuration=Release -p:WarningLevel=0 -p:Platform=x64 -p:PlatformTarget=x64 -t:"Clean;Build" -maxcpucount --runtime win-x64 --self-contained
 ```
 
-Konflikte sind nur in den zwei Hook-Dateien möglich und in Sekunden gelöst.
-Sollte Upstream `feedStore.addFeedEntry` oder die Feed-Tabellen umbenennen,
-muss nur `src/mods/api.js` (Event-Bridge) bzw. die betroffene Mod-DB-Query
-angepasst werden — die Mod-API nach außen bleibt gleich.
+`vrcx-upstream` zeigt direkt auf `vrcx-team/VRCX` und bleibt getrennt vom
+`upstream`-Remote des Zwischen-Forks `Arikazei/vrcx-modschnitstelle`. Updater
+und Release-Downloads verwenden `nerdrx/vrcx-modschnitstelle`. Prüfe beim
+Rebase die markierten Renderer- und .NET-Stellen sowie Installer und Updater;
+ein grüner Mod-Test allein deckt diese Integration nicht ab.
 
 ## Einen Mod schreiben
 

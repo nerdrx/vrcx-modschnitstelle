@@ -5,25 +5,31 @@ small, update-stable **mod/plugin API** — plus four mods built on top of it.
 
 *Deutsche Version weiter unten. / German version below.*
 
-VRCX upstream is only touched in **3 marked lines** (`// MOD-API`); everything
-else lives in `src/mods/`. Mods never import VRCX internals directly — they code
-against a stable `ModContext` (events, DB access, UI/nav registration, i18n,
-selected API helpers), so rebasing onto new VRCX releases is usually painless.
+The mods themselves live in `src/mods/` and use a `ModContext` (events, DB
+access, UI/nav registration, i18n, selected API helpers). The integration also
+touches VRCX renderer and native overlay code, so each base update needs checks
+at those boundaries.
 
 **Transparency — every change to upstream VRCX code:**
 
-- [`src/app.js`](src/app.js) — 2 lines: import + `initMods({ app })` call
-  (search for `MOD-API`)
-- [`src/plugins/router.js`](src/plugins/router.js) — 1 line: a `name` for the
-  main layout route so mods can register views under it
-- Everything else is additive and lives in [`src/mods/`](src/mods/)
-- [`src/shared/constants/settings.js`](src/shared/constants/settings.js) —
-  updater URLs point to **this fork's releases** instead of official VRCX
-  (so updating never silently replaces the modded app; marked `MOD-API`)
-- Plus a few small, clearly marked (`// MOD-FIX`) bugfixes in the Electron
-  launcher (`src-electron/`), proposed upstream as well
+- `src/app.js`, `src/plugins/router.js`, and `src/shared/constants/ui.js` —
+  initialize mods and allow mod views to register in the router and reactive
+  navigation.
+- `src/shared/constants/settings.js` — updater URLs point to
+  [this fork's releases](https://github.com/nerdrx/vrcx-modschnitstelle/releases)
+  so updates keep users on the modded app.
+- `Dotnet/Overlay*`, `Dotnet/AppApi/*`, and `src/public/vr-chat.html` — native
+  VR chat panel, overlay message routing, and voice-sidecar integration.
+- `src-electron/` and `build-scripts/download-dotnet-runtime.js` — marked
+  `// MOD-FIX` launcher and runtime-download fixes.
+- `src/mods/` contains the loader, stable-facing API, and bundled mods; its
+  bridge still adapts to VRCX stores, database services, and other internals.
 - Full diff against official VRCX:
-  [upstream comparison](https://github.com/vrcx-team/VRCX/compare/master...Arikazei:vrcx-modschnitstelle:mod-api)
+  [upstream comparison](https://github.com/vrcx-team/VRCX/compare/master...nerdrx:vrcx-modschnitstelle:mod-api)
+
+For base updates, add `vrcx-team/VRCX` as a separate `vrcx-upstream` remote;
+keep the existing `upstream` remote to `Arikazei/vrcx-modschnitstelle`. See the
+[sync workflow](src/mods/README.md#update-workflow-neues-vrcx-release-einpflegen).
 
 ## Included mods
 
@@ -47,7 +53,7 @@ Same as upstream VRCX (Windows):
 ```bash
 npm install --include=dev
 npm run prod
-dotnet build Dotnet\VRCX-Cef.csproj -c Release
+dotnet build Dotnet/VRCX-Cef.csproj -p:Configuration=Release -p:WarningLevel=0 -p:Platform=x64 -p:PlatformTarget=x64 -t:"Clean;Build" -maxcpucount --runtime win-x64 --self-contained
 ```
 
 The app then lives in `build\Cef\VRCX.exe`. Mod API docs, how to write your own
@@ -75,27 +81,31 @@ Ein **inoffizieller Fork von [VRCX](https://github.com/vrcx-team/VRCX)** mit
 einer schlanken, **update-stabilen Mod-/Plugin-Schnittstelle** — plus vier
 darauf aufbauenden Mods.
 
-Der VRCX-Upstream-Code wird nur an **3 markierten Zeilen** (`// MOD-API`)
-berührt; alles Weitere liegt in `src/mods/`. Mods importieren nie
-VRCX-Interna direkt, sondern programmieren gegen einen stabilen `ModContext`
-(Events, DB-Zugriff, UI-/Nav-Registrierung, i18n, ausgewählte API-Helfer) —
-ein Rebase auf neue VRCX-Releases ist dadurch meist schmerzfrei.
+Die Mods selbst liegen in `src/mods/` und verwenden einen `ModContext`
+(Events, DB-Zugriff, UI-/Nav-Registrierung, i18n, ausgewählte API-Helfer).
+Die Integration berührt auch Renderer- und nativen Overlay-Code von VRCX;
+bei jedem Base-Update müssen diese Schnittstellen geprüft werden.
 
 **Transparenz — jede Änderung am Upstream-Code von VRCX:**
 
-- [`src/app.js`](src/app.js) — 2 Zeilen: Import + Aufruf `initMods({ app })`
-  (nach `MOD-API` suchen)
-- [`src/plugins/router.js`](src/plugins/router.js) — 1 Zeile: ein `name` für
-  die Hauptlayout-Route, damit Mods dort Views registrieren können
-- Alles andere ist rein additiv und liegt in [`src/mods/`](src/mods/)
-- [`src/shared/constants/settings.js`](src/shared/constants/settings.js) —
-  die Updater-URLs zeigen auf die **Releases dieses Forks** statt auf das
-  offizielle VRCX (ein Update ersetzt die gemoddete App also nie unbemerkt;
-  markiert mit `MOD-API`)
-- Dazu wenige klar markierte (`// MOD-FIX`) Bugfixes im Electron-Launcher
-  (`src-electron/`), die auch Upstream vorgeschlagen werden
+- `src/app.js`, `src/plugins/router.js` und `src/shared/constants/ui.js` —
+  initialisieren Mods und erlauben Mod-Views in Router und reaktiver Navigation.
+- `src/shared/constants/settings.js` — die Updater-URLs zeigen auf
+  [die Releases dieses Forks](https://github.com/nerdrx/vrcx-modschnitstelle/releases),
+  damit Updates bei der gemoddeten App bleiben.
+- `Dotnet/Overlay*`, `Dotnet/AppApi/*` und `src/public/vr-chat.html` — natives
+  VR-Chat-Panel, Overlay-Nachrichtenrouting und Voice-Sidecar-Integration.
+- `src-electron/` und `build-scripts/download-dotnet-runtime.js` — markierte
+  `// MOD-FIX`-Korrekturen am Launcher und Runtime-Download.
+- `src/mods/` enthält Loader, Mod-API und Mods; die Bridge passt weiterhin
+  VRCX-Stores, Datenbankdienste und andere Interna an.
 - Kompletter Diff gegen das offizielle VRCX:
-  [Upstream-Vergleich](https://github.com/vrcx-team/VRCX/compare/master...Arikazei:vrcx-modschnitstelle:mod-api)
+  [Upstream-Vergleich](https://github.com/vrcx-team/VRCX/compare/master...nerdrx:vrcx-modschnitstelle:mod-api)
+
+Für Base-Updates `vrcx-team/VRCX` als separates Remote `vrcx-upstream`
+hinzufügen; das bestehende Remote `upstream` zu `Arikazei/vrcx-modschnitstelle`
+beibehalten. Der [Sync-Workflow](src/mods/README.md#update-workflow-neues-vrcx-release-einpflegen)
+enthält die Schritte.
 
 ## Enthaltene Mods
 
@@ -121,7 +131,7 @@ Wie beim offiziellen VRCX (Windows):
 ```bash
 npm install --include=dev
 npm run prod
-dotnet build Dotnet\VRCX-Cef.csproj -c Release
+dotnet build Dotnet/VRCX-Cef.csproj -p:Configuration=Release -p:WarningLevel=0 -p:Platform=x64 -p:PlatformTarget=x64 -t:"Clean;Build" -maxcpucount --runtime win-x64 --self-contained
 ```
 
 Die App liegt danach unter `build\Cef\VRCX.exe`. Mod-API-Doku, eigene Mods

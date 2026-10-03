@@ -205,14 +205,12 @@
                 },
                 "logging": {
                     "header": "Logging",
-                    "resource_load": "Log Udon string/image load",
-                    "empty_avatar": "Log avatars in feed without names"
+                    "resource_load": "Log Udon string/image load"
                 },
                 "automation": {
                     "auto_state_change_tooltip": "Tự động thay đổi status khi có người khác trong world instance (Một mình / Cùng mọi người)",
                     "auto_invite_request_accept": "Auto Accept Invite Requests",
                     "auto_invite_request_accept_tooltip": "Automatically accept invite requests from favorite friends",
-                    "auto_invite_request_accept_off": "Tắt",
                     "auto_invite_request_accept_favs": "All Favorites",
                     "auto_invite_request_accept_selected_favs": "VRCX Favorites"
                 },
@@ -240,7 +238,6 @@
                     "theme_mode_pink": "Hồng",
                     "theme_mode_material3": "Material 3",
                     "zoom": "Zoom",
-                    "vrcplus_profile_icons": "VRCPlus Profile Icons",
                     "nicknames": "Memo Nicknames",
                     "sort_favorite_by": "Sắp xếp mục yêu thích theo",
                     "sort_favorite_by_name": "Tên",
@@ -257,7 +254,6 @@
                     "force_iso_date_format": "Bắt buộc định dạng ngày ISO"
                 },
                 "side_panel": {
-                    "header": "Bẳng điều khiển bên cạnh",
                     "sorting": {
                         "header": "Sắp xếp"
                     }
@@ -475,8 +471,6 @@
                 "vrchat_team": "VRChat Team"
             },
             "actions": {
-                "favorite_tooltip": "Thêm vào yêu thích",
-                "unfavorite_tooltip": "Bỏ khỏi yêu thích",
                 "refresh": "Làm mới",
                 "invite": "Gửi lời mời",
                 "invite_with_message": "Gửi lời mời với tin nhắn",
@@ -524,7 +518,6 @@
                 "memo": "Ghi nhớ",
                 "memo_placeholder": "Bấm để tạo ghi nhớ",
                 "avatar_info": "Thông tin Avatar",
-                "avatar_info_last_seen": "Lần cuối xem thông tin Avatar",
                 "represented_group": "Đại diện Group",
                 "bio": "Bio",
                 "last_seen": "Lần cuối gặp",
@@ -549,7 +542,6 @@
                 "copy_url": "Copy URL",
                 "copy_display_name": "Copy DisplayName",
                 "instance_full": "đầu",
-                "instance_closed": "closed",
                 "close_instance": "Close Instance"
             },
             "groups": {
@@ -650,7 +642,7 @@
                 "capacity": "Sức chứa",
                 "heat": "Độ nóng",
                 "popularity": "Độ nổi tiếng",
-                "created_at": "Tạo lúc",
+                "created": "Tạo lúc",
                 "last_updated": "Lần cập nhật cuối",
                 "publication_date": "Publication Date",
                 "labs_publication_date": "Labs Publication Date",
@@ -764,12 +756,10 @@
                 "announcement": "Thông báo",
                 "rules": "Luật lệ",
                 "members": "Thành viên",
-                "created_at": "Tạo lúc",
+                "created": "Tạo lúc",
                 "links": "Đường dẫn",
                 "url": "URL nhóm",
-                "url_tooltip": "Sao chép URL đến clipboard",
                 "id": "Group ID",
-                "id_tooltip": "Sao chép ID đến clipboard",
                 "joined_at": "Tham gia lúc",
                 "roles": "Vai trò",
                 "role": "Vai trò:",

@@ -10,15 +10,12 @@ class SQLiteService {
             if (e.message.includes('database disk image is malformed')) {
                 modalStore
                     .confirm({
-                        description:
-                            'Please repair or delete your database file by following these instructions.',
+                        description: 'Please repair or delete your database file by following these instructions.',
                         title: 'Your database is corrupted'
                     })
                     .then(({ ok }) => {
                         if (!ok) return;
-                        openExternalLink(
-                            'https://github.com/vrcx-team/VRCX/wiki#how-to-repair-vrcx-database'
-                        );
+                        openExternalLink('https://github.com/vrcx-team/VRCX/wiki#how-to-repair-vrcx-database');
                     })
                     .catch(() => {});
             }
@@ -33,8 +30,7 @@ class SQLiteService {
                 e.message.includes('attempt to write a readonly database')
             ) {
                 modalStore.alert({
-                    description:
-                        'Please close other applications that might be using the database file.',
+                    description: 'Please close other applications that might be using the database file.',
                     title: 'Database is locked'
                 });
             }
@@ -76,6 +72,17 @@ class SQLiteService {
                 args = new Map(Object.entries(args));
             }
             return await SQLite.ExecuteNonQuery(sql, args);
+        } catch (e) {
+            this.handleSQLiteError(e);
+        }
+    }
+
+    async executeInsert(sql, args = null) {
+        try {
+            if (LINUX && args) {
+                args = new Map(Object.entries(args));
+            }
+            return await SQLite.ExecuteInsert(sql, args);
         } catch (e) {
             this.handleSQLiteError(e);
         }

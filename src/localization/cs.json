@@ -215,8 +215,7 @@
                 },
                 "logging": {
                     "header": "Záznamy",
-                    "resource_load": "Záznam načítání Udon nápisů/obrázků",
-                    "empty_avatar": "Záznam avatarů v kanálu bez jmen"
+                    "resource_load": "Záznam načítání Udon nápisů/obrázků"
                 },
                 "automation": {
                     "auto_change_status": "Automaticky měnit status",
@@ -230,7 +229,6 @@
                     "instance_type_placeholder": "Všechny typy instancí",
                     "auto_invite_request_accept": "Automaticky přijímat žádosti o pozvání",
                     "auto_invite_request_accept_tooltip": "Automaticky přijímat žádosti o pozvání od oblíbených přátel",
-                    "auto_invite_request_accept_off": "Vypnuto",
                     "auto_invite_request_accept_favs": "Všichni oblíbení",
                     "auto_invite_request_accept_selected_favs": "VRCX oblíbení"
                 },
@@ -258,7 +256,6 @@
                     "theme_mode_pink": "Růžový",
                     "theme_mode_material3": "Material 3",
                     "zoom": "Přiblížení",
-                    "vrcplus_profile_icons": "VRCPlus Profilové ikony",
                     "nicknames": "Přezdívky v poznámkách",
                     "sort_favorite_by": "Řadit oblíbené podle",
                     "sort_favorite_by_name": "jména",
@@ -275,7 +272,6 @@
                     "force_iso_date_format": "Vynutit formát data ISO"
                 },
                 "side_panel": {
-                    "header": "Postranní panel",
                     "sorting": {
                         "header": "Řazení",
                         "alphabetical": "Abecedně",
@@ -526,8 +522,6 @@
                 "showcased": "Showcased"
             },
             "actions": {
-                "favorite_tooltip": "Add to favorites",
-                "unfavorite_tooltip": "Remove from favorites",
                 "refresh": "Refresh",
                 "share": "Share",
                 "invite": "Invite",
@@ -578,7 +572,6 @@
                 "memo": "Memo",
                 "memo_placeholder": "Click to add a memo",
                 "avatar_info": "Avatar Info",
-                "avatar_info_last_seen": "Avatar Info Last Seen",
                 "represented_group": "Represented Group",
                 "bio": "Bio",
                 "last_seen": "Last Seen",
@@ -603,7 +596,6 @@
                 "copy_url": "Copy URL",
                 "copy_display_name": "Copy DisplayName",
                 "instance_full": "full",
-                "instance_closed": "closed",
                 "close_instance": "Close Instance",
                 "instance_age_gated": "age gated"
             },
@@ -720,7 +712,7 @@
                 "capacity": "Capacity",
                 "heat": "Heat",
                 "popularity": "Popularity",
-                "created_at": "Created At",
+                "created": "Created",
                 "last_updated": "Last Updated",
                 "publication_date": "Publication Date",
                 "labs_publication_date": "Labs Publication Date",
@@ -833,12 +825,12 @@
                 "announcement": "Announcement",
                 "rules": "Rules",
                 "members": "Members",
-                "created_at": "Created At",
+                "created": "Created",
                 "links": "Links",
                 "url": "Group URL",
-                "url_tooltip": "Copy URL to clipboard",
                 "id": "Group ID",
-                "id_tooltip": "Copy ID to clipboard",
+                "copy_id": "Copy ID",
+                "copy_url": "Copy URL",
                 "joined_at": "Joined At",
                 "roles": "Roles",
                 "role": "Role:",

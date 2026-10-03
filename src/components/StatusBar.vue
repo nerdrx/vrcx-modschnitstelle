@@ -14,7 +14,7 @@
                             -webkit-mask-image: linear-gradient(to right, black calc(100% - 20px), transparent 100%);
                         ">
                         <TooltipWrapper
-                            v-if="visibility.proxy"
+                            v-if="!isLinux && visibility.proxy"
                             :content="
                                 vrcxStore.proxyServer
                                     ? `${t('status_bar.proxy')}: ${vrcxStore.proxyServer}`
@@ -434,6 +434,7 @@
     const { t } = useI18n();
 
     const isMacOS = computed(() => navigator.platform.includes('Mac'));
+    const isLinux = computed(() => LINUX);
 
     const gameStore = useGameStore();
     const gameLogStore = useGameLogStore();
@@ -518,7 +519,6 @@
     const visibility = reactive({ ...defaultVisibility });
 
     /**
-     *
      * @param key
      */
     function toggleVisibility(key) {
@@ -555,9 +555,6 @@
 
     const msgsPerMinuteAvg = computed(() => Math.round(msgsLastMinute.value));
 
-    /**
-     *
-     */
     function drawSparkline() {
         const canvas = wsCanvasRef.value;
         if (!canvas) return;
@@ -599,7 +596,6 @@
     }
 
     /**
-     *
      * @param variableName
      * @param fallback
      */
@@ -633,15 +629,11 @@
 
     const visibleClocks = computed(() => clocks.value.slice(0, clockCount.value));
 
-    /**
-     *
-     */
     function saveClocks() {
         configRepository.setString(CLOCKS_KEY, JSON.stringify(clocks.value));
     }
 
     /**
-     *
      * @param val
      */
     function setClockCount(val) {
@@ -654,7 +646,6 @@
     }
 
     /**
-     *
      * @param clock
      * @returns {string}
      */
@@ -669,7 +660,6 @@
     }
 
     /**
-     *
      * @param idx
      * @param offsetValue
      */
@@ -775,9 +765,6 @@
         zoomInputRef.value?.$el?.focus?.();
     }
 
-    /**
-     *
-     */
     function handleProxyClick() {
         generalSettingsStore.promptProxySettings();
     }

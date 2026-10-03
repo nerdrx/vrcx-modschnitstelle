@@ -14,10 +14,7 @@ import {
 import { i18n } from '../plugins/i18n';
 import { AppDebug, logWebRequest } from '../services/appConfig';
 import { database } from '../services/database';
-import {
-    runLastLocationResetFlow,
-    runUpdateCurrentUserLocationFlow
-} from './locationCoordinator';
+import { runLastLocationResetFlow, runUpdateCurrentUserLocationFlow } from './locationCoordinator';
 import { getGroupName } from '../shared/utils';
 import { userRequest } from '../api';
 import { watchState } from '../services/watchState';
@@ -100,10 +97,7 @@ export async function tryLoadPlayerList() {
                 };
                 locationStore.lastLocation.playerList.set(ctx.userId, userMap);
                 if (friendStore.friends.has(ctx.userId)) {
-                    locationStore.lastLocation.friendList.set(
-                        ctx.userId,
-                        userMap
-                    );
+                    locationStore.lastLocation.friendList.set(ctx.userId, userMap);
                 }
             }
             if (ctx.type === 'OnPlayerLeft') {
@@ -112,12 +106,13 @@ export async function tryLoadPlayerList() {
             }
         }
         locationStore.lastLocation.playerList.forEach((ref1) => {
-            if (
-                ref1.userId &&
-                typeof ref1.userId === 'string' &&
-                !userStore.cachedUsers.has(ref1.userId)
-            ) {
-                userRequest.getUser({ userId: ref1.userId });
+            if (ref1.userId && typeof ref1.userId === 'string') {
+                if (!userStore.cachedUsers.has(ref1.userId)) {
+                    userRequest.getUser({ userId: ref1.userId });
+                }
+                if (!userStore.cachedProfiles.has(ref1.userId)) {
+                    userRequest.getPublicProfile({ userId: ref1.userId });
+                }
             }
         });
 
@@ -134,10 +129,11 @@ export async function tryLoadPlayerList() {
 /**
  * Core game log entry processor. Dispatches game log events to the
  * appropriate stores based on type.
+ *
  * @param {object} gameLog
  * @param {string} location
  */
-export function addGameLogEntry(gameLog, location) {
+export async function addGameLogEntry(gameLog, location) {
     const gameLogStore = useGameLogStore();
     const locationStore = useLocationStore();
     const instanceStore = useInstanceStore();
@@ -154,17 +150,15 @@ export function addGameLogEntry(gameLog, location) {
     const notificationStore = useNotificationStore();
 
     let entry = undefined;
+    let persistedEntryPromise;
     if (advancedSettingsStore.gameLogDisabled) {
         return;
     }
     let userId = String(gameLog.userId || '');
     if (!userId && gameLog.displayName) {
         userId =
-            findUserByDisplayName(
-                userStore.cachedUsers,
-                gameLog.displayName,
-                userStore.cachedUserIdsByDisplayName
-            )?.id ?? '';
+            findUserByDisplayName(userStore.cachedUsers, gameLog.displayName, userStore.cachedUserIdsByDisplayName)
+                ?.id ?? '';
     }
     switch (gameLog.type) {
         case 'location-destination':
@@ -174,12 +168,10 @@ export function addGameLogEntry(gameLog, location) {
                     type: 'LocationDestination',
                     location: gameLog.location
                 });
-                runLastLocationResetFlow(gameLog.dt);
+                await runLastLocationResetFlow(gameLog.dt);
                 locationStore.setLastLocationLocation('traveling');
                 locationStore.setLastLocationDestination(gameLog.location);
-                locationStore.setLastLocationDestinationTime(
-                    Date.parse(gameLog.dt)
-                );
+                locationStore.setLastLocationDestinationTime(Date.parse(gameLog.dt));
                 gameLogStore.state.lastLocationAvatarList.clear();
                 instanceStore.removeQueuedInstance(gameLog.location);
                 runUpdateCurrentUserLocationFlow();
@@ -191,13 +183,10 @@ export function addGameLogEntry(gameLog, location) {
             }
             break;
         case 'location':
-            instanceStore.addInstanceJoinHistory(
-                locationStore.lastLocation.location,
-                gameLog.dt
-            );
+            instanceStore.addInstanceJoinHistory(locationStore.lastLocation.location, gameLog.dt);
             const worldName = replaceBioSymbols(gameLog.worldName);
             if (gameStore.isGameRunning) {
-                runLastLocationResetFlow(gameLog.dt);
+                await runLastLocationResetFlow(gameLog.dt);
                 gameLogStore.clearNowPlaying();
                 locationStore.setLastLocation({
                     date: Date.parse(gameLog.dt),
@@ -216,16 +205,11 @@ export function addGameLogEntry(gameLog, location) {
             }
             instanceStore.addInstanceJoinHistory(gameLog.location, gameLog.dt);
             const L = parseLocation(gameLog.location);
-            entry = createLocationEntry(
-                gameLog.dt,
-                gameLog.location,
-                L.worldId,
-                worldName
-            );
+            entry = createLocationEntry(gameLog.dt, gameLog.location, L.worldId, worldName);
             getGroupName(gameLog.location).then((groupName) => {
                 entry.groupName = groupName;
             });
-            gameLogStore.addGamelogLocationToDatabase(entry);
+            persistedEntryPromise = gameLogStore.addGamelogLocationToDatabase(entry);
             break;
         case 'player-joined':
             const joinTime = Date.parse(gameLog.dt);
@@ -241,15 +225,11 @@ export function addGameLogEntry(gameLog, location) {
                 console.error('Missing userId:', gameLog.displayName);
             } else if (userId === userStore.currentUser.id) {
                 // skip
-            } else if (
-                friendStore.friends.has(userId) &&
-                typeof ref !== 'undefined'
-            ) {
+            } else if (friendStore.friends.has(userId) && typeof ref !== 'undefined') {
                 locationStore.lastLocation.friendList.set(userId, userMap);
                 if (
                     ref.location !== locationStore.lastLocation.location &&
-                    ref.travelingToLocation !==
-                        locationStore.lastLocation.location
+                    ref.travelingToLocation !== locationStore.lastLocation.location
                 ) {
                     ref.$location_at = joinTime;
                 }
@@ -260,17 +240,12 @@ export function addGameLogEntry(gameLog, location) {
                     console.log('Fetching user from gameLog:', userId);
                 }
                 userRequest.getUser({ userId });
+                userRequest.getPublicProfile({ userId });
             }
             vrStore.updateVRLastLocation();
             instanceStore.getCurrentInstanceUserList();
-            entry = createJoinLeaveEntry(
-                'OnPlayerJoined',
-                gameLog.dt,
-                gameLog.displayName,
-                location,
-                userId
-            );
-            database.addGamelogJoinLeaveToDatabase(entry);
+            entry = createJoinLeaveEntry('OnPlayerJoined', gameLog.dt, gameLog.displayName, location, userId);
+            persistedEntryPromise = database.addGamelogJoinLeaveToDatabase(entry);
             break;
         case 'player-left':
             const ref1 = locationStore.lastLocation.playerList.get(userId);
@@ -280,28 +255,19 @@ export function addGameLogEntry(gameLog, location) {
             const time = dayjs(gameLog.dt) - ref1.joinTime;
             locationStore.lastLocation.playerList.delete(userId);
             locationStore.lastLocation.friendList.delete(userId);
-            gameLogStore.state.lastLocationAvatarList.delete(
-                gameLog.displayName
-            );
+            gameLogStore.state.lastLocationAvatarList.delete(gameLog.displayName);
             photonStore.photonLobbyAvatars.delete(userId);
             vrStore.updateVRLastLocation();
             instanceStore.getCurrentInstanceUserList();
-            entry = createJoinLeaveEntry(
-                'OnPlayerLeft',
-                gameLog.dt,
-                gameLog.displayName,
-                location,
-                userId,
-                time
-            );
-            database.addGamelogJoinLeaveToDatabase(entry);
+            entry = createJoinLeaveEntry('OnPlayerLeft', gameLog.dt, gameLog.displayName, location, userId, time);
+            persistedEntryPromise = database.addGamelogJoinLeaveToDatabase(entry);
             break;
         case 'portal-spawn':
             if (vrcxStore.ipcEnabled && gameStore.isGameRunning) {
                 break;
             }
             entry = createPortalSpawnEntry(gameLog.dt, location);
-            database.addGamelogPortalSpawnToDatabase(entry);
+            persistedEntryPromise = database.addGamelogPortalSpawnToDatabase(entry);
             break;
         case 'video-play':
             gameLog.videoUrl = decodeURI(gameLog.videoUrl);
@@ -309,7 +275,7 @@ export function addGameLogEntry(gameLog, location) {
                 break;
             }
             gameLogStore.setLastVideoUrl(gameLog.videoUrl);
-            gameLogStore.addGameLogVideo(gameLog, location, userId);
+            await gameLogStore.addGameLogVideo(gameLog, location, userId);
             break;
         case 'video-sync':
             const timestamp = gameLog.timestamp.replace(/,/g, '');
@@ -319,20 +285,12 @@ export function addGameLogEntry(gameLog, location) {
             break;
         case 'resource-load-string':
         case 'resource-load-image':
-            if (
-                !generalSettingsStore.logResourceLoad ||
-                gameLogStore.lastResourceloadUrl === gameLog.resourceUrl
-            ) {
+            if (!generalSettingsStore.logResourceLoad || gameLogStore.lastResourceloadUrl === gameLog.resourceUrl) {
                 break;
             }
             gameLogStore.setLastResourceloadUrl(gameLog.resourceUrl);
-            entry = createResourceLoadEntry(
-                gameLog.type,
-                gameLog.dt,
-                gameLog.resourceUrl,
-                location
-            );
-            database.addGamelogResourceLoadToDatabase(entry);
+            entry = createResourceLoadEntry(gameLog.type, gameLog.dt, gameLog.resourceUrl, location);
+            persistedEntryPromise = database.addGamelogResourceLoadToDatabase(entry);
             break;
         case 'screenshot':
             vrcxStore.processScreenshot(gameLog.screenshotPath);
@@ -342,10 +300,7 @@ export function addGameLogEntry(gameLog, location) {
             if (advancedSettingsStore.saveInstanceEmoji) {
                 const inv = parseInventoryFromUrl(gameLog.url);
                 if (inv) {
-                    galleryStore.queueCheckInstanceInventory(
-                        inv.inventoryId,
-                        inv.userId
-                    );
+                    galleryStore.queueCheckInstanceInventory(inv.inventoryId, inv.userId);
                 }
             }
             if (advancedSettingsStore.saveInstancePrints) {
@@ -359,28 +314,17 @@ export function addGameLogEntry(gameLog, location) {
             if (!gameStore.isGameRunning) {
                 break;
             }
-            let avatarName = gameLogStore.state.lastLocationAvatarList.get(
-                gameLog.displayName
-            );
-            if (
-                photonStore.photonLoggingEnabled ||
-                avatarName === gameLog.avatarName
-            ) {
+            let avatarName = gameLogStore.state.lastLocationAvatarList.get(gameLog.displayName);
+            if (photonStore.photonLoggingEnabled || avatarName === gameLog.avatarName) {
                 break;
             }
             if (!avatarName) {
                 avatarName = gameLog.avatarName;
-                gameLogStore.state.lastLocationAvatarList.set(
-                    gameLog.displayName,
-                    avatarName
-                );
+                gameLogStore.state.lastLocationAvatarList.set(gameLog.displayName, avatarName);
                 break;
             }
             avatarName = gameLog.avatarName;
-            gameLogStore.state.lastLocationAvatarList.set(
-                gameLog.displayName,
-                avatarName
-            );
+            gameLogStore.state.lastLocationAvatarList.set(gameLog.displayName, avatarName);
             entry = {
                 created_at: gameLog.dt,
                 type: 'AvatarChange',
@@ -392,15 +336,15 @@ export function addGameLogEntry(gameLog, location) {
         case 'vrcx':
             const type = gameLog.data.substr(0, gameLog.data.indexOf(' '));
             if (type === 'VideoPlay(PyPyDance)') {
-                gameLogStore.addGameLogPyPyDance(gameLog, location);
+                await gameLogStore.addGameLogPyPyDance(gameLog, location);
             } else if (type === 'VideoPlay(VRDancing)') {
-                gameLogStore.addGameLogVRDancing(gameLog, location);
+                await gameLogStore.addGameLogVRDancing(gameLog, location);
             } else if (type === 'VideoPlay(ZuwaZuwaDance)') {
-                gameLogStore.addGameLogZuwaZuwaDance(gameLog, location);
+                await gameLogStore.addGameLogZuwaZuwaDance(gameLog, location);
             } else if (type === 'LSMedia') {
-                gameLogStore.addGameLogLSMedia(gameLog, location);
+                await gameLogStore.addGameLogLSMedia(gameLog, location);
             } else if (type === 'VideoPlay(PopcornPalace)') {
-                gameLogStore.addGameLogPopcornPalace(gameLog, location);
+                await gameLogStore.addGameLogPopcornPalace(gameLog, location);
             }
             break;
         case 'photon-id':
@@ -435,7 +379,7 @@ export function addGameLogEntry(gameLog, location) {
                 type: 'Event',
                 data: gameLog.event
             };
-            database.addGamelogEventToDatabase(entry);
+            persistedEntryPromise = database.addGamelogEventToDatabase(entry);
             break;
         case 'vrc-quit':
             if (!gameStore.isGameRunning) {
@@ -449,15 +393,11 @@ export function addGameLogEntry(gameLog, location) {
                 }
                 AppApi.QuitGame().then((processCount) => {
                     if (processCount > 1) {
-                        console.log(
-                            'QuitFix: More than 1 process running, not killing VRC'
-                        );
+                        console.log('QuitFix: More than 1 process running, not killing VRC');
                     } else if (processCount === 1) {
                         console.log('QuitFix: Killed VRC');
                     } else {
-                        console.log(
-                            'QuitFix: Nothing to kill, no VRC process running'
-                        );
+                        console.log('QuitFix: Nothing to kill, no VRC process running');
                     }
                 });
             }
@@ -481,34 +421,34 @@ export function addGameLogEntry(gameLog, location) {
             if (!advancedSettingsStore.saveInstanceStickers) {
                 break;
             }
-            galleryStore.trySaveStickerToFile(
-                gameLog.displayName,
-                gameLog.userId,
-                gameLog.inventoryId
-            );
+            galleryStore.trySaveStickerToFile(gameLog.displayName, gameLog.userId, gameLog.inventoryId);
             break;
     }
     if (typeof entry !== 'undefined') {
         sharedFeedStore.addEntry(entry);
         notificationStore.queueGameLogNoty(entry);
-        gameLogStore.addGameLog(entry);
+        if (persistedEntryPromise) {
+            const persistedEntry = await persistedEntryPromise;
+            if (persistedEntry) {
+                gameLogStore.addGameLog(persistedEntry);
+            }
+        } else {
+            gameLogStore.addGameLog(entry);
+        }
     }
 }
 
 /**
  * Parses raw game log JSON and delegates to addGameLogEntry.
  * Called from C# / updateLoop.
+ *
  * @param {string} json
  */
-export function addGameLogEvent(json) {
+export async function addGameLogEvent(json) {
     const locationStore = useLocationStore();
 
     const rawLogs = JSON.parse(json);
-    const gameLog = gameLogService.parseRawGameLog(
-        rawLogs[1],
-        rawLogs[2],
-        rawLogs.slice(3)
-    );
+    const gameLog = gameLogService.parseRawGameLog(rawLogs[1], rawLogs[2], rawLogs.slice(3));
     if (
         AppDebug.debugGameLog &&
         gameLog.type !== 'photon-id' &&
@@ -517,7 +457,7 @@ export function addGameLogEvent(json) {
     ) {
         console.log('gameLog:', gameLog);
     }
-    addGameLogEntry(gameLog, locationStore.lastLocation.location);
+    await addGameLogEntry(gameLog, locationStore.lastLocation.location);
 }
 
 /**
@@ -530,6 +470,7 @@ export async function getGameLogTable() {
 
 /**
  * Fetches all game log entries since dateTill and processes them.
+ *
  * @param {string} dateTill
  */
 async function updateGameLog(dateTill) {
@@ -542,7 +483,7 @@ async function updateGameLog(dateTill) {
         if (gameLog.type === 'location') {
             location = gameLog.location;
         }
-        addGameLogEntry(gameLog, location);
+        await addGameLogEntry(gameLog, location);
     }
 }
 

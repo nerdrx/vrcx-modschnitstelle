@@ -104,16 +104,13 @@ const gameLog = {
         };
         gamelogDatabase.sort(compareByCreatedAt);
         if (gamelogDatabase.length > dbVars.maxTableSize) {
-            gamelogDatabase.splice(
-                0,
-                gamelogDatabase.length - dbVars.maxTableSize
-            );
+            gamelogDatabase.splice(0, gamelogDatabase.length - dbVars.maxTableSize);
         }
         return gamelogDatabase;
     },
 
-    addGamelogLocationToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addGamelogLocationToDatabase(entry) {
+        const rowId = await sqliteService.executeInsert(
             `INSERT OR IGNORE INTO gamelog_location (created_at, location, world_id, world_name, time, group_name) VALUES (@created_at, @location, @world_id, @world_name, @time, @group_name)`,
             {
                 '@created_at': entry.created_at,
@@ -124,20 +121,18 @@ const gameLog = {
                 '@group_name': entry.groupName
             }
         );
+        return rowId ? { ...entry, rowId } : undefined;
     },
 
     updateGamelogLocationTimeToDatabase(entry) {
-        sqliteService.executeNonQuery(
-            `UPDATE gamelog_location SET time = @time WHERE created_at = @created_at`,
-            {
-                '@created_at': entry.created_at,
-                '@time': entry.time
-            }
-        );
+        sqliteService.executeNonQuery(`UPDATE gamelog_location SET time = @time WHERE created_at = @created_at`, {
+            '@created_at': entry.created_at,
+            '@time': entry.time
+        });
     },
 
-    addGamelogJoinLeaveToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addGamelogJoinLeaveToDatabase(entry) {
+        const rowId = await sqliteService.executeInsert(
             `INSERT OR IGNORE INTO gamelog_join_leave (created_at, type, display_name, location, user_id, time) VALUES (@created_at, @type, @display_name, @location, @user_id, @time)`,
             {
                 '@created_at': entry.created_at,
@@ -148,42 +143,19 @@ const gameLog = {
                 '@time': entry.time
             }
         );
+        return rowId ? { ...entry, rowId } : undefined;
     },
 
-    addGamelogJoinLeaveBulk(inputData) {
+    async addGamelogJoinLeaveBulk(inputData) {
         if (inputData.length === 0) {
-            return;
+            return [];
         }
-        var sqlValues = '';
-        var items = [
-            'created_at',
-            'type',
-            'displayName',
-            'location',
-            'userId',
-            'time'
-        ];
-        for (var line of inputData) {
-            var field = {};
-            for (var item of items) {
-                if (typeof line[item] === 'string') {
-                    field[item] = line[item].replace(/'/g, "''");
-                } else if (typeof line[item] === 'number') {
-                    field[item] = line[item];
-                } else {
-                    field[item] = '';
-                }
-            }
-            sqlValues += `('${field.created_at}', '${field.type}', '${field.displayName}', '${field.location}', '${field.userId}', '${field.time}'), `;
-        }
-        sqlValues = sqlValues.slice(0, -2);
-        sqliteService.executeNonQuery(
-            `INSERT OR IGNORE INTO gamelog_join_leave (created_at, type, display_name, location, user_id, time) VALUES ${sqlValues}`
-        );
+        const entries = await Promise.all(inputData.map((entry) => this.addGamelogJoinLeaveToDatabase(entry)));
+        return entries.filter(Boolean);
     },
 
-    addGamelogPortalSpawnToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addGamelogPortalSpawnToDatabase(entry) {
+        const rowId = await sqliteService.executeInsert(
             `INSERT OR IGNORE INTO gamelog_portal_spawn (created_at, display_name, location, user_id, instance_id, world_name) VALUES (@created_at, @display_name, @location, @user_id, @instance_id, @world_name)`,
             {
                 '@created_at': entry.created_at,
@@ -194,10 +166,11 @@ const gameLog = {
                 '@world_name': entry.worldName
             }
         );
+        return rowId ? { ...entry, rowId } : undefined;
     },
 
-    addGamelogVideoPlayToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addGamelogVideoPlayToDatabase(entry) {
+        const rowId = await sqliteService.executeInsert(
             `INSERT OR IGNORE INTO gamelog_video_play (created_at, video_url, video_name, video_id, location, display_name, user_id) VALUES (@created_at, @video_url, @video_name, @video_id, @location, @display_name, @user_id)`,
             {
                 '@created_at': entry.created_at,
@@ -209,10 +182,11 @@ const gameLog = {
                 '@user_id': entry.userId
             }
         );
+        return rowId ? { ...entry, rowId } : undefined;
     },
 
-    addGamelogResourceLoadToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addGamelogResourceLoadToDatabase(entry) {
+        const rowId = await sqliteService.executeInsert(
             `INSERT OR IGNORE INTO gamelog_resource_load (created_at, resource_url, resource_type, location) VALUES (@created_at, @resource_url, @resource_type, @location)`,
             {
                 '@created_at': entry.created_at,
@@ -221,20 +195,22 @@ const gameLog = {
                 '@location': entry.location
             }
         );
+        return rowId ? { ...entry, rowId } : undefined;
     },
 
-    addGamelogEventToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addGamelogEventToDatabase(entry) {
+        const rowId = await sqliteService.executeInsert(
             `INSERT OR IGNORE INTO gamelog_event (created_at, data) VALUES (@created_at, @data)`,
             {
                 '@created_at': entry.created_at,
                 '@data': entry.data
             }
         );
+        return rowId ? { ...entry, rowId } : undefined;
     },
 
-    addGamelogExternalToDatabase(entry) {
-        sqliteService.executeNonQuery(
+    async addGamelogExternalToDatabase(entry) {
+        const rowId = await sqliteService.executeInsert(
             `INSERT OR IGNORE INTO gamelog_external (created_at, message, display_name, user_id, location) VALUES (@created_at, @message, @display_name, @user_id, @location)`,
             {
                 '@created_at': entry.created_at,
@@ -244,6 +220,7 @@ const gameLog = {
                 '@location': entry.location
             }
         );
+        return rowId ? { ...entry, rowId } : undefined;
     },
 
     async getLastVisit(worldId, currentWorldMatch) {
@@ -318,6 +295,26 @@ const gameLog = {
                 };
             },
             `SELECT created_at FROM gamelog_location WHERE location LIKE @groupId ORDER BY id DESC LIMIT 1`,
+            {
+                '@groupId': `%${groupId}%`
+            }
+        );
+        return ref;
+    },
+
+    async getGroupJoinCount(groupId) {
+        var ref = {
+            joinCount: 0,
+            groupId
+        };
+        await sqliteService.execute(
+            (row) => {
+                ref = {
+                    joinCount: row[0] || 0,
+                    groupId
+                };
+            },
+            `SELECT COUNT(DISTINCT location) FROM gamelog_location WHERE location LIKE @groupId`,
             {
                 '@groupId': `%${groupId}%`
             }
@@ -705,11 +702,7 @@ const gameLog = {
         return gamelogDatabase;
     },
 
-    async lookupGameLogDatabase(
-        filters,
-        vipList,
-        maxEntries = dbVars.maxTableSize
-    ) {
+    async lookupGameLogDatabase(filters, vipList, maxEntries = dbVars.maxTableSize) {
         const baseColumns = [
             'id',
             'created_at',
@@ -914,18 +907,14 @@ const gameLog = {
 
     /**
      * Lookup the game log database for a specific search term
+     *
      * @param {string} search The search term
      * @param {Array} filters The filters to apply
      * @param {Array} [vipList] The list of VIP users
      * @returns {Promise<any[]>} The game log data
      */
 
-    async searchGameLogDatabase(
-        search,
-        filters,
-        vipList,
-        maxEntries = dbVars.searchTableSize
-    ) {
+    async searchGameLogDatabase(search, filters, vipList, maxEntries = dbVars.searchTableSize) {
         if (search.startsWith('wrld_') || search.startsWith('grp_')) {
             return this.getGameLogByLocation(search, filters, vipList);
         }
@@ -1189,26 +1178,13 @@ const gameLog = {
 
         await sqliteService.execute(
             (dbRow) => {
-                var [
-                    created_at_iso,
-                    created_at_ts,
-                    location,
-                    time,
-                    worldName,
-                    groupName,
-                    eventId,
-                    eventType
-                ] = dbRow;
+                var [created_at_iso, created_at_ts, location, time, worldName, groupName, eventId, eventType] = dbRow;
 
                 if (
                     !currentGroup ||
                     currentGroup.location !== location ||
-                    (created_at_ts - currentGroup.last_ts >
-                        groupingTimeTolerance && // groups multiple OnPlayerJoined and OnPlayerLeft together if they are within time tolerance limit
-                        !(
-                            prevEvent === 'OnPlayerJoined' &&
-                            eventType === 'OnPlayerLeft'
-                        )) // allows OnPlayerLeft to connect with nearby OnPlayerJoined
+                    (created_at_ts - currentGroup.last_ts > groupingTimeTolerance && // groups multiple OnPlayerJoined and OnPlayerLeft together if they are within time tolerance limit
+                        !(prevEvent === 'OnPlayerJoined' && eventType === 'OnPlayerLeft')) // allows OnPlayerLeft to connect with nearby OnPlayerJoined
                 ) {
                     currentGroup = {
                         created_at: created_at_iso,
@@ -1318,7 +1294,7 @@ const gameLog = {
 
     /**
      * @param {string} location
-     * @returns {Promise<Array<{created_at: string, display_name: string, user_id: string, time: number}>>}
+     * @returns {Promise<{ created_at: string; display_name: string; user_id: string; time: number }[]>}
      */
     async getPlayerDetailFromInstance(location) {
         const entries = [];
@@ -1386,9 +1362,10 @@ const gameLog = {
      * Get current user's online sessions from gamelog_location
      * Each row has created_at (leave time) and time (duration in ms)
      * Session start = created_at - time, Session end = created_at
-     * @param {number} [fromDays=0] - How many days back to start (0 = all time)
-     * @param {number} [toDays=0] - How many days back to stop (0 = now)
-     * @returns {Promise<Array<{created_at: string, time: number}>>}
+     *
+     * @param {number} [fromDays=0] - How many days back to start (0 = all time). Default is `0`
+     * @param {number} [toDays=0] - How many days back to stop (0 = now). Default is `0`
+     * @returns {Promise<{ created_at: string; time: number }[]>}
      */
     async getCurrentUserOnlineSessions(fromDays = 0, toDays = 0) {
         const data = [];
@@ -1397,9 +1374,7 @@ const gameLog = {
         const where = [];
 
         if (fromDays > 0) {
-            const fromDate = new Date(
-                now.getTime() - fromDays * 86400000
-            ).toISOString();
+            const fromDate = new Date(now.getTime() - fromDays * 86400000).toISOString();
             params['@fromDate'] = fromDate;
             where.push('created_at >= @fromDate');
 
@@ -1412,15 +1387,12 @@ const gameLog = {
             );
         }
         if (toDays > 0) {
-            const toDate = new Date(
-                now.getTime() - toDays * 86400000
-            ).toISOString();
+            const toDate = new Date(now.getTime() - toDays * 86400000).toISOString();
             params['@toDate'] = toDate;
             where.push('created_at < @toDate');
         }
 
-        const dateClause =
-            where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+        const dateClause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
         await sqliteService.execute(
             (dbRow) => {
                 data.push({ created_at: dbRow[0], time: dbRow[1] || 0 });
@@ -1433,9 +1405,10 @@ const gameLog = {
 
     /**
      * Get current user's online sessions after a given timestamp (incremental).
+     *
      * @param {string} afterCreatedAt - Only return rows created after this timestamp
-     * @param {boolean} [inclusive=false] - If true, use >= instead of > to re-read the last record
-     * @returns {Promise<Array<{created_at: string, time: number}>>}
+     * @param {boolean} [inclusive=false] - If true, use >= instead of > to re-read the last record. Default is `false`
+     * @returns {Promise<{ created_at: string; time: number }[]>}
      */
     async getCurrentUserOnlineSessionsAfter(afterCreatedAt, inclusive = false) {
         const data = [];
@@ -1453,26 +1426,18 @@ const gameLog = {
     /**
      * Get current user's top visited worlds from gamelog_location.
      * Groups by world_id and aggregates visit count and total time.
+     *
      * @param {number} [days] - Number of days to look back. Omit or 0 for all time.
-     * @param {number} [limit=5] - Maximum number of worlds to return.
-     * @param {'time'|'count'} [sortBy='time'] - Sort by total time or visit count.
-     * @param {string} [excludeWorldId=''] - Optional world ID to exclude from results.
-     * @returns {Promise<Array<{worldId: string, worldName: string, visitCount: number, totalTime: number}>>}
+     * @param {number} [limit=5] - Maximum number of worlds to return. Default is `5`
+     * @param {'time' | 'count'} [sortBy='time'] - Sort by total time or visit count. Default is `'time'`
+     * @param {string} [excludeWorldId=''] - Optional world ID to exclude from results. Default is `''`
+     * @returns {Promise<{ worldId: string; worldName: string; visitCount: number; totalTime: number }[]>}
      */
-    async getMyTopWorlds(
-        days = 0,
-        limit = 5,
-        sortBy = 'time',
-        excludeWorldId = ''
-    ) {
+    async getMyTopWorlds(days = 0, limit = 5, sortBy = 'time', excludeWorldId = '') {
         const results = [];
-        const whereClause =
-            days > 0 ? `AND created_at >= datetime('now', @daysOffset)` : '';
-        const excludeClause = excludeWorldId
-            ? 'AND world_id != @excludeWorldId'
-            : '';
-        const orderBy =
-            sortBy === 'count' ? 'visit_count DESC' : 'total_time DESC';
+        const whereClause = days > 0 ? `AND created_at >= datetime('now', @daysOffset)` : '';
+        const excludeClause = excludeWorldId ? 'AND world_id != @excludeWorldId' : '';
+        const orderBy = sortBy === 'count' ? 'visit_count DESC' : 'total_time DESC';
         const params = { '@limit': limit };
         if (days > 0) {
             params['@daysOffset'] = `-${days} days`;
@@ -1523,9 +1488,8 @@ const gameLog = {
     },
 
     /**
-     *
-     * @param {string} startDate: utc string of startOfDay
-     * @param {string} endDate: utc string endOfDay
+     * @param {string} startDate: Utc string of startOfDay
+     * @param {string} endDate: Utc string endOfDay
      * @param startDate
      * @param endDate
      * @returns
@@ -1555,10 +1519,7 @@ const gameLog = {
                 }
                 const instanceData = detailData.get(rowData.location);
 
-                detailData.set(rowData.location, [
-                    ...(instanceData || []),
-                    rowData
-                ]);
+                detailData.set(rowData.location, [...(instanceData || []), rowData]);
             },
             `SELECT
                      *
@@ -1580,6 +1541,7 @@ const gameLog = {
 
     /**
      * Get the All Date of Instance Activity for the current user
+     *
      * @returns {Promise<string[]>}
      */
     async getDateOfInstanceActivity() {
@@ -1618,12 +1580,9 @@ const gameLog = {
     },
 
     deleteGameLogInstanceByInstanceId(input) {
-        sqliteService.executeNonQuery(
-            `DELETE FROM gamelog_location WHERE location = @location`,
-            {
-                '@location': input.location
-            }
-        );
+        sqliteService.executeNonQuery(`DELETE FROM gamelog_location WHERE location = @location`, {
+            '@location': input.location
+        });
     },
 
     deleteGameLogInstance(input) {
@@ -1667,13 +1626,10 @@ const gameLog = {
     },
 
     deleteGameLogEvent(input) {
-        sqliteService.executeNonQuery(
-            `DELETE FROM gamelog_event WHERE created_at = @created_at AND data = @data`,
-            {
-                '@created_at': input.created_at,
-                '@data': input.data
-            }
-        );
+        sqliteService.executeNonQuery(`DELETE FROM gamelog_event WHERE created_at = @created_at AND data = @data`, {
+            '@created_at': input.created_at,
+            '@data': input.data
+        });
     },
 
     deleteGameLogExternal(input) {
@@ -1702,9 +1658,20 @@ const gameLog = {
 
     /**
      * Get Location segments paginated by cursor (id DESC).
-     * @param {number|null} beforeId - cursor: only return rows with id < beforeId. null = latest.
-     * @param {number} limit - how many segments to fetch.
-     * @returns {Promise<Array<{id: number, created_at: string, location: string, worldId: string, worldName: string, time: number, groupName: string}>>}
+     *
+     * @param {number | null} beforeId - Cursor: only return rows with id < beforeId. null = latest.
+     * @param {number} limit - How many segments to fetch.
+     * @returns {Promise<
+     *     {
+     *         id: number;
+     *         created_at: string;
+     *         location: string;
+     *         worldId: string;
+     *         worldName: string;
+     *         time: number;
+     *         groupName: string;
+     *     }[]
+     * >}
      */
     async getSessionsLocationSegments(beforeId, limit) {
         const data = [];
@@ -1738,10 +1705,11 @@ const gameLog = {
     /**
      * Get join/leave and video_play events for a set of location tags within a date range.
      * Excludes the current user's own join/leave.
-     * @param {string[]} locationTags - location values to match
+     *
+     * @param {string[]} locationTags - Location values to match
      * @param {string} afterDate - ISO date (inclusive lower bound)
      * @param {string} beforeDate - ISO date (inclusive upper bound, with padding)
-     * @returns {Promise<Array<object>>}
+     * @returns {Promise<object[]>}
      */
     async getSessionsEventsForSegments(locationTags, afterDate, beforeDate) {
         if (!locationTags || locationTags.length === 0) return [];
@@ -1811,9 +1779,10 @@ const gameLog = {
     /**
      * Get Location segments from a given date onwards (for anchor jumps).
      * Returns segments with created_at >= sinceDate, capped by limit, ordered id DESC.
+     *
      * @param {string} sinceDate - ISO date string
-     * @param {number} limit - max segments to return
-     * @returns {Promise<Array<object>>}
+     * @param {number} limit - Max segments to return
+     * @returns {Promise<object[]>}
      */
     async getSessionsLocationSegmentsByAnchor(sinceDate, limit) {
         const data = [];

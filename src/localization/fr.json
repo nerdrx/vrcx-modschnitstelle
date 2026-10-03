@@ -132,7 +132,6 @@
             "clear_results_tooltip": "Vider les résultats de la recherche",
             "user": {
                 "header": "Utilisateur",
-                "search_by_bio": "Rechercher dans la bio",
                 "sort_by_last_logged_in": "dernière personne connecté"
             },
             "world": {
@@ -464,8 +463,7 @@
                 },
                 "logging": {
                     "header": "Se connecter",
-                    "resource_load": "Journal des textes/images chargées par Udon",
-                    "empty_avatar": "Journal des avatars dans l'actualité sans noms"
+                    "resource_load": "Journal des textes/images chargées par Udon"
                 },
                 "automation": {
                     "auto_change_status": "Changer automatiquement de statut",
@@ -479,7 +477,6 @@
                     "instance_type_placeholder": "Choisir des types d'instances",
                     "auto_invite_request_accept": "Accepter automatiquement les demandes d'invitation",
                     "auto_invite_request_accept_tooltip": "Accepter automatiquement les demandes d'invitation des amis favoris",
-                    "auto_invite_request_accept_off": "Désactivé",
                     "auto_invite_request_accept_favs": "Tous les favoris",
                     "auto_invite_request_accept_selected_favs": "Favoris sélectionnés"
                 },
@@ -507,7 +504,6 @@
                     "theme_mode_pink": "Rose",
                     "theme_mode_material3": "Matériel 3",
                     "zoom": "Zoom",
-                    "vrcplus_profile_icons": "Icônes des profils VRCPlus",
                     "nicknames": "Memo Nicknames",
                     "sort_favorite_by": "Trier les favoris par",
                     "sort_favorite_by_name": "nom",
@@ -524,7 +520,6 @@
                     "force_iso_date_format": "Forcer le format ISO des dates"
                 },
                 "side_panel": {
-                    "header": "Panneau latéral",
                     "sorting": {
                         "header": "Comportement du tri",
                         "alphabetical": "Alphabétique",
@@ -776,8 +771,6 @@
                 "showcased": "Mise en avant"
             },
             "actions": {
-                "favorite_tooltip": "Ajouter aux favoris",
-                "unfavorite_tooltip": "Supprimer des favoris",
                 "refresh": "Actualiser",
                 "share": "Partager",
                 "invite": "Inviter",
@@ -828,7 +821,6 @@
                 "memo": "Mémo",
                 "memo_placeholder": "Cliquez pour ajouter un mémo",
                 "avatar_info": "Informations de l'avatar",
-                "avatar_info_last_seen": "Informations sur l'avatar vu la dernière fois",
                 "represented_group": "Groupe représenté",
                 "bio": "Bio",
                 "last_seen": "Ensemble (date)",
@@ -853,7 +845,6 @@
                 "copy_url": "Copier l'URL",
                 "copy_display_name": "Copier le pseudonyme",
                 "instance_full": "Complète",
-                "instance_closed": "Instance fermée",
                 "close_instance": "Fermer l'instance",
                 "instance_age_gated": "Limitation d'âge"
             },
@@ -970,7 +961,7 @@
                 "capacity": "Capacité",
                 "heat": "Chaleur",
                 "popularity": "Popularité",
-                "created_at": "Créé le",
+                "created": "Créé le",
                 "last_updated": "Dernière mise à jour",
                 "publication_date": "Date de publication",
                 "labs_publication_date": "Date de publication au Labs",
@@ -1085,12 +1076,10 @@
                 "announcement": "Annonces",
                 "rules": "Régles",
                 "members": "Membres",
-                "created_at": "Créé le",
+                "created": "Créé le",
                 "links": "Liens",
                 "url": "URL du groupe",
-                "url_tooltip": "Copier l'URL dans le presse-papiers",
                 "id": "ID du Groupe",
-                "id_tooltip": "Copier l'ID dans le presse-papiers",
                 "joined_at": "Rejoint le",
                 "roles": "Rôles",
                 "role": "Rôle :",

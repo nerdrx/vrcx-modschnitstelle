@@ -37,13 +37,9 @@ export async function runUpdateFriendDelayedCheckFlow(
     let worldName;
     const id = ctx.id;
     if (AppDebug.debugFriendState) {
-        console.log(
-            `${ctx.name} updateFriendState ${ctx.state} -> ${newState}`
-        );
+        console.log(`${ctx.name} updateFriendState ${ctx.state} -> ${newState}`);
         if (typeof ctx.ref !== 'undefined' && location !== ctx.ref.location) {
-            console.log(
-                `${ctx.name} pendingOfflineLocation ${location} -> ${ctx.ref.location}`
-            );
+            console.log(`${ctx.name} pendingOfflineLocation ${location} -> ${ctx.ref.location}`);
         }
     }
     if (!friends.has(id)) {
@@ -53,10 +49,7 @@ export async function runUpdateFriendDelayedCheckFlow(
     const isVIP = localFavoriteFriends.has(id);
     const ref = ctx.ref;
     if (ctx.state !== newState && typeof ctx.ref !== 'undefined') {
-        if (
-            (newState === 'offline' || newState === 'active') &&
-            ctx.state === 'online'
-        ) {
+        if ((newState === 'offline' || newState === 'active') && ctx.state === 'online') {
             ctx.ref.$online_for = '';
             ctx.ref.$offline_for = now();
             ctx.ref.$active_for = '';
@@ -79,12 +72,11 @@ export async function runUpdateFriendDelayedCheckFlow(
             };
             notificationStore.queueFeedNoty(feed);
             sharedFeedStore.addEntry(feed);
-            feedStore.addFeedEntry(feed);
-            database.addOnlineOfflineToDatabase(feed);
-        } else if (
-            newState === 'online' &&
-            (ctx.state === 'offline' || ctx.state === 'active')
-        ) {
+            const persistedFeed = await database.addOnlineOfflineToDatabase(feed);
+            if (persistedFeed) {
+                feedStore.addFeedEntry(persistedFeed);
+            }
+        } else if (newState === 'online' && (ctx.state === 'offline' || ctx.state === 'active')) {
             ctx.ref.$previousLocation = '';
             ctx.ref.$travelingToTime = now();
             ctx.ref.$location_at = now();
@@ -105,8 +97,10 @@ export async function runUpdateFriendDelayedCheckFlow(
             };
             notificationStore.queueFeedNoty(feed);
             sharedFeedStore.addEntry(feed);
-            feedStore.addFeedEntry(feed);
-            database.addOnlineOfflineToDatabase(feed);
+            const persistedFeed = await database.addOnlineOfflineToDatabase(feed);
+            if (persistedFeed) {
+                feedStore.addFeedEntry(persistedFeed);
+            }
         }
         if (newState === 'active') {
             ctx.ref.$active_for = now();
@@ -126,6 +120,7 @@ export async function runUpdateFriendDelayedCheckFlow(
 
 /**
  * Handles immediate friend presence updates and pending-offline orchestration.
+ *
  * @param {string} id Friend id.
  * @param {string | undefined} stateInput Optional incoming state.
  * @param {object} [options] Test seams.
@@ -179,9 +174,7 @@ export async function runUpdateFriendFlow(
             ref.location === 'offline' &&
             ref.$lastFetch < now() - 10000 // 10 seconds
         ) {
-            console.log(
-                `Fetching online friend in an offline location ${ctx.name}`
-            );
+            console.log(`Fetching online friend in an offline location ${ctx.name}`);
             userRequest.getUser({ userId: id });
         }
     }
@@ -208,10 +201,7 @@ export async function runUpdateFriendFlow(
         friendStore.reindexSortedFriend(ctx);
         return;
     }
-    if (
-        ctx.state === 'online' &&
-        (stateInput === 'active' || stateInput === 'offline')
-    ) {
+    if (ctx.state === 'online' && (stateInput === 'active' || stateInput === 'offline')) {
         ctx.ref = ref;
         ctx.isVIP = isVIP;
         if (typeof ref !== 'undefined') {
@@ -219,13 +209,7 @@ export async function runUpdateFriendFlow(
             syncFriendSearchIndex(ctx);
         }
         if (!watchState.isFriendsLoaded) {
-            await runUpdateFriendDelayedCheckFlow(
-                ctx,
-                stateInput,
-                location,
-                $location_at,
-                { now, nowIso }
-            );
+            await runUpdateFriendDelayedCheckFlow(ctx, stateInput, location, $location_at, { now, nowIso });
             return;
         }
         // prevent status flapping
@@ -253,13 +237,7 @@ export async function runUpdateFriendFlow(
     if (typeof ref !== 'undefined') {
         ctx.name = ref.displayName;
         syncFriendSearchIndex(ctx);
-        await runUpdateFriendDelayedCheckFlow(
-            ctx,
-            ctx.ref.state,
-            location,
-            $location_at,
-            { now, nowIso }
-        );
+        await runUpdateFriendDelayedCheckFlow(ctx, ctx.ref.state, location, $location_at, { now, nowIso });
     } else {
         friendStore.reindexSortedFriend(ctx);
     }
@@ -267,14 +245,12 @@ export async function runUpdateFriendFlow(
 
 /**
  * Processes pending-offline entries and executes delayed transitions.
+ *
  * @param {object} [options] Test seams.
  * @param {function} [options.now] Timestamp provider.
  * @param {function} [options.nowIso] ISO timestamp provider.
  */
-export async function runPendingOfflineTickFlow({
-    now = Date.now,
-    nowIso = () => new Date().toJSON()
-} = {}) {
+export async function runPendingOfflineTickFlow({ now = Date.now, nowIso = () => new Date().toJSON() } = {}) {
     const friendStore = useFriendStore();
     const { friends, pendingOfflineMap, pendingOfflineDelay } = friendStore;
 
@@ -288,10 +264,7 @@ export async function runPendingOfflineTickFlow({
             }
             ctx.pendingOffline = false;
             if (pending.newState === ctx.state) {
-                console.error(
-                    ctx.name,
-                    'pendingOfflineCancelledStateMatched, this should never happen'
-                );
+                console.error(ctx.name, 'pendingOfflineCancelledStateMatched, this should never happen');
                 pendingOfflineMap.delete(id);
                 continue;
             }

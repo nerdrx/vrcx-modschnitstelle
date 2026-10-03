@@ -18,18 +18,14 @@ const branches = {
         name: 'Stable',
         // MOD-API: updater points at this fork's releases, NOT official VRCX
         // (otherwise users would "update" back to the unmodded app)
-        urlReleases:
-            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases',
-        urlLatest:
-            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases/latest'
+        urlReleases: 'https://api.github.com/repos/nerdrx/vrcx-modschnitstelle/releases',
+        urlLatest: 'https://api.github.com/repos/nerdrx/vrcx-modschnitstelle/releases/latest'
     },
     Nightly: {
         name: 'Nightly',
         // MOD-API: the fork has no separate nightly channel
-        urlReleases:
-            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases',
-        urlLatest:
-            'https://api.github.com/repos/Arikazei/vrcx-modschnitstelle/releases/latest'
+        urlReleases: 'https://api.github.com/repos/nerdrx/vrcx-modschnitstelle/releases',
+        urlLatest: 'https://api.github.com/repos/nerdrx/vrcx-modschnitstelle/releases/latest'
     }
     // LinuxTest: {
     //     name: 'LinuxTest',
