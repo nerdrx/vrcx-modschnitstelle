@@ -96,7 +96,7 @@ jobs:
           Remove-Item "$staging\debug.log" -ErrorAction SilentlyContinue
           Get-ChildItem $staging -Filter *.pdb | Remove-Item -ErrorAction SilentlyContinue
           Copy-Item LICENSE "$staging\LICENSE.txt"
-          $name = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { 'manual' }
+          $name = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '[/\\]', '-' } else { 'manual' }
           Compress-Archive -Path $staging -DestinationPath "VRCX-with-Mods-$name.zip"
           exit 0
 
