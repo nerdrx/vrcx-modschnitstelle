@@ -5,6 +5,7 @@
  */
 module.exports = {
     appId: 'app.vrcx',
+    publish: { provider: 'github', owner: 'nerdrx', repo: 'vrcx-modschnitstelle' },
     productName: 'VRCX',
     icon: 'images/VRCX.png',
     files: [
@@ -84,6 +85,11 @@ module.exports = {
         category: 'public.app-category.utilities',
         executableName: 'VRCX',
         minimumSystemVersion: '14.0'
+    },
+    win: {
+        artifactName: 'VRCX_Version.${ext}',
+        target: ['nsis'],
+        icon: 'images/VRCX.ico'
     },
     toolsets: {
         appimage: '1.0.3'

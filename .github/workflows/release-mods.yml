@@ -1,4 +1,4 @@
-# Builds the Windows package publicly and attaches it to a GitHub release.
+# Builds Windows and Linux packages; releases remain drafts until verified.
 # Trigger: push a tag like v2026.07.18-mods.1 (or run manually for a test build).
 name: Release (VRCX with Mods)
 
@@ -15,6 +15,8 @@ jobs:
   build:
     name: Build Windows package
     runs-on: windows-latest
+    outputs:
+      fork_version: ${{ steps.stamp.outputs.fork_version }}
     steps:
       - uses: actions/checkout@v6
 
@@ -22,6 +24,7 @@ jobs:
       # identifies as e.g. "VRCX 2026.07.18.m3" (tag v2026.07.18-mods.3).
       # No dash: VRCX treats 7-char dash suffixes as nightly-hash builds.
       - name: Stamp fork version
+        id: stamp
         shell: pwsh
         run: |
           $v = if ($env:GITHUB_REF_NAME -like 'v*') {
@@ -32,6 +35,7 @@ jobs:
           Set-Content -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'Version') -Value $v -NoNewline -Encoding utf8
           if ((Get-Content Version -Raw).Trim() -ne $v) { throw 'Source version stamp failed' }
           "FORK_VERSION=$v" | Out-File -Append $env:GITHUB_ENV
+          "fork_version=$v" | Out-File -Append $env:GITHUB_OUTPUT
           Write-Host "Fork version: $v"
 
       - uses: actions/setup-node@v4
@@ -49,6 +53,9 @@ jobs:
 
       - name: Run mod tests
         run: npx vitest run src/mods
+
+      - name: Run updater tests
+        run: npx vitest run src/stores/__tests__/vrcxUpdater.test.js
 
       - name: Build UI
         run: npm run prod
@@ -120,25 +127,141 @@ jobs:
             VRCX-with-Mods-*.zip
             VRCX_*_Setup.exe
 
-      - name: Create GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
+  build_linux:
+    name: Build Linux x64 AppImage
+    runs-on: ubuntu-latest
+    outputs:
+      fork_version: ${{ steps.stamp.outputs.fork_version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Stamp fork version
+        id: stamp
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            version="${version/-mods./.m}"
+          else
+            version="$(tr -d '\r\n' < Version).m0"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.m[0-9]+$ ]]; then
+            echo "Invalid fork version: $version" >&2
+            exit 1
+          fi
+          printf '%s' "$version" > Version
+          [[ "$(tr -d '\r\n' < Version)" == "$version" ]]
+          echo "FORK_VERSION=$version" >> "$GITHUB_ENV"
+          echo "fork_version=$version" >> "$GITHUB_OUTPUT"
+          echo "Fork version: $version"
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build Linux x64 .NET application
+        run: dotnet build Dotnet/VRCX-Electron.csproj -p:Configuration=Release -p:WarningLevel=0 -p:Platform=x64 -t:"Clean;Build" -maxcpucount -r linux-x64
+
+      - name: Verify .NET version payload
+        shell: bash
+        run: |
+          test "$(tr -d '\r\n' < Version)" = "$FORK_VERSION"
+          test "$(tr -d '\r\n' < build/Electron/linux-x64/Version)" = "$FORK_VERSION"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Run updater tests
+        run: npx vitest run src/stores/__tests__/vrcxUpdater.test.js
+
+      - name: Build UI
+        run: npm run prod
+
+      - name: Build Linux x64 AppImage
+        run: npm run build-electron
+
+      - name: Verify AppImage version payloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage="build/VRCX_${FORK_VERSION}_x64.AppImage"
+          test -f "$appimage"
+          chmod +x "$appimage"
+          "$appimage" --appimage-extract >/dev/null
+          asar_path="$(find squashfs-root -type f -path '*/resources/app.asar' -print -quit)"
+          test -n "$asar_path"
+          ASAR_PATH="$asar_path" node -e '
+            const asar = require("@electron/asar");
+            const actual = asar.extractFile(process.env.ASAR_PATH, "Version").toString("utf8").trim();
+            if (actual !== process.env.FORK_VERSION) throw new Error(`ASAR version ${actual} != ${process.env.FORK_VERSION}`);
+          '
+          resources="${asar_path%/app.asar}"
+          native_version="$(find "$resources/app.asar.unpacked/build/Electron" -type f -name Version -print -quit)"
+          test -n "$native_version"
+          test "$(tr -d '\r\n' < "$native_version")" = "$FORK_VERSION"
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: VRCX-Linux-x64-AppImage
+          path: build/VRCX_${{ steps.stamp.outputs.fork_version }}_x64.AppImage
+
+  publish:
+    name: Draft release
+    runs-on: ubuntu-latest
+    needs: [build, build_linux]
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: VRCX-with-Mods
+          path: release-assets
+
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: VRCX-Linux-x64-AppImage
+          path: release-assets
+
+      - name: Verify release assets
+        shell: bash
+        env:
+          WINDOWS_VERSION: ${{ needs.build.outputs.fork_version }}
+          LINUX_VERSION: ${{ needs.build_linux.outputs.fork_version }}
+        run: |
+          test "$WINDOWS_VERSION" = "$LINUX_VERSION"
+          test -f "release-assets/VRCX_${WINDOWS_VERSION}_Setup.exe"
+          test -f "release-assets/VRCX_${WINDOWS_VERSION}_x64.AppImage"
+          compgen -G 'release-assets/VRCX-with-Mods-*.zip' >/dev/null
+
+      - name: Create draft GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: VRCX ${{ env.FORK_VERSION }}
+          name: VRCX ${{ needs.build.outputs.fork_version }}
+          draft: true
           files: |
-            VRCX_*_Setup.exe
-            VRCX-with-Mods-*.zip
+            release-assets/VRCX_*_Setup.exe
+            release-assets/VRCX-with-Mods-*.zip
+            release-assets/VRCX_*_x64.AppImage
           generate_release_notes: true
           body: |
             **VRCX with Mods** — unofficial VRCX fork with a mod API and
             bundled mods. Built publicly by GitHub Actions from this
             repository's source (see the workflow run for this tag).
 
-            **Downloads:** `VRCX_*_Setup.exe` = installer (used by the
-            built-in auto-updater); `VRCX-with-Mods-*.zip` = portable.
+            **Downloads:** `VRCX_*_Setup.exe` = Windows installer (used by the
+            built-in auto-updater); `VRCX-with-Mods-*.zip` = portable Windows
+            build; `VRCX_*_x64.AppImage` = Linux x64 (used by the built-in
+            auto-updater).
 
-            ⚠️ The exe is **unsigned** — Windows SmartScreen will warn on
-            first launch ("More info" → "Run anyway").
+            ⚠️ Windows exe is **unsigned** — SmartScreen will warn on first
+            launch ("More info" → "Run anyway").
             ⚠️ Shares its database with a regular VRCX installation — close
             one before starting the other; a backup of
             `%AppData%\VRCX\VRCX.sqlite3` is recommended.

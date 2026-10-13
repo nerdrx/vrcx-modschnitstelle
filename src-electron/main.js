@@ -9,7 +9,8 @@ const {
     Menu,
     dialog,
     Notification: ElectronNotification,
-    nativeImage
+    nativeImage,
+    nativeTheme
 } = require('electron');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -22,17 +23,16 @@ function dotnetSetup() {
     if (fs.existsSync(bundledDotNetPath)) {
         // Include bundled .NET runtime
         process.env.DOTNET_ROOT = bundledDotNetPath;
-        // MOD-FIX: use the platform delimiter for bundled runtimes.
         process.env.PATH = `${bundledDotNetPath}${path.delimiter}${process.env.PATH}`;
     } else if (process.platform === 'darwin') {
         const dotnetPath = path.join('/usr/local/share/dotnet');
         const dotnetPathArm = path.join('/usr/local/share/dotnet/x64');
         if (fs.existsSync(dotnetPathArm)) {
             process.env.DOTNET_ROOT = dotnetPathArm;
-            process.env.PATH = `${dotnetPathArm}:${process.env.PATH}`;
+            process.env.PATH = `${dotnetPathArm}${path.delimiter}${process.env.PATH}`;
         } else if (fs.existsSync(dotnetPath)) {
             process.env.DOTNET_ROOT = dotnetPath;
-            process.env.PATH = `${dotnetPath}:${process.env.PATH}`;
+            process.env.PATH = `${dotnetPath}${path.delimiter}${process.env.PATH}`;
         }
     }
 
@@ -286,6 +286,22 @@ ipcMain.handle('app:setTrayIconNotification', (_event, notify) => {
     setTrayIconNotification(notify);
 });
 
+function sendSystemTheme() {
+    if (mainWindow && !mainWindow.isDestroyed() && nativeTheme.themeSource === 'system') {
+        mainWindow.webContents.send('systemThemeChanged', nativeTheme.shouldUseDarkColors);
+    }
+}
+
+ipcMain.handle('app:setThemeSource', (_event, source) => {
+    if (!['system', 'light', 'dark'].includes(source)) {
+        return;
+    }
+    nativeTheme.themeSource = source;
+    sendSystemTheme();
+});
+
+nativeTheme.on('updated', sendSystemTheme);
+
 function createWindow() {
     console.log('Creating main window');
 
@@ -400,6 +416,10 @@ function createWindow() {
 
     mainWindow.on('focus', () => {
         mainWindow.webContents.send('onBrowserFocus');
+    });
+
+    mainWindow.on('blur', () => {
+        mainWindow.webContents.send('onBrowserBlur');
     });
 }
 
@@ -739,9 +759,8 @@ function isDotNetInstalled() {
     let dotnetPath;
 
     if (process.env.DOTNET_ROOT) {
-        // MOD-FIX: dotnet binary is dotnet.exe on Windows
-        const dotnetExeName = process.platform === 'win32' ? 'dotnet.exe' : 'dotnet';
-        dotnetPath = path.join(process.env.DOTNET_ROOT, dotnetExeName);
+        const dotnetExe = process.platform === 'win32' ? 'dotnet.exe' : 'dotnet';
+        dotnetPath = path.join(process.env.DOTNET_ROOT, dotnetExe);
         if (!fs.existsSync(dotnetPath)) {
             // fallback to command
             dotnetPath = 'dotnet';

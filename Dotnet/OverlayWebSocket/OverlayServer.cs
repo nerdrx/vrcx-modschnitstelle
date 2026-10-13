@@ -161,7 +161,7 @@ public class OverlayServer
             case OverlayMessageType.IsHmdAfk:
                 var isHmdAfk = string.Equals(message.Data, "true", StringComparison.OrdinalIgnoreCase);
                 if (MainForm.Instance?.Browser != null && !MainForm.Instance.Browser.IsLoading && MainForm.Instance.Browser.CanExecuteJavascriptInMainFrame)
-                    MainForm.Instance.Browser.ExecuteScriptAsync("window?.$pinia?.game.updateIsHmdAfk", isHmdAfk);
+                    MainForm.Instance.Browser.ExecuteScriptAsync("window?.$bridge?.updateIsHmdAfk", isHmdAfk);
                 break;
 
             // MOD-API: P2 VR chat panel — forward panel actions to the mod

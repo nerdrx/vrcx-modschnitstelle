@@ -1,6 +1,11 @@
 <template>
     <div class="flex flex-col gap-10 py-2">
         <SettingsGroup :title="t('view.settings.notifications.notifications.header')">
+            <template #description>
+                <span :class="{ 'text-destructive': currentUser.status === 'busy' }">{{
+                    t('view.settings.notifications.notifications.busy_warning')
+                }}</span>
+            </template>
             <SettingsItem :label="t('view.settings.notifications.notifications.notification_filter')">
                 <Button size="sm" variant="outline" @click="showNotyFeedFiltersDialog">{{
                     t('view.settings.notifications.notifications.notification_filter')
@@ -11,6 +16,13 @@
                 <Button size="sm" variant="outline" @click="testNotification"
                     ><Play />{{ t('view.settings.notifications.notifications.test_notification') }}</Button
                 >
+            </SettingsItem>
+
+            <SettingsItem :label="t('view.settings.notifications.notifications.inventory_bundle_notifications')" toggle>
+                <Switch
+                    :model-value="inventoryBundleNotifications"
+                    :ariaLabel="t('view.settings.notifications.notifications.inventory_bundle_notifications')"
+                    @update:modelValue="setInventoryBundleNotifications" />
             </SettingsItem>
         </SettingsGroup>
 
@@ -152,7 +164,7 @@
     import { storeToRefs } from 'pinia';
     import { useI18n } from 'vue-i18n';
 
-    import { useNotificationStore, useNotificationsSettingsStore } from '@/stores';
+    import { useNotificationStore, useNotificationsSettingsStore, useUserStore } from '@/stores';
 
     import FeedFiltersDialog from '../../dialogs/FeedFiltersDialog.vue';
     import SettingsGroup from '../SettingsGroup.vue';
@@ -167,6 +179,7 @@
         afkDesktopToast,
         notificationTTS,
         notificationTTSNickName,
+        inventoryBundleNotifications,
         isTestTTSVisible,
         notificationTTSTest,
         TTSvoices
@@ -176,13 +189,16 @@
         setDesktopToast,
         setAfkDesktopToast,
         setNotificationTTSNickName,
+        setInventoryBundleNotifications,
         getTTSVoiceName,
         changeTTSVoice,
         saveNotificationTTS,
         testNotificationTTS
     } = notificationsSettingsStore;
 
-    const { testNotification, markAllAsSeen } = useNotificationStore();
+    const { currentUser } = storeToRefs(useUserStore());
+
+    const { testNotification } = useNotificationStore();
 
     const feedFiltersDialogMode = ref('');
 
@@ -197,10 +213,6 @@
                 changeTTSVoice(value);
             }
         }
-    });
-
-    onMounted(() => {
-        markAllAsSeen();
     });
 
     function showNotyFeedFiltersDialog() {
