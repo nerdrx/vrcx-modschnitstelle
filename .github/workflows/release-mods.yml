@@ -103,7 +103,7 @@ jobs:
 
       - name: Rename setup
         shell: pwsh
-        run: Move-Item Installer/VRCX_Setup.exe "VRCX_$($env:FORK_VERSION)_Setup.exe"
+        run: Move-Item Installer/VRCX_Setup_x64.exe "VRCX_$($env:FORK_VERSION)_Setup.exe"
 
       - name: Package
         shell: pwsh
