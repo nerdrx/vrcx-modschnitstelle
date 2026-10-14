@@ -57,8 +57,8 @@ final class AndroidHostBridge {
     private final MainActivity activity;
     private final WebView webView;
     private final ExecutorService orderedExecutor = Executors.newSingleThreadExecutor();
-    private final ExecutorService networkExecutor = new ThreadPoolExecutor(2, 2, 0L,
-            TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(32), new ThreadPoolExecutor.AbortPolicy());
+    private final ExecutorService networkExecutor = new ThreadPoolExecutor(4, 4, 0L,
+            TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(256), new ThreadPoolExecutor.AbortPolicy());
     private final Object dbLock = new Object();
     private SQLiteDatabase database;
     private long sessionGeneration;
@@ -94,7 +94,7 @@ final class AndroidHostBridge {
                     activity.requestNotificationPermission(id);
                     return;
                 }
-                ExecutorService executor = "WebApi".equals(className) ? networkExecutor : orderedExecutor;
+                ExecutorService executor = executorFor(className, methodName);
                 try {
                     executor.execute(() -> {
                         try {
@@ -113,7 +113,13 @@ final class AndroidHostBridge {
         }
     }
 
-    private Object dispatch(String className, String method, JSONArray args) throws Exception {
+    ExecutorService executorFor(String className, String method) {
+        return "WebApi".equals(className) &&
+                ("Execute".equals(method) || "ExecuteJson".equals(method))
+                ? networkExecutor : orderedExecutor;
+    }
+
+    Object dispatch(String className, String method, JSONArray args) throws Exception {
         switch (className) {
             case "SQLite":
             case "DatabaseApi":

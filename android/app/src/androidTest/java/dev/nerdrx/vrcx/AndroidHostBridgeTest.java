@@ -11,6 +11,11 @@ import org.json.JSONObject;
 
 import java.net.URL;
 import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /** Contract checks for SQL binding and the WebView navigation boundary. */
 public final class AndroidHostBridgeTest extends InstrumentationTestCase {
@@ -158,6 +163,52 @@ public final class AndroidHostBridgeTest extends InstrumentationTestCase {
             assertFalse(AndroidHostBridge.cookieDomainMatches("evil.invalid", "vrchat.cloud"));
             assertTrue(AndroidHostBridge.cookieDomainMatches("api.vrchat.cloud", ".vrchat.cloud"));
         } finally {
+            bridge.clearCookieBundle();
+            bridge.close();
+            activity.finish();
+        }
+    }
+
+    public void testHttpBurstCannotBlockOrderedCookieAndStorageCalls() throws Exception {
+        MainActivity activity = (MainActivity) getInstrumentation().startActivitySync(
+                new Intent(getInstrumentation().getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        AndroidHostBridge bridge = new AndroidHostBridge(activity, null);
+        ExecutorService http = bridge.executorFor("WebApi", "ExecuteJson");
+        assertSame(http, bridge.executorFor("WebApi", "Execute"));
+        ExecutorService ordered = bridge.executorFor("WebApi", "GetCookies");
+        assertSame(ordered, bridge.executorFor("WebApi", "SetCookies"));
+        assertSame(ordered, bridge.executorFor("WebApi", "ClearCookies"));
+        assertNotSame(http, ordered);
+        assertNotSame(http, bridge.executorFor("VRCXStorage", "Get"));
+        assertEquals(256, ((ThreadPoolExecutor) http).getQueue().remainingCapacity());
+
+        CountDownLatch entered = new CountDownLatch(4);
+        CountDownLatch release = new CountDownLatch(1);
+        try {
+            for (int i = 0; i < 40; i++) {
+                http.execute(() -> {
+                    entered.countDown();
+                    try { release.await(10, TimeUnit.SECONDS); }
+                    catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                });
+            }
+            assertTrue("all four HTTP workers should become busy", entered.await(5, TimeUnit.SECONDS));
+            assertEquals(220, ((ThreadPoolExecutor) http).getQueue().remainingCapacity());
+            String key = "burst-test-" + System.nanoTime();
+            Future<Object> cookies = ordered.submit(() -> {
+                bridge.dispatch("WebApi", "ClearCookies", new JSONArray());
+                bridge.dispatch("WebApi", "SetCookies", new JSONArray().put("W10="));
+                return bridge.dispatch("WebApi", "GetCookies", new JSONArray());
+            });
+            Future<Object> storage = bridge.executorFor("VRCXStorage", "Get").submit(() -> {
+                bridge.dispatch("VRCXStorage", "Set", new JSONArray().put(key).put("ready"));
+                return bridge.dispatch("VRCXStorage", "Get", new JSONArray().put(key));
+            });
+            assertEquals("W10=", cookies.get(5, TimeUnit.SECONDS));
+            assertEquals("ready", storage.get(5, TimeUnit.SECONDS));
+            bridge.dispatch("VRCXStorage", "Remove", new JSONArray().put(key));
+        } finally {
+            release.countDown();
             bridge.clearCookieBundle();
             bridge.close();
             activity.finish();
