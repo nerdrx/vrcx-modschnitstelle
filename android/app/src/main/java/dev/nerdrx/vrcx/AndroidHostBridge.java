@@ -10,6 +10,7 @@ import android.content.ContentValues;
 import android.net.Uri;
 import android.os.Build;
 import android.util.Base64;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
@@ -391,6 +392,15 @@ final class AndroidHostBridge {
                     for (Map.Entry<String, List<String>> header : connection.getHeaderFields().entrySet()) {
                         if ("set-cookie".equalsIgnoreCase(header.getKey())) storeResponseCookies(url, header.getValue());
                     }
+                    String route = url.getPath();
+                    if (route.equals("/api/1/auth/user") || route.startsWith("/api/1/auth/twofactorauth/") ||
+                            route.equals("/api/1/auth/user/friends")) {
+                        // Only route/status and cookie presence: never log credentials, codes, or response bodies.
+                        String cookies = cookieHeader(url);
+                        Log.i("VRCXSession", "HTTP " + status + " " + route +
+                                " auth=" + (cookies.startsWith("auth=") || cookies.contains("; auth=")) +
+                                " twoFactor=" + (cookies.startsWith("twoFactorAuth=") || cookies.contains("; twoFactorAuth=")));
+                    }
                 }
             }
             if (status >= 300 && status < 400) {
@@ -480,7 +490,7 @@ final class AndroidHostBridge {
 
     private static final String COOKIE_STORAGE_KEY = "__vrcx_cookie_bundle";
 
-    private synchronized String getCookieBundle() throws Exception {
+    synchronized String getCookieBundle() throws Exception {
         JSONArray cookies = currentCookies();
         return Base64.encodeToString(cookies.toString().getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
     }

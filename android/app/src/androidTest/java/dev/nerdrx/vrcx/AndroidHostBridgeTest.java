@@ -14,6 +14,30 @@ import java.util.Collections;
 
 /** Contract checks for SQL binding and the WebView navigation boundary. */
 public final class AndroidHostBridgeTest extends InstrumentationTestCase {
+    public void testTwoFactorCookiesSurviveVerificationAndRestoringSession() throws Exception {
+        MainActivity activity = (MainActivity) getInstrumentation().startActivitySync(
+                new Intent(getInstrumentation().getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        AndroidHostBridge bridge = new AndroidHostBridge(activity, null);
+        URL user = new URL("https://api.vrchat.cloud/api/1/auth/user");
+        try {
+            bridge.clearCookieBundle();
+            bridge.storeResponseCookies(user, Collections.singletonList(
+                    "auth=synthetic-session; Domain=.api.vrchat.cloud; Path=/; Expires=Wed, 01 Jan 2031 00:00:00 GMT; Secure; HttpOnly; SameSite=None"));
+            bridge.storeResponseCookies(new URL("https://api.vrchat.cloud/api/1/auth/twofactorauth/totp/verify"), Collections.singletonList(
+                    "twoFactorAuth=synthetic-verified; Domain=.api.vrchat.cloud; Path=/; Max-Age=3600; Secure; HttpOnly; SameSite=None"));
+            String cookies = bridge.cookieHeader(user);
+            assertTrue(cookies.contains("auth=synthetic-session"));
+            assertTrue(cookies.contains("twoFactorAuth=synthetic-verified"));
+            String saved = bridge.getCookieBundle();
+            bridge.clearCookieBundle();
+            bridge.setCookieBundle(saved);
+            assertEquals(cookies, bridge.cookieHeader(user));
+            assertEquals(cookies, bridge.cookieHeader(new URL("https://api.vrchat.cloud/api/1/auth/user/friends")));
+            assertEquals("", bridge.cookieHeader(new URL("https://vrchat.com/api/1/auth/user")));
+            bridge.storeResponseCookies(user, Collections.singletonList("twoFactorAuth=deleted; Path=/; Domain=.api.vrchat.cloud; Max-Age=0; Secure"));
+            assertEquals("auth=synthetic-session", bridge.cookieHeader(user));
+        } finally { bridge.clearCookieBundle(); bridge.close(); activity.finish(); }
+    }
     public void testHistoryImportIsIdempotentAndKeepsPrivateSettings() throws Exception {
         MainActivity activity = (MainActivity) getInstrumentation().startActivitySync(
                 new Intent(getInstrumentation().getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));

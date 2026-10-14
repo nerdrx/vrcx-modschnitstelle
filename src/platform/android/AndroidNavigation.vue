@@ -29,6 +29,14 @@
             </SheetHeader>
             <div class="grid grid-cols-2 gap-2 p-3">
                 <Button
+                    v-if="menu === 'all'"
+                    variant="outline"
+                    :disabled="friendStore.isRefreshFriendsLoading"
+                    :aria-label="t('side_panel.refresh_tooltip')"
+                    @click="refreshFriends">
+                    <i class="ri-refresh-line" aria-hidden="true" />{{ t('side_panel.refresh_tooltip') }}
+                </Button>
+                <Button
                     v-for="item in menuItems"
                     :key="item.key"
                     variant="outline"
@@ -54,11 +62,14 @@
     import { Button } from '../../components/ui/button';
     import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '../../components/ui/sheet';
     import { navDefinitions } from '../../shared/constants/ui';
+    import { useFriendStore } from '../../stores/friend';
+    import { runRefreshFriendsListFlow } from '../../coordinators/friendSyncCoordinator';
 
     const route = useRoute();
     const router = useRouter();
     const { t } = useI18n();
     const menu = ref('');
+    const friendStore = useFriendStore();
     const quickLinks = [
         { route: 'feed', label: 'Feed', icon: 'ri-rss-line' },
         { route: 'friends-locations', label: 'Friends', icon: 'ri-user-location-line' },
@@ -76,6 +87,14 @@
     function navigate(name) {
         menu.value = '';
         router.push({ name });
+    }
+    async function refreshFriends() {
+        menu.value = '';
+        try {
+            await runRefreshFriendsListFlow();
+        } catch (error) {
+            console.error('Friend refresh failed:', error);
+        }
     }
 </script>
 
