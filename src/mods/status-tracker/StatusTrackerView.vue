@@ -1,6 +1,7 @@
 <template>
     <div
         class="x-container"
+        :class="{ 'st-root--android': isAndroid }"
         style="padding: 16px; height: 100%; display: flex; flex-direction: column; overflow: hidden">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
@@ -58,60 +59,96 @@
         </div>
 
         <div v-if="view === 'times'" class="st-scroll">
-        <table class="st-table" style="min-width: 760px">
-            <thead>
-                <tr>
-                    <th style="text-align: left; min-width: 160px">Friend</th>
-                    <th style="text-align: left; width: 40%">Verteilung</th>
-                    <th
-                        v-for="s in legend"
-                        :key="s.key"
-                        class="st-th-sort"
-                        :class="{ 'st-th-sort--active': sortKey === s.key }"
-                        style="text-align: right"
-                        :title="'Sortieren nach ' + s.label"
-                        @click="setSort(s.key)">
-                        <span :style="{ background: s.color }" class="st-dot"></span
-                        ><span v-if="sortKey === s.key" class="st-sort-arrow">▼</span>
-                    </th>
-                    <th
-                        class="st-th-sort"
-                        :class="{ 'st-th-sort--active': sortKey === 'total' }"
-                        style="text-align: right"
-                        title="Sortieren nach Online gesamt"
-                        @click="setSort('total')">
-                        Online gesamt<span v-if="sortKey === 'total'" class="st-sort-arrow">▼</span>
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr v-for="row in visibleRows" :key="row.userId" :class="{ 'st-row--dim': isDimmed(row) }">
-                    <td>
+            <div v-if="isAndroid" class="st-cards st-cards--visible">
+                <article
+                    v-for="row in visibleRows"
+                    :key="row.userId"
+                    class="st-card"
+                    :class="{ 'st-row--dim': isDimmed(row) }">
+                    <div class="st-card-head">
                         <a class="st-name-link" title="Profil öffnen" @click.stop="openUser(row.userId)">
                             {{ row.displayName }}
                         </a>
-                    </td>
-                    <td>
-                        <div class="st-bar">
-                            <div
-                                v-for="seg in row.segments"
-                                :key="seg.key"
-                                :style="{ width: seg.percent + '%', background: seg.color }"
-                                :title="seg.title"></div>
-                        </div>
-                    </td>
-                    <td v-for="s in legend" :key="s.key" class="st-num">
-                        {{ formatMs(row.totals[s.key]) }}
-                    </td>
-                    <td class="st-num" style="font-weight: 600">{{ formatMs(row.totals.totalOnlineMs) }}</td>
-                </tr>
-                <tr v-if="!loading && visibleRows.length === 0">
-                    <td colspan="8" style="text-align: center; opacity: 0.6; padding: 24px">
-                        Keine Daten im gewählten Zeitraum.
-                    </td>
-                </tr>
-            </tbody>
-        </table>
+                        <strong>{{ formatMs(row.totals.totalOnlineMs) }}</strong>
+                    </div>
+                    <div class="st-bar">
+                        <div
+                            v-for="seg in row.segments"
+                            :key="seg.key"
+                            :style="{ width: seg.percent + '%', background: seg.color }"
+                            :title="seg.title"></div>
+                    </div>
+                    <div class="st-card-values">
+                        <span v-for="s in legend" :key="s.key">
+                            <span :style="{ background: s.color }" class="st-dot"></span>
+                            {{ s.label }} <b>{{ formatMs(row.totals[s.key]) }}</b>
+                        </span>
+                    </div>
+                </article>
+                <p v-if="!loading && visibleRows.length === 0" class="st-empty">
+                    {{
+                        isAndroid
+                            ? 'Noch keine Statusdaten im Zeitraum. Der Tracker sammelt Änderungen, während diese App verbunden ist.'
+                            : 'Keine Daten im gewählten Zeitraum.'
+                    }}
+                </p>
+            </div>
+            <div v-else>
+                <table class="st-table" style="min-width: 760px">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; min-width: 160px">Friend</th>
+                            <th style="text-align: left; width: 40%">Verteilung</th>
+                            <th
+                                v-for="s in legend"
+                                :key="s.key"
+                                class="st-th-sort"
+                                :class="{ 'st-th-sort--active': sortKey === s.key }"
+                                style="text-align: right"
+                                :title="'Sortieren nach ' + s.label"
+                                @click="setSort(s.key)">
+                                <span :style="{ background: s.color }" class="st-dot"></span
+                                ><span v-if="sortKey === s.key" class="st-sort-arrow">▼</span>
+                            </th>
+                            <th
+                                class="st-th-sort"
+                                :class="{ 'st-th-sort--active': sortKey === 'total' }"
+                                style="text-align: right"
+                                title="Sortieren nach Online gesamt"
+                                @click="setSort('total')">
+                                Online gesamt<span v-if="sortKey === 'total'" class="st-sort-arrow">▼</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="row in visibleRows" :key="row.userId" :class="{ 'st-row--dim': isDimmed(row) }">
+                            <td>
+                                <a class="st-name-link" title="Profil öffnen" @click.stop="openUser(row.userId)">
+                                    {{ row.displayName }}
+                                </a>
+                            </td>
+                            <td>
+                                <div class="st-bar">
+                                    <div
+                                        v-for="seg in row.segments"
+                                        :key="seg.key"
+                                        :style="{ width: seg.percent + '%', background: seg.color }"
+                                        :title="seg.title"></div>
+                                </div>
+                            </td>
+                            <td v-for="s in legend" :key="s.key" class="st-num">
+                                {{ formatMs(row.totals[s.key]) }}
+                            </td>
+                            <td class="st-num" style="font-weight: 600">{{ formatMs(row.totals.totalOnlineMs) }}</td>
+                        </tr>
+                        <tr v-if="!loading && visibleRows.length === 0">
+                            <td colspan="8" style="text-align: center; opacity: 0.6; padding: 24px">
+                                Keine Daten im gewählten Zeitraum.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- v-show (not v-if) so the section keeps running in the background
@@ -128,8 +165,10 @@
     import { loadEvents } from './db';
     import { getCtx } from './runtime';
     import LastInstanceSection from './LastInstanceSection.vue';
+    import { isAndroidHost } from '../platform';
 
     const { t } = useI18n();
+    const isAndroid = isAndroidHost();
 
     const STATUS_META = {
         'join me': { color: '#42caff', label: 'Join Me (Blau)' },
@@ -193,8 +232,7 @@
             const friendStore = ctx.stores.friends;
             const list = [];
             for (const [userId, totals] of totalsByUser) {
-                const displayName =
-                    friendStore.friends.get(userId)?.ref?.displayName || names.get(userId) || userId;
+                const displayName = friendStore.friends.get(userId)?.ref?.displayName || names.get(userId) || userId;
                 const segments = ALL_KEYS.filter((key) => totals[key] > 0).map((key) => ({
                     key,
                     color: STATUS_META[key].color,
@@ -207,9 +245,7 @@
             // whole span is 'unknown' don't clutter the top of the list
             const knownMs = (totals) => totals.totalOnlineMs - (totals[UNKNOWN_STATUS] || 0);
             list.sort(
-                (a, b) =>
-                    knownMs(b.totals) - knownMs(a.totals) ||
-                    b.totals.totalOnlineMs - a.totals.totalOnlineMs
+                (a, b) => knownMs(b.totals) - knownMs(a.totals) || b.totals.totalOnlineMs - a.totals.totalOnlineMs
             );
             rows.value = list;
         } catch (err) {
@@ -270,15 +306,11 @@
         if (sortKey.value !== 'total') {
             const key = sortKey.value;
             list = [...list].sort(
-                (a, b) =>
-                    (b.totals[key] || 0) - (a.totals[key] || 0) ||
-                    b.totals.totalOnlineMs - a.totals.totalOnlineMs
+                (a, b) => (b.totals[key] || 0) - (a.totals[key] || 0) || b.totals.totalOnlineMs - a.totals.totalOnlineMs
             );
         } else if (selectedKeys.value.size > 0) {
             list = [...list].sort(
-                (a, b) =>
-                    selectedTotal(b) - selectedTotal(a) ||
-                    b.totals.totalOnlineMs - a.totals.totalOnlineMs
+                (a, b) => selectedTotal(b) - selectedTotal(a) || b.totals.totalOnlineMs - a.totals.totalOnlineMs
             );
         }
         return list;
@@ -319,6 +351,46 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow: auto;
+    }
+    .st-cards {
+        display: none;
+    }
+    .st-cards--visible {
+        display: block;
+    }
+    .st-card {
+        border: 1px solid var(--border, #4443);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    .st-card-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+    }
+    .st-card-values {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 12px;
+        margin-top: 10px;
+    }
+    .st-card-values > span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        min-width: 0;
+    }
+    .st-card-values b {
+        margin-left: auto;
+        white-space: nowrap;
+    }
+    .st-empty {
+        text-align: center;
+        opacity: 0.7;
+        padding: 20px 8px;
     }
     .st-table thead th {
         position: sticky;
@@ -407,5 +479,61 @@
         overflow: hidden;
         background: #4441;
         min-width: 120px;
+    }
+    .st-root--android {
+        padding: 12px !important;
+    }
+    .st-root--android > div:first-child {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+    }
+    .st-root--android .st-seg {
+        max-width: 100%;
+        overflow-x: auto;
+        flex: 0 1 auto;
+    }
+    .st-root--android .st-range-btn,
+    .st-root--android .st-chip {
+        min-height: 40px;
+        padding: 8px 12px;
+        white-space: nowrap;
+        touch-action: manipulation;
+    }
+    .st-root--android .st-search {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        min-height: 42px;
+        font-size: 16px;
+    }
+    .st-root--android .st-cards {
+        display: grid;
+        gap: 10px;
+    }
+    .st-root--android .st-card {
+        margin: 0;
+        padding: 14px;
+    }
+    .st-root--android .st-card-head {
+        align-items: center;
+        font-size: 15px;
+    }
+    .st-root--android .st-card-values {
+        font-size: 13px;
+    }
+    .st-root--android .st-card-values > span {
+        font-size: 12px;
+    }
+    .st-root--android .st-name-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        touch-action: manipulation;
+    }
+    .st-root--android .st-scroll {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
     }
 </style>

@@ -278,4 +278,11 @@
         scale: calc(1 * var(--card-scale));
         filter: brightness(1.05);
     }
+
+    @media (max-width: 600px) {
+        :global(.vrcx-android .friend-card) {
+            min-width: min(var(--friend-card-min-width, 180px), 100%);
+            max-width: 100%;
+        }
+    }
 </style>

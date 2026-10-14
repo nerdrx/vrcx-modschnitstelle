@@ -68,7 +68,7 @@
                         v-for="avatar in setAvatarTagsDialog.ownAvatars"
                         :key="avatar.id"
                         :class="[
-                            'w-[335px]',
+                            'w-full max-w-[335px] min-w-0',
                             'box-border flex items-center p-1.5 text-[13px] cursor-pointer hover:rounded-[25px_5px_5px_25px]'
                         ]"
                         @click="showAvatarDialog(avatar.id)">

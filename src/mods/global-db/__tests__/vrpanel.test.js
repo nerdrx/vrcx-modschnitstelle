@@ -1,5 +1,20 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_VR_PANEL, migrateLaserCalibration } from '../vrpanel';
+import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_VR_PANEL, migrateLaserCalibration, startVrPanel } from '../vrpanel';
+
+afterEach(() => {
+    delete window.VRCX_ANDROID;
+    delete window.__vrcxChatAction;
+});
+
+describe('Android capability guard', () => {
+    it('does not start the desktop VR panel', async () => {
+        window.VRCX_ANDROID = true;
+
+        await startVrPanel({});
+
+        expect(window.__vrcxChatAction).toBeUndefined();
+    });
+});
 
 // P2: die Laser-Kalibrierung war bis Runde 5 ein cm-Offset auf die Ray-Quelle
 // (Parallaxe — der Korrekturbedarf wanderte über die Panelfläche). Jetzt sind
@@ -21,10 +36,7 @@ describe('migrateLaserCalibration', () => {
 
     it('nimmt den Default-Pitch als Basis, wenn keiner gespeichert ist', () => {
         const { settings } = migrateLaserCalibration({ vrLaserOffY: 3.5 });
-        expect(settings.vrLaserPitch).toBeCloseTo(
-            DEFAULT_VR_PANEL.vrLaserPitch - 2.0,
-            1
-        );
+        expect(settings.vrLaserPitch).toBeCloseTo(DEFAULT_VR_PANEL.vrLaserPitch - 2.0, 1);
     });
 
     it('lässt bereits migrierte Einstellungen unverändert', () => {

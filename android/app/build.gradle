@@ -1,0 +1,48 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'dev.nerdrx.vrcx'
+    compileSdk 35
+    buildFeatures { buildConfig true }
+    useLibrary 'android.test.runner'
+    useLibrary 'android.test.base'
+    defaultConfig {
+        applicationId 'dev.nerdrx.vrcx'
+        minSdk 30
+        targetSdk 35
+        versionCode 3
+        versionName '0.1.0-alpha.3'
+        buildConfigField 'String', 'VRCX_VERSION', '"' + file('../../Version').text.trim() + '"'
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+    }
+    sourceSets.main.assets.srcDirs += '../../build/android'
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    signingConfigs {
+        release {
+            if (System.getenv('VRCX_ANDROID_KEYSTORE')) {
+                storeFile file(System.getenv('VRCX_ANDROID_KEYSTORE'))
+                storePassword System.getenv('VRCX_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('VRCX_ANDROID_KEY_ALIAS') ?: 'vrcx'
+                keyPassword System.getenv('VRCX_ANDROID_KEY_PASSWORD') ?: System.getenv('VRCX_ANDROID_STORE_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (System.getenv('VRCX_ANDROID_KEYSTORE')) signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
+
+tasks.register('checkFrontend') {
+    doLast {
+        if (!file('../../build/android/frontend/android.html').exists()) {
+            throw new GradleException('Run npm run build:android at the repository root before building the APK.')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'checkFrontend' }

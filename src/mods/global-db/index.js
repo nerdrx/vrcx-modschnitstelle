@@ -23,14 +23,9 @@ import {
     ttsSpeak,
     ttsTextFor
 } from './sidecar';
-import {
-    hapticEnabledFor,
-    hapticPatternFor,
-    startVrPanel,
-    stopVrPanel,
-    vrHaptic
-} from './vrpanel';
+import { hapticEnabledFor, hapticPatternFor, startVrPanel, stopVrPanel, vrHaptic } from './vrpanel';
 import { setCtx } from './runtime';
+import { isAndroidHost } from '../platform';
 
 let timer = null;
 
@@ -84,31 +79,23 @@ export function restartTimer(ctx, minutes) {
 function onChatMessage(ctx) {
     return (ev) => {
         try {
+            const android = isAndroidHost();
             let vrcStatus = 'active';
             try {
                 vrcStatus = ctx.stores.user.currentUser?.status || 'active';
             } catch {}
             if (isDnd(chatState.settings, vrcStatus)) return;
-            const chatOpen =
-                chatState.viewOpen &&
-                chatState.active === ev.channel &&
-                !document.hidden;
+            const chatOpen = chatState.viewOpen && chatState.active === ev.channel && !document.hidden;
             if (chatOpen) return;
             const from = displayName(ev.from_user);
             const scope = ev.channel === 'global' ? 'Pool' : 'DM';
             // Reine Bild-Nachrichten würden sonst als nackte URL im Toast
             // stehen — mediaSummary macht daraus "🖼️ Bild".
-            const body =
-                ev.kind === 'invite' ? 'Join-Einladung 📍' : mediaSummary(ev.text);
+            const body = ev.kind === 'invite' ? 'Join-Einladung 📍' : mediaSummary(ev.text);
             const s = chatState.settings;
             // Ton, Bild und Vibration lassen sich je Ereignisart unterscheiden:
             // eine Einladung soll sich anders anfühlen als eine Pool-Nachricht.
-            const soundEvent =
-                ev.kind === 'invite'
-                    ? 'invite'
-                    : ev.channel === 'global'
-                      ? 'global'
-                      : 'dm';
+            const soundEvent = ev.kind === 'invite' ? 'invite' : ev.channel === 'global' ? 'global' : 'dm';
             // Separat togglebar: Ton / visuelle Benachrichtigung / Haptik
             if (s.vrNotySound !== false) {
                 if (!playSound(s, soundEvent)) {
@@ -119,26 +106,20 @@ function onChatMessage(ctx) {
                 ctx.ui.notify({
                     title: `${from} (${scope})`,
                     body,
-                    desktop: s.notifyDesktop !== false,
-                    xs: s.notifyVr !== false,
-                    ovrt: s.notifyVr !== false,
-                    vr: s.notifyVr !== false
+                    ...(android ? { android: true } : {}),
+                    desktop: !android && s.notifyDesktop !== false,
+                    xs: !android && s.notifyVr !== false,
+                    ovrt: !android && s.notifyVr !== false,
+                    vr: !android && s.notifyVr !== false
                 });
             }
-            if (hapticEnabledFor(s, soundEvent)) {
-                vrHaptic(
-                    s.vrHapticHand || 'both',
-                    hapticPatternFor(s, soundEvent),
-                    s.vrHapticStrength
-                );
+            if (!android && hapticEnabledFor(s, soundEvent)) {
+                vrHaptic(s.vrHapticHand || 'both', hapticPatternFor(s, soundEvent), s.vrHapticStrength);
             }
             // P4: Nachricht über den Sidecar vorlesen (Piper). mediaSummary
             // sorgt dafür, dass keine nackten URLs vorgelesen werden.
-            if (shouldTts(s, soundEvent) && sidecarState.connected) {
-                ttsSpeak(
-                    ttsTextFor(from, body),
-                    pickTtsVoice(sidecarState.voices, 'de')
-                );
+            if (!android && shouldTts(s, soundEvent) && sidecarState.connected) {
+                ttsSpeak(ttsTextFor(from, body), pickTtsVoice(sidecarState.voices, 'de'));
             }
         } catch (err) {
             ctx.warn('chat notify failed:', err);
@@ -160,11 +141,12 @@ export async function startChatIfConfigured(ctx) {
     }
     const chatSettings = await kvGet(ctx, 'chat_settings', {});
     await initChat(ctx, settings, chatSettings, onChatMessage(ctx));
-    await startVrPanel(ctx); // P2: VR-Overlay-Chat-Panel
-    // P4: Voice-Sidecar (TTS/PTT/Translator), wenn aktiviert. Nach dem
-    // Verbinden den Translator-Zustand herstellen (idempotent).
-    await ensureSidecar(ctx, chatSettings);
-    setTimeout(() => applyTranslator(chatState.settings), 3000);
+    if (!isAndroidHost()) {
+        await startVrPanel(ctx); // P2: VR-Overlay-Chat-Panel
+        // P4: Voice-Sidecar (TTS/PTT/Translator), wenn aktiviert.
+        await ensureSidecar(ctx, chatSettings);
+        setTimeout(() => applyTranslator(chatState.settings), 3000);
+    }
 }
 
 // P1.5: nav entries are only registered AFTER login and only when the user

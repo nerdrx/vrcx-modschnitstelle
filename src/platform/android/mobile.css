@@ -1,0 +1,194 @@
+.vrcx-android {
+    color-scheme: dark;
+    --android-navigation-height: 72px;
+}
+.vrcx-android body {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.vrcx-android #x-app {
+    height: 100dvh;
+}
+.vrcx-android .android-main {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.vrcx-android .android-main-content {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+.vrcx-android .x-container {
+    height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 12px;
+}
+.vrcx-android button:not([role='checkbox']):not([role='switch']),
+.vrcx-android [role='tab'],
+.vrcx-android select {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+}
+.vrcx-android input:not([type='checkbox']),
+.vrcx-android textarea {
+    font-size: 16px;
+}
+.vrcx-android [role='checkbox'],
+.vrcx-android [role='switch'],
+.vrcx-android [role='radio'] {
+    position: relative;
+}
+.vrcx-android [role='checkbox']::after,
+.vrcx-android [role='switch']::after,
+.vrcx-android [role='radio']::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+}
+.vrcx-android input:not([type='checkbox']):not([type='radio']),
+.vrcx-android [role='combobox'] {
+    min-height: 44px;
+    min-width: 0;
+}
+.vrcx-android [role='menuitem'],
+.vrcx-android [role='menuitemcheckbox'],
+.vrcx-android [role='menuitemradio'],
+.vrcx-android [role='option'] {
+    min-height: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    white-space: normal;
+}
+.vrcx-android .x-login-container {
+    overflow: auto;
+    padding: 64px 16px 24px;
+    width: 100%;
+}
+.vrcx-android .x-login {
+    width: 100%;
+    max-width: 480px;
+    margin: auto;
+}
+.vrcx-android .x-login-form-container {
+    flex-direction: column;
+    width: 100%;
+}
+.vrcx-android .x-login-form-container > div {
+    width: 100%;
+    min-width: 0;
+}
+.vrcx-android .x-vertical-divider {
+    display: none;
+}
+.vrcx-android [data-slot='dialog-content'] {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 20px);
+    min-width: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+.vrcx-android [data-slot='sheet-content'] {
+    max-height: calc(100dvh - 24px);
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+}
+.vrcx-android [data-slot='dialog-scroll-content'] {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    min-width: 0;
+    margin-block: 8px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.vrcx-android [data-slot='dropdown-menu-content'],
+.vrcx-android [data-slot='select-content'],
+.vrcx-android [data-slot='popover-content'] {
+    max-width: calc(100vw - 24px);
+    max-height: 70dvh;
+    overflow: auto;
+    overscroll-behavior: contain;
+}
+.vrcx-android [data-slot='dialog-footer'] {
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.vrcx-android .data-table {
+    container-type: inline-size;
+}
+.vrcx-android .data-table [data-slot='empty'] {
+    position: sticky;
+    left: 0;
+    width: calc(100cqw - 20px);
+    max-width: 100%;
+}
+.vrcx-android .dt-pagination {
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+.vrcx-android .dt-pagination-sizes {
+    flex-basis: 100%;
+    justify-content: flex-start;
+}
+.vrcx-android .noty_layout {
+    max-width: calc(100vw - 24px);
+    word-break: normal;
+    overflow-wrap: anywhere;
+}
+.vrcx-android #noty_layout__bottom,
+.vrcx-android #noty_layout__bottomLeft,
+.vrcx-android #noty_layout__bottomCenter,
+.vrcx-android #noty_layout__bottomRight {
+    bottom: calc(var(--android-navigation-height) + 12px);
+    left: 12px;
+    right: 12px;
+    width: auto;
+    transform: none;
+}
+.vrcx-android [data-sonner-toaster][data-y-position='bottom'] {
+    bottom: calc(var(--android-navigation-height) + 12px);
+}
+@media (max-width: 600px) {
+    .vrcx-android [data-slot='tabs-list'] {
+        max-width: 100%;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        flex-shrink: 0;
+        overflow-x: auto;
+        height: auto;
+    }
+    .vrcx-android .x-login-container .x-login {
+        min-width: 0;
+    }
+    .vrcx-android table {
+        font-size: 13px;
+    }
+}
+@media (max-width: 700px) {
+    .vrcx-android .android-entity-dialog {
+        display: block;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .vrcx-android .android-entity-summary {
+        width: 100%;
+        padding-right: 0;
+        overflow: visible;
+    }
+    .vrcx-android .android-entity-body {
+        width: 100%;
+        min-height: 360px;
+        padding-left: 0;
+        margin-top: 12px;
+    }
+}

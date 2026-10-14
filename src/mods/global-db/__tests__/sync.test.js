@@ -1,6 +1,53 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { diffMembers, rowAllowed, toObjects } from '../sync';
+import { diffMembers, poolFetch, rowAllowed, toObjects } from '../sync';
+
+afterEach(() => {
+    delete window.VRCX_ANDROID;
+    delete window.WebApi;
+    vi.unstubAllGlobals();
+});
+
+describe('poolFetch', () => {
+    it('uses the native Android request bridge and parses its response', async () => {
+        window.VRCX_ANDROID = true;
+        const execute = vi.fn().mockResolvedValue(JSON.stringify({ status: 200, message: '{"ok":true}' }));
+        window.WebApi = { ExecuteJson: execute };
+
+        const response = await poolFetch('https://pool.example/v1/test', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer token' },
+            body: '{"value":1}'
+        });
+
+        expect(execute).toHaveBeenCalledWith(
+            JSON.stringify({
+                url: 'https://pool.example/v1/test',
+                method: 'POST',
+                headers: { Authorization: 'Bearer token' },
+                body: '{"value":1}'
+            })
+        );
+        expect(response.ok).toBe(true);
+        await expect(response.json()).resolves.toEqual({ ok: true });
+    });
+
+    it('surfaces native transport failures', async () => {
+        window.VRCX_ANDROID = true;
+        window.WebApi = { ExecuteJson: vi.fn().mockResolvedValue('{"status":-1,"message":"offline"}') };
+
+        await expect(poolFetch('https://pool.example/v1/test')).rejects.toThrow('offline');
+    });
+
+    it('uses browser fetch on desktop', async () => {
+        const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+        vi.stubGlobal('fetch', fetchMock);
+
+        await poolFetch('https://pool.example/v1/test');
+
+        expect(fetchMock).toHaveBeenCalledWith('https://pool.example/v1/test', {});
+    });
+});
 
 const ids = new Set(['usr_a', 'usr_b']);
 const names = new Set(['Alice']);

@@ -106,7 +106,9 @@
                         </TooltipWrapper>
                         <span v-if="userDialog.ref.pronouns" class="basis-full h-0"></span>
                         <TooltipWrapper v-if="userDialog.ref.pronouns" side="top" :content="t('dialog.user.pronouns')">
-                            <span class="x-grey font-mono text-xs" v-text="replaceBioSymbols(userDialog.ref.pronouns)"></span>
+                            <span
+                                class="x-grey font-mono text-xs"
+                                v-text="replaceBioSymbols(userDialog.ref.pronouns)"></span>
                         </TooltipWrapper>
                     </div>
                     <template v-if="userDialog.ref.id === currentUser.id">
@@ -304,14 +306,14 @@
                                     :class="{ grayscale: badge.hidden }"
                                     loading="lazy" />
                             </PopoverTrigger>
-                            <PopoverContent side="right" class="w-75">
+                            <PopoverContent side="right" class="w-75 max-w-[calc(100vw-2rem)]">
                                 <img
                                     :src="badge.badgeImageUrl"
                                     :class="['cursor-pointer', 'max-w-full', 'max-h-full']"
                                     @click="showFullscreenImageDialog(badge.badgeImageUrl)"
                                     loading="lazy" />
                                 <br />
-                                <div style="display: block; width: 275px; word-break: normal">
+                                <div class="block w-full max-w-[275px] min-w-0 [overflow-wrap:anywhere]">
                                     <span>{{ badge.badgeName }}</span>
                                     <br />
                                     <span class="x-grey text-xs">{{ badge.badgeDescription }}</span>

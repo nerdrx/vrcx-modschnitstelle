@@ -218,12 +218,12 @@
                                 <MessageCircle class="size-4" />
                                 {{ t('dialog.user.actions.moderation_disable_chatbox') }}
                             </DropdownMenuItem>
-                            <DropdownMenuItem @click="onCommand('Show Avatar')">
+                            <DropdownMenuItem v-if="!isAndroid" @click="onCommand('Show Avatar')">
                                 <User class="size-4" />
                                 <Check v-if="userDialog.isShowAvatar" class="size-4" />
                                 <span>{{ t('dialog.user.actions.moderation_show_avatar') }}</span>
                             </DropdownMenuItem>
-                            <DropdownMenuItem @click="onCommand('Hide Avatar')">
+                            <DropdownMenuItem v-if="!isAndroid" @click="onCommand('Hide Avatar')">
                                 <User class="size-4" />
                                 <Check v-if="userDialog.isHideAvatar" class="size-4" />
                                 <span>{{ t('dialog.user.actions.moderation_hide_avatar') }}</span>
@@ -281,6 +281,7 @@
 </template>
 
 <script setup>
+    const isAndroid = window.VRCX_ANDROID === true;
     import {
         Check,
         CheckCircle,

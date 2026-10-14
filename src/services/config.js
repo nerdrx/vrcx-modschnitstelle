@@ -16,6 +16,7 @@ class ConfigRepository {
 
     async remove(key) {
         const _key = transformKey(key);
+        if (window.VRCX_ANDROID) return VRCXStorage.Remove(_key);
         await sqliteService.executeNonQuery(`DELETE FROM configs WHERE key = @key`, {
             '@key': _key
         });
@@ -29,15 +30,19 @@ class ConfigRepository {
     async getString(key, defaultValue = null) {
         const _key = transformKey(key);
         let value = undefined;
-        await sqliteService.execute(
-            (row) => {
-                value = row[0];
-            },
-            `SELECT value FROM configs WHERE key = @key`,
-            {
-                '@key': _key
-            }
-        );
+        if (window.VRCX_ANDROID) {
+            value = await VRCXStorage.Get(_key);
+            if (value === '') return defaultValue;
+        } else
+            await sqliteService.execute(
+                (row) => {
+                    value = row[0];
+                },
+                `SELECT value FROM configs WHERE key = @key`,
+                {
+                    '@key': _key
+                }
+            );
 
         if (value === null || value === undefined || value === 'undefined') {
             return defaultValue;
@@ -53,6 +58,7 @@ class ConfigRepository {
     async setString(key, value) {
         const _key = transformKey(key);
         const _value = String(value);
+        if (window.VRCX_ANDROID) return VRCXStorage.Set(_key, _value);
         await sqliteService.executeNonQuery(`INSERT OR REPLACE INTO configs (key, value) VALUES (@key, @value)`, {
             '@key': _key,
             '@value': _value

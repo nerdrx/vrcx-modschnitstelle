@@ -69,7 +69,7 @@
                     <div class="flex flex-wrap items-start" style="flex: 1; max-height: 150px; overflow: auto">
                         <div
                             v-if="userDialog.$location.userId"
-                            class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-[167px] hover:rounded-[25px_5px_5px_25px]"
+                            class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-full max-w-[167px] min-w-0 hover:rounded-[25px_5px_5px_25px]"
                             @click="showUserDialog(userDialog.$location.userId)">
                             <template v-if="userDialog.$location.user">
                                 <div
@@ -100,7 +100,7 @@
                         <div
                             v-for="user in userDialog.users"
                             :key="user.id"
-                            class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-[167px] hover:rounded-[25px_5px_5px_25px]"
+                            class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-full max-w-[167px] min-w-0 hover:rounded-[25px_5px_5px_25px]"
                             @click="showUserDialog(user.id)">
                             <div class="relative inline-block flex-none size-9 mr-2.5" :class="userStatusClass(user)">
                                 <Avatar class="size-9">
@@ -144,7 +144,7 @@
                         <div class="flex items-center gap-1">
                             <Button
                                 v-if="translationApi && userDialog.publicProfileRef?.bio"
-                                class="h-5 w-5"
+                                class="h-5 w-5 [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                 size="icon-sm"
                                 variant="ghost"
                                 @click="translateBio">
@@ -153,7 +153,7 @@
                             </Button>
                             <Button
                                 v-if="userDialog.id === currentUser.id"
-                                class="h-5 w-5"
+                                class="h-5 w-5 [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                 size="icon-sm"
                                 variant="ghost"
                                 @click="showEditProfileDialog()">
@@ -191,7 +191,10 @@
                             :style="{ color: userDialog.theme.subtextColor }">
                             {{ t('dialog.user.info.note') }}
                         </span>
-                        <Button class="h-5 w-5" size="icon-sm" variant="ghost">
+                        <Button
+                            class="h-5 w-5 [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
+                            size="icon-sm"
+                            variant="ghost">
                             <Pencil class="h-3 w-3" :style="{ color: userDialog.theme.iconColor }" />
                         </Button>
                     </div>
@@ -213,7 +216,10 @@
                             :style="{ color: userDialog.theme.subtextColor }">
                             {{ t('dialog.user.info.memo') }}
                         </span>
-                        <Button class="h-5 w-5" size="icon-sm" variant="ghost">
+                        <Button
+                            class="h-5 w-5 [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
+                            size="icon-sm"
+                            variant="ghost">
                             <Pencil class="h-3 w-3" :style="{ color: userDialog.theme.iconColor }" />
                         </Button>
                     </div>
@@ -442,7 +448,7 @@
                         @click="showWorldDialog(currentUser.homeLocation)">
                         <span class="truncate" v-text="userDialog.$homeLocationName"></span>
                         <Button
-                            class="rounded-full h-5 w-5 flex-none"
+                            class="rounded-full h-5 w-5 flex-none [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                             size="icon-sm"
                             variant="ghost"
                             @click.stop="resetHome()">

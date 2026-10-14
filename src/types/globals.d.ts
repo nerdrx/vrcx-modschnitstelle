@@ -9,6 +9,10 @@ declare global {
     const LINUX: boolean;
 
     interface Window {
+        VRCX_ANDROID?: boolean;
+        NXAndroid?: { postMessage(message: string): void };
+        __nxAndroidResult?: (response: { id: number; result?: any; error?: string }) => void;
+        __nxAndroidLifecycle?: (event: string) => void;
         $pinia: any;
         $bridge: any;
         $vr: any;

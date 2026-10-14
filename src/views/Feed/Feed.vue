@@ -8,7 +8,7 @@
             :total-items="totalItems"
             :on-page-size-change="handlePageSizeChange">
             <template #toolbar>
-                <div class="mt-0 mx-0 mb-2" style="display: flex; align-items: center">
+                <div class="feed-toolbar mt-0 mx-0 mb-2" style="display: flex; align-items: center">
                     <div style="flex: none; display: flex; align-items: center" class="mr-2">
                         <Popover v-model:open="popoverOpen">
                             <PopoverTrigger as-child>
@@ -65,7 +65,7 @@
                         size="sm"
                         :model-value="activeFilterSelection"
                         @update:model-value="handleFeedFilterChange"
-                        class="w-full justify-start"
+                        class="feed-filters w-full justify-start"
                         style="flex: 1">
                         <ToggleGroupItem value="All">
                             {{ t('view.search.avatar.all') }}
@@ -75,7 +75,7 @@
                         </ToggleGroupItem>
                     </ToggleGroup>
                     <InputGroupField
-                        class="ml-2"
+                        class="feed-search ml-2"
                         v-model="feedTable.search"
                         :placeholder="t('view.feed.search_placeholder')"
                         clearable
@@ -224,6 +224,34 @@
 </script>
 
 <style scoped>
+    @media (max-width: 600px) {
+        :global(.vrcx-android .feed-toolbar) {
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        :global(.vrcx-android .feed-toolbar > div:first-child) {
+            margin-right: 0;
+        }
+
+        :global(.vrcx-android .feed-filters) {
+            flex: 1 1 100%;
+            max-width: 100%;
+            overflow-x: auto;
+            justify-content: flex-start;
+        }
+
+        :global(.vrcx-android .feed-filters button) {
+            flex: none;
+        }
+
+        :global(.vrcx-android .feed-search) {
+            flex: 1 1 100% !important;
+            width: 100%;
+            margin-left: 0;
+        }
+    }
+
     .feed :deep(.x-text-removed) {
         text-decoration: line-through;
         color: #ff0000;

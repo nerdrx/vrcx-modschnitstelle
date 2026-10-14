@@ -1,5 +1,5 @@
 <template>
-    <div class="user-dialog-scrollbars flex-1 min-h-0 min-w-0 flex flex-row">
+    <div class="android-entity-dialog user-dialog-scrollbars flex-1 min-h-0 min-w-0 flex flex-row">
         <DialogHeader class="sr-only">
             <DialogTitle>{{
                 userDialog.ref?.displayName || userDialog.id || t('dialog.user.info.header')
@@ -7,7 +7,7 @@
             <DialogDescription>{{ getUserStateText(userDialog.ref || {}) }}</DialogDescription>
         </DialogHeader>
 
-        <div class="flex-none w-77 overflow-y-auto">
+        <div class="android-entity-summary flex-none w-77 overflow-y-auto">
             <UserSummaryHeader
                 :get-user-state-text="getUserStateText"
                 :copy-user-display-name="copyUserDisplayName"
@@ -16,7 +16,7 @@
                 :user-dialog-command="userDialogCommand" />
         </div>
 
-        <div class="flex-1 min-w-0 flex flex-col min-h-0 pl-2">
+        <div class="android-entity-body flex-1 min-w-0 flex flex-col min-h-0 pl-2">
             <TabsUnderline
                 v-model="userDialog.activeTab"
                 :items="userDialogTabs"

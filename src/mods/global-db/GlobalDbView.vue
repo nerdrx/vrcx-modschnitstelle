@@ -1,5 +1,8 @@
 <template>
-    <div class="x-container" style="padding: 16px; height: 100%; display: flex; flex-direction: column; overflow: hidden">
+    <div
+        class="x-container"
+        :class="{ 'gdb-root--android': isAndroid }"
+        style="padding: 16px; height: 100%; display: flex; flex-direction: column; overflow: hidden">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap">
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
                 {{ t('mods.globaldb.nav.mod-global-db') }}
@@ -15,15 +18,9 @@
                 <p style="font-size: 13px; margin: 0 0 10px">
                     <b>Ich teile:</b> Status, Bio, Online/Offline, Instanzen, Begegnungen.
                 </p>
-                <p class="gdb-privacy">
-                    Memos, Authentifizierung und Configs verlassen deinen PC niemals.
-                </p>
+                <p class="gdb-privacy">Memos, Authentifizierung und Configs verlassen deinen PC niemals.</p>
                 <div class="gdb-row" style="margin-top: 12px">
-                    <button
-                        class="gdb-btn gdb-btn--primary"
-                        :disabled="busy || eligible !== true"
-                        @click="joinNow"
-                    >
+                    <button class="gdb-btn gdb-btn--primary" :disabled="busy || eligible !== true" @click="joinNow">
                         Pool beitreten
                     </button>
                     <span v-if="eligible === null" style="font-size: 12px; opacity: 0.7">Prüfe Berechtigung…</span>
@@ -40,15 +37,20 @@
                     <summary>Erweitert (Zweit-PC / Token manuell eintragen)</summary>
                     <div class="gdb-row" style="margin-top: 10px">
                         <label>Server</label>
-                        <input v-model="settings.serverUrl" class="gdb-input" style="min-width: 320px" />
+                        <input v-model="settings.serverUrl" class="gdb-input gdb-input--wide" />
                     </div>
                     <div class="gdb-row">
                         <label>Token</label>
-                        <input v-model="manualToken" type="password" class="gdb-input" style="min-width: 320px"
+                        <input
+                            v-model="manualToken"
+                            type="password"
+                            class="gdb-input gdb-input--wide"
                             placeholder="Token vom anderen PC einfügen" />
                     </div>
                     <div class="gdb-row">
-                        <button class="gdb-btn" :disabled="busy || !manualToken" @click="applyManualToken">Übernehmen</button>
+                        <button class="gdb-btn" :disabled="busy || !manualToken" @click="applyManualToken">
+                            Übernehmen
+                        </button>
                     </div>
                 </details>
             </div>
@@ -57,7 +59,9 @@
             <template v-else>
                 <div v-if="init.running" class="gdb-section">
                     <h3>Erst-Sync läuft…</h3>
-                    <div class="gdb-progress"><div class="gdb-progress-bar" :class="{ paused: init.paused }"></div></div>
+                    <div class="gdb-progress">
+                        <div class="gdb-progress-bar" :class="{ paused: init.paused }"></div>
+                    </div>
                     <div class="gdb-row" style="margin-top: 8px">
                         <button class="gdb-btn" @click="init.paused = !init.paused">
                             {{ init.paused ? 'Weiter' : 'Pausieren' }}
@@ -75,7 +79,9 @@
                         <button class="gdb-btn" :disabled="busy" @click="syncNow">Jetzt syncen</button>
                         <button class="gdb-btn" :disabled="busy" @click="testConnection">Verbindung testen</button>
                     </div>
-                    <div class="gdb-row"><label>Letzter Sync</label><span>{{ lastSync || '—' }}</span></div>
+                    <div class="gdb-row">
+                        <label>Letzter Sync</label><span>{{ lastSync || '—' }}</span>
+                    </div>
                     <div class="gdb-row">
                         <label>Sync-Stand</label>
                         <span v-if="syncState.running" style="color: #e5c451">
@@ -83,7 +89,9 @@
                         </span>
                         <template v-else-if="gap !== null">
                             <span v-if="gapTotal === 0" style="color: #51e57e">vollständig synchron ✓</span>
-                            <span v-else style="color: #e5c451"
+                            <span
+                                v-else
+                                style="color: #e5c451"
                                 title="Download exakt; Upload vor Filterung geschätzt (überschätzt)">
                                 ~{{ gapTotal }} Zeilen ausstehend (↓{{ gap.down }} · ↑~{{ gap.up }})
                             </span>
@@ -110,7 +118,9 @@
                     </div>
                     <p class="gdb-note">
                         Geteilt werden nur Feed-/Gamelog-Daten von Pool-Mitgliedern.
-                        <span class="gdb-privacy-inline">Memos, Authentifizierung und Configs verlassen deinen PC niemals.</span>
+                        <span class="gdb-privacy-inline"
+                            >Memos, Authentifizierung und Configs verlassen deinen PC niemals.</span
+                        >
                     </p>
                     <div v-if="log.length" class="gdb-log">
                         <div v-for="(line, i) in log" :key="i">{{ line }}</div>
@@ -126,7 +136,10 @@
                             <button class="gdb-btn" @click="tokenVisible = true">Anzeigen</button>
                         </template>
                         <template v-else>
-                            <input :value="settings.token" readonly class="gdb-input" style="min-width: 320px"
+                            <input
+                                :value="settings.token"
+                                readonly
+                                class="gdb-input gdb-input--wide"
                                 @focus="$event.target.select()" />
                             <button class="gdb-btn" @click="tokenVisible = false">Verbergen</button>
                         </template>
@@ -135,8 +148,12 @@
                     </div>
                     <div class="gdb-row">
                         <label>Benachrichtigung</label>
-                        <button class="gdb-btn" @click="testNoty">Test-Noty (Desktop + VR)</button>
-                        <span style="font-size: 12px; opacity: 0.6">prüft Windows-Toast, XSOverlay &amp; VRCX-VR-Overlay</span>
+                        <button class="gdb-btn" @click="testNoty">
+                            {{ isAndroid ? 'Test-Benachrichtigung' : 'Test-Noty (Desktop + VR)' }}
+                        </button>
+                        <span style="font-size: 12px; opacity: 0.6"
+                            >prüft Windows-Toast, XSOverlay &amp; VRCX-VR-Overlay</span
+                        >
                     </div>
                     <div class="gdb-row">
                         <button class="gdb-btn gdb-btn--danger" :disabled="busy" @click="leavePool">
@@ -148,18 +165,28 @@
                         <summary>Erweitert</summary>
                         <div class="gdb-row" style="margin-top: 10px">
                             <label>Server</label>
-                            <input v-model="settings.serverUrl" class="gdb-input" style="min-width: 320px" />
+                            <input v-model="settings.serverUrl" class="gdb-input gdb-input--wide" />
                         </div>
                         <div class="gdb-row">
                             <label>Auto-Sync</label>
                             <input v-model="settings.enabled" type="checkbox" />
-                            <span style="opacity:.7">alle</span>
-                            <input v-model.number="settings.intervalMin" type="number" min="1" class="gdb-input" style="width: 60px" />
-                            <span style="opacity:.7">Minuten</span>
+                            <span style="opacity: 0.7">alle</span>
+                            <input
+                                v-model.number="settings.intervalMin"
+                                type="number"
+                                min="1"
+                                class="gdb-input"
+                                style="width: 60px" />
+                            <span style="opacity: 0.7">Minuten</span>
                         </div>
                         <div class="gdb-row">
-                            <button class="gdb-btn gdb-btn--primary" :disabled="busy" @click="saveSettings">Speichern</button>
-                            <button class="gdb-btn" :disabled="busy" @click="forceReupload"
+                            <button class="gdb-btn gdb-btn--primary" :disabled="busy" @click="saveSettings">
+                                Speichern
+                            </button>
+                            <button
+                                class="gdb-btn"
+                                :disabled="busy"
+                                @click="forceReupload"
                                 title="Setzt alle Upload-Cursor zurück und lädt die komplette Historie erneut hoch (Server dedupliziert)">
                                 Re-Upload erzwingen
                             </button>
@@ -180,8 +207,10 @@
     import { checkEligible, joinPool, uploadFriendHashes } from './join';
     import { ensureChatReady, restartTimer, startChatIfConfigured } from './index';
     import { getCtx } from './runtime';
+    import { isAndroidHost } from '../platform';
 
     const { t } = useI18n();
+    const isAndroid = isAndroidHost();
 
     const TABLE_LABELS = {
         status: 'Status',
@@ -343,7 +372,9 @@
             if (result.ok) {
                 pushLog(`Erst-Sync fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen.`);
             } else {
-                pushLog(`Erst-Sync unvollständig (${Object.keys(result.errors).join(', ')}) — nächster Sync setzt fort.`);
+                pushLog(
+                    `Erst-Sync unvollständig (${Object.keys(result.errors).join(', ')}) — nächster Sync setzt fort.`
+                );
             }
         } catch (err) {
             pushLog('Erst-Sync unterbrochen: ' + (err.message || err) + ' — läuft beim nächsten Sync weiter.');
@@ -387,14 +418,17 @@
 
     async function testNoty() {
         const ctx = getCtx();
+        const android = isAndroidHost();
         await ctx.ui.notify({
             title: 'Pool-Chat',
             body: 'Test-Benachrichtigung ' + new Date().toLocaleTimeString('de-AT'),
-            desktop: true,
-            xs: true,
-            vr: true
+            ...(android ? { android: true } : { desktop: true, xs: true, vr: true })
         });
-        pushLog('Test-Noty gesendet (Desktop + XSOverlay + VR-Overlay).');
+        pushLog(
+            android
+                ? 'Android-Testbenachrichtigung gesendet.'
+                : 'Test-Noty gesendet (Desktop + XSOverlay + VR-Overlay).'
+        );
     }
 
     function copyToken() {
@@ -433,10 +467,14 @@
             counts.value = await poolCounts(ctx);
             lastSync.value = (await kvGet(ctx, 'last_sync', '')) || '';
             if (result.ok) {
-                pushLog(`Fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen, ${result.filtered} gefiltert.`);
+                pushLog(
+                    `Fertig: ${result.uploaded} hochgeladen, ${result.downloaded} empfangen, ${result.filtered} gefiltert.`
+                );
                 ensureChatReady(ctx).catch(() => {});
             } else {
-                pushLog(`Sync mit Fehlern (${Object.keys(result.errors).join(', ')}): ${Object.values(result.errors)[0]}`);
+                pushLog(
+                    `Sync mit Fehlern (${Object.keys(result.errors).join(', ')}): ${Object.values(result.errors)[0]}`
+                );
             }
         } catch (err) {
             connected.value = false;
@@ -447,7 +485,11 @@
     }
 
     async function leavePool() {
-        if (!window.confirm('Pool wirklich verlassen? Alle deine Beiträge und Daten über dich werden auf dem Server gelöscht.')) {
+        if (
+            !window.confirm(
+                'Pool wirklich verlassen? Alle deine Beiträge und Daten über dich werden auf dem Server gelöscht.'
+            )
+        ) {
             return;
         }
         const ctx = getCtx();
@@ -491,14 +533,21 @@
 </script>
 
 <style scoped>
-    .gdb-scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .gdb-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
     .gdb-section {
         border: 1px solid var(--border, #4443);
         border-radius: 10px;
         padding: 14px 16px;
         margin-bottom: 14px;
     }
-    .gdb-section h3 { margin: 0 0 10px; font-size: 14px; }
+    .gdb-section h3 {
+        margin: 0 0 10px;
+        font-size: 14px;
+    }
     .gdb-row {
         display: flex;
         gap: 10px;
@@ -520,6 +569,57 @@
         color: inherit;
         font-size: 13px;
     }
+    .gdb-input--wide {
+        min-width: 320px;
+    }
+    .gdb-root--android {
+        padding: 12px !important;
+    }
+    .gdb-root--android > div:first-child {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+    }
+    .gdb-root--android .gdb-section {
+        padding: 14px 12px;
+    }
+    .gdb-root--android .gdb-section p {
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+    .gdb-root--android .gdb-row > label:first-child {
+        width: auto;
+        flex-basis: 100%;
+    }
+    .gdb-root--android .gdb-input {
+        max-width: 100%;
+    }
+    .gdb-root--android .gdb-input--wide {
+        min-width: 0;
+        width: 100%;
+        min-height: 42px;
+        font-size: 16px;
+    }
+    .gdb-root--android .gdb-row {
+        gap: 8px;
+    }
+    .gdb-root--android .gdb-btn {
+        min-height: 44px;
+        padding: 9px 14px;
+        font-size: 14px;
+        touch-action: manipulation;
+    }
+    .gdb-root--android .gdb-details summary {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+    .gdb-root--android .gdb-badge,
+    .gdb-root--android .gdb-stat,
+    .gdb-root--android .gdb-member {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+    }
     .gdb-btn {
         padding: 5px 12px;
         border: 1px solid var(--border, #4443);
@@ -529,12 +629,17 @@
         cursor: pointer;
         font-size: 13px;
     }
-    .gdb-btn:hover { color: var(--foreground, #fafafa); }
+    .gdb-btn:hover {
+        color: var(--foreground, #fafafa);
+    }
     .gdb-btn--primary {
         background: var(--accent, #3f3f46);
         color: var(--foreground, #fafafa);
     }
-    .gdb-btn--danger { border-color: #e64a4a80; color: #e64a4a; }
+    .gdb-btn--danger {
+        border-color: #e64a4a80;
+        color: #e64a4a;
+    }
     .gdb-badge {
         font-size: 12px;
         padding: 2px 10px;
@@ -542,20 +647,48 @@
         border: 1px solid var(--border, #4443);
         color: var(--muted-foreground, #9f9fa5);
     }
-    .gdb-badge--on { border-color: #51e57e80; color: #51e57e; }
-    .gdb-badge--warn { border-color: #e5c45180; color: #e5c451; }
-    .gdb-stat, .gdb-member {
+    .gdb-badge--on {
+        border-color: #51e57e80;
+        color: #51e57e;
+    }
+    .gdb-badge--warn {
+        border-color: #e5c45180;
+        color: #e5c451;
+    }
+    .gdb-stat,
+    .gdb-member {
         font-size: 12px;
         padding: 2px 10px;
         border-radius: 10px;
         border: 1px solid var(--border, #4443);
     }
-    .gdb-note { font-size: 12px; color: var(--muted-foreground, #9f9fa5); margin: 4px 0 0; }
-    .gdb-privacy { color: #e64a4a; font-size: 13px; font-weight: 600; margin: 0; }
-    .gdb-privacy-inline { color: #e64a4a; }
-    .gdb-error { color: #e64a4a; font-size: 12px; margin: 6px 0 0; }
-    .gdb-details { margin-top: 12px; font-size: 13px; }
-    .gdb-details summary { cursor: pointer; color: var(--muted-foreground, #9f9fa5); }
+    .gdb-note {
+        font-size: 12px;
+        color: var(--muted-foreground, #9f9fa5);
+        margin: 4px 0 0;
+    }
+    .gdb-privacy {
+        color: #e64a4a;
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0;
+    }
+    .gdb-privacy-inline {
+        color: #e64a4a;
+    }
+    .gdb-error {
+        color: #e64a4a;
+        font-size: 12px;
+        margin: 6px 0 0;
+    }
+    .gdb-details {
+        margin-top: 12px;
+        font-size: 13px;
+    }
+    .gdb-details summary {
+        cursor: pointer;
+        color: var(--muted-foreground, #9f9fa5);
+    }
     .gdb-progress {
         height: 8px;
         border-radius: 4px;
@@ -566,17 +699,20 @@
     .gdb-progress-bar {
         position: absolute;
         inset: 0;
-        background: repeating-linear-gradient(
-            45deg,
-            var(--accent, #3f3f46) 0 12px,
-            transparent 12px 24px
-        );
+        background: repeating-linear-gradient(45deg, var(--accent, #3f3f46) 0 12px, transparent 12px 24px);
         animation: gdb-slide 1s linear infinite;
     }
-    .gdb-progress-bar.paused { animation-play-state: paused; opacity: 0.4; }
+    .gdb-progress-bar.paused {
+        animation-play-state: paused;
+        opacity: 0.4;
+    }
     @keyframes gdb-slide {
-        from { background-position: 0 0; }
-        to { background-position: 34px 0; }
+        from {
+            background-position: 0 0;
+        }
+        to {
+            background-position: 34px 0;
+        }
     }
     .gdb-log {
         margin-top: 8px;
