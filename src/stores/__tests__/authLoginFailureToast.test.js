@@ -295,6 +295,34 @@ describe('useAuthStore login failure toast policy', () => {
 
     afterEach(() => {
         vi.useRealTimers();
+        delete window.VRCX_ANDROID;
+    });
+
+    test('Android saved accounts retain the session without retaining the password', async () => {
+        window.VRCX_ANDROID = true;
+        const store = await createAuthStore();
+        mocks.webApiService.getCookies.mockResolvedValueOnce('opaque-session');
+        store.credentialsToSave = { username: 'tester', password: 'never-store-this', endpoint: '', websocket: '' };
+        await store.updateStoredUser({ id: 'usr_me', displayName: 'Tester' });
+        const saved = mocks.configRepository.setString.mock.calls.find(([key]) => key === 'savedCredentials');
+        const account = JSON.parse(saved[1]).usr_me;
+        expect(account.loginParams.password).toBe('');
+        expect(account.cookies).toBe('opaque-session');
+        expect(saved[1]).not.toContain('never-store-this');
+    });
+
+    test('Android restores cookie sessions without sending an empty Basic password', async () => {
+        window.VRCX_ANDROID = true;
+        const store = await createAuthStore();
+        mocks.request.mockResolvedValueOnce({ id: 'usr_me', displayName: 'Tester' });
+        await store.relogin({
+            user: { id: 'usr_me' },
+            cookies: 'opaque-session',
+            loginParams: { username: 'tester', password: '', endpoint: '', websocket: '' }
+        });
+        expect(mocks.webApiService.setCookies).toHaveBeenCalledWith('opaque-session');
+        expect(mocks.request).toHaveBeenCalledWith('auth/user', { method: 'GET' });
+        expect(mocks.runLoginSuccessFlow).toHaveBeenCalled();
     });
 
     test('shows a single warning toast on the third manual login failure inside 90 seconds', async () => {

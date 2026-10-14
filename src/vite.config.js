@@ -94,6 +94,7 @@ function getAssetFilename({ name }) {
  * @returns {import('vite').UserConfig}
  */
 export default defineConfig(({ mode }) => {
+    const android = mode === 'android';
     const { SENTRY_AUTH_TOKEN: sentryAuthToken } = loadEnv(mode, process.cwd(), '');
 
     const buildAndUploadSourceMaps = !!sentryAuthToken;
@@ -140,7 +141,7 @@ export default defineConfig(({ mode }) => {
                     customMedia: true
                 },
                 errorRecovery: true,
-                targets: browserslistToTargets(browserslist('Chrome 145'))
+                targets: browserslistToTargets(browserslist(android ? 'Chrome 120' : 'Chrome 145'))
             }
         },
         optimizeDeps: {
@@ -166,9 +167,9 @@ export default defineConfig(({ mode }) => {
             strictPort: true
         },
         build: {
-            target: 'chrome145',
-            outDir: '../build/html',
-            license: true,
+            target: android ? 'chrome120' : 'chrome145',
+            outDir: android ? '../build/android/frontend' : '../build/html',
+            license: android ? { fileName: 'THIRD-PARTY-LICENSES.txt' } : true,
             emptyOutDir: true,
             copyPublicDir: true,
             reportCompressedSize: false,
@@ -181,10 +182,14 @@ export default defineConfig(({ mode }) => {
             },
             rolldownOptions: {
                 preserveEntrySignatures: false,
-                input: {
-                    index: resolve(import.meta.dirname, './index.html'),
-                    vr: resolve(import.meta.dirname, './vr.html')
-                },
+                input: android
+                    ? {
+                          android: resolve(import.meta.dirname, './android.html')
+                      }
+                    : {
+                          index: resolve(import.meta.dirname, './index.html'),
+                          vr: resolve(import.meta.dirname, './vr.html')
+                      },
                 output: {
                     assetFileNames: getAssetFilename,
                     manualChunks: getManualChunk

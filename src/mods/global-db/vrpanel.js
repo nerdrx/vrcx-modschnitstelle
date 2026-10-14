@@ -6,19 +6,11 @@
 // OverlayServer, OverlayMessageType.ChatAction).
 // ============================================================================
 
-import {
-    ampel,
-    chatState,
-    displayName,
-    canonDm,
-    loadHistory,
-    markRead,
-    sendMessage,
-    sendTyping
-} from './chat';
+import { ampel, chatState, displayName, canonDm, loadHistory, markRead, sendMessage, sendTyping } from './chat';
 import { kvGet, kvSet } from './db';
 import { DEFAULT_MEDIA, parseMessage, resolveEmbed } from './media';
 import { DEFAULT_VOICE, applyTranslator, sttStart, sttStop } from './sidecar';
+import { isAndroidHost } from '../platform';
 
 export const DEFAULT_VR_PANEL = {
     vrPanel: false, // Panel aktiv
@@ -102,7 +94,7 @@ export function hapticPatternFor(settings, event) {
     return s.vrHapticPattern;
 }
 
-/** true, wenn für dieses Ereignis überhaupt vibriert werden soll. */
+/** True, wenn für dieses Ereignis überhaupt vibriert werden soll. */
 export function hapticEnabledFor(settings, event) {
     const s = settings || {};
     if (s.vrNotyHaptic === false) return false;
@@ -114,6 +106,7 @@ let lastPayload = '';
 let modCtx = null;
 
 function vrCall(fn, obj) {
+    if (isAndroidHost()) return;
     if (typeof AppApi === 'undefined') return;
     try {
         AppApi.ExecuteVrOverlayFunction(`chat.${fn}`, JSON.stringify(obj));
@@ -171,10 +164,7 @@ export function buildPayload(settings) {
             channel,
             label,
             unread: ch?.unread || 0,
-            typing:
-                ch && ch.typingUntil > Date.now()
-                    ? displayName(ch.typingUser)
-                    : '',
+            typing: ch && ch.typingUntil > Date.now() ? displayName(ch.typingUser) : '',
             messages: (ch?.messages || []).slice(-30).map((m) => ({
                 id: m.id,
                 name: displayName(m.from_user),
@@ -183,10 +173,7 @@ export function buildPayload(settings) {
                 mine: m.from_user === chatState.me,
                 // Höchstens zwei Bilder je Nachricht — das Panel ist 1024 px
                 // hoch, mehr würde die Nachrichtenliste unlesbar machen.
-                media:
-                    showMedia && m.kind !== 'invite'
-                        ? mediaUrlsFor(m.text, allowEmbeds).slice(0, 2)
-                        : []
+                media: showMedia && m.kind !== 'invite' ? mediaUrlsFor(m.text, allowEmbeds).slice(0, 2) : []
             }))
         });
     };
@@ -208,8 +195,8 @@ export function buildPayload(settings) {
  * der Strahlquelle gespeichert. Das ist ein Parallaxe-Fehler (wandert über
  * die Panelfläche), deshalb jetzt Winkel. Umrechnung bei ~1 m Panel-Distanz:
  * 1 cm entspricht atan(0.01) ≈ 0,573°.
- *   H  (+ = außen)     -> vrLaserYaw   (+ = außen)
- *   V  (+ = oben)      -> vrLaserPitch (Pitch kippt nach unten => Vorzeichen dreht)
+ * H  (+ = außen)     -> vrLaserYaw   (+ = außen)
+ * V  (+ = oben)      -> vrLaserPitch (Pitch kippt nach unten => Vorzeichen dreht)
  * Pure Funktion, damit sie testbar bleibt.
  */
 export const CM_PER_DEG = 0.5729578; // atan(0.01) in Grad
@@ -222,9 +209,7 @@ export function migrateLaserCalibration(cs) {
         changed = true;
     }
     if (typeof out.vrLaserOffY === 'number') {
-        const base = typeof out.vrLaserPitch === 'number'
-            ? out.vrLaserPitch
-            : DEFAULT_VR_PANEL.vrLaserPitch;
+        const base = typeof out.vrLaserPitch === 'number' ? out.vrLaserPitch : DEFAULT_VR_PANEL.vrLaserPitch;
         out.vrLaserPitch = Math.round((base - out.vrLaserOffY * CM_PER_DEG) * 10) / 10;
         changed = true;
     }
@@ -239,9 +224,9 @@ export function migrateLaserCalibration(cs) {
  * Bis P2-Runde 6 gab es einen einzigen vrMode für Mini UND großes Panel —
  * damit war "Mini am Handgelenk + Panel frei in der Welt" nicht möglich.
  * Jetzt zwei unabhängige Felder. Abbildung des alten Werts:
- *   wrist -> Mini am Handgelenk, Panel kopffest
- *   hud   -> beides kopffest
- *   world -> Mini kopffest, Panel frei in der Welt
+ * wrist -> Mini am Handgelenk, Panel kopffest
+ * hud   -> beides kopffest
+ * world -> Mini kopffest, Panel frei in der Welt
  * Pure Funktion (testbar).
  */
 export function migrateVrModes(cs) {
@@ -269,14 +254,10 @@ async function pushConfig(ctx) {
             ctx.log('Gesten-Taste vom Stick-Klick auf B/Y zurückgesetzt');
         }
         if (laser.changed) {
-            ctx.log(
-                `Laser-Kalibrierung migriert: Yaw ${cs.vrLaserYaw}°, Pitch ${cs.vrLaserPitch}°`
-            );
+            ctx.log(`Laser-Kalibrierung migriert: Yaw ${cs.vrLaserYaw}°, Pitch ${cs.vrLaserPitch}°`);
         }
         if (modes.changed) {
-            ctx.log(
-                `VR-Positionen migriert: Mini ${cs.vrMiniMode}, Panel ${cs.vrBigMode}`
-            );
+            ctx.log(`VR-Positionen migriert: Mini ${cs.vrMiniMode}, Panel ${cs.vrBigMode}`);
         }
     }
     const s = { ...DEFAULT_VR_PANEL, ...DEFAULT_VOICE, ...cs };
@@ -322,6 +303,7 @@ async function pushConfig(ctx) {
 }
 
 function pushState(settings) {
+    if (isAndroidHost()) return;
     if (!chatState.enabled) return;
     const payload = JSON.stringify(buildPayload(settings));
     if (payload === lastPayload) return;
@@ -429,6 +411,7 @@ export function vrHaptic(hand, pattern, strength) {
 
 /** Nach initChat aufrufen. Läuft passiv (1s-Poll + Diff), bis stopVrPanel. */
 export async function startVrPanel(ctx) {
+    if (isAndroidHost()) return;
     modCtx = ctx;
     window.__vrcxChatAction = onAction(ctx);
     // Global-Historie vorladen — Panel soll nicht leer starten
@@ -447,11 +430,12 @@ export function stopVrPanel() {
     clearInterval(timer);
     timer = null;
     vrCall('config', { enabled: false });
-    if (window.__vrcxChatAction) delete window.__vrcxChatAction;
+    if (typeof window !== 'undefined' && window.__vrcxChatAction) delete window.__vrcxChatAction;
 }
 
 /** Aus der Settings-UI aufrufen, wenn sich VR-Panel-Einstellungen ändern. */
 export async function refreshVrPanelConfig(ctx) {
+    if (isAndroidHost()) return;
     await pushConfig(ctx);
 }
 

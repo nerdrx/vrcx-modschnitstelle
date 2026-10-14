@@ -12,6 +12,7 @@
  */
 
 import { reactive } from 'vue';
+import { isAndroidHost } from '../platform';
 
 export const SIDECAR_URL = 'ws://127.0.0.1:34710';
 
@@ -75,7 +76,7 @@ export function reduceSidecarMessage(state, msg) {
     }
 }
 
-/** true, wenn dieses Ereignis vorgelesen werden soll. */
+/** True, wenn dieses Ereignis vorgelesen werden soll. */
 export function shouldTts(settings, event) {
     const s = { ...DEFAULT_VOICE, ...(settings || {}) };
     if (!s.voiceEnabled) return false;
@@ -123,6 +124,7 @@ function scheduleReconnect() {
 }
 
 function connect() {
+    if (isAndroidHost()) return;
     if (ws) return;
     try {
         ws = new WebSocket(SIDECAR_URL);
@@ -144,8 +146,14 @@ function connect() {
         const kind = reduceSidecarMessage(sidecarState, msg);
         if (kind === 'status' && !sidecarState.connected) {
             sidecarState.connected = true;
-            ctxRef?.log('Voice-Sidecar verbunden (TTS:', sidecarState.ttsReady,
-                'STT:', sidecarState.sttReady, 'Übersetzer:', sidecarState.translatorReady + ')');
+            ctxRef?.log(
+                'Voice-Sidecar verbunden (TTS:',
+                sidecarState.ttsReady,
+                'STT:',
+                sidecarState.sttReady,
+                'Übersetzer:',
+                sidecarState.translatorReady + ')'
+            );
         } else if (kind === 'stt' && sttResolve) {
             const r = sttResolve;
             sttResolve = null;
@@ -182,17 +190,16 @@ function connect() {
 export async function ensureSidecar(ctx, settings) {
     const s = { ...DEFAULT_VOICE, ...(settings || {}) };
     ctxRef = ctx;
+    if (isAndroidHost()) {
+        stopSidecar();
+        return;
+    }
     if (!s.voiceEnabled) {
         stopSidecar();
         return;
     }
     wantConnection = true;
-    if (
-        s.voiceAutostart &&
-        s.sidecarPath &&
-        typeof AppApi !== 'undefined' &&
-        AppApi.StartVoiceSidecar
-    ) {
+    if (s.voiceAutostart && s.sidecarPath && typeof AppApi !== 'undefined' && AppApi.StartVoiceSidecar) {
         try {
             const r = await AppApi.StartVoiceSidecar(s.sidecarPath);
             if (r === 'ok') {
@@ -219,7 +226,7 @@ export function stopSidecar() {
     ws = null;
     sidecarState.connected = false;
     sidecarState.translatorActive = false;
-    if (startedByUs && typeof AppApi !== 'undefined' && AppApi.StopVoiceSidecar) {
+    if (!isAndroidHost() && startedByUs && typeof AppApi !== 'undefined' && AppApi.StopVoiceSidecar) {
         try {
             AppApi.StopVoiceSidecar();
         } catch {}
@@ -228,6 +235,7 @@ export function stopSidecar() {
 }
 
 export function ttsSpeak(text, voice) {
+    if (isAndroidHost()) return false;
     if (!sidecarState.connected || !sidecarState.ttsReady || !text) return false;
     const cmd = { type: 'tts', id: 'noty-' + Date.now(), text };
     if (voice) cmd.voice = voice;
@@ -235,6 +243,7 @@ export function ttsSpeak(text, voice) {
 }
 
 export function sttStart(language = 'de') {
+    if (isAndroidHost()) return false;
     if (!sidecarState.connected || !sidecarState.sttReady) return false;
     return send({ type: 'stt_start', language });
 }
@@ -242,6 +251,10 @@ export function sttStart(language = 'de') {
 /** Aufnahme beenden; Promise mit erkanntem Text ('' bei Timeout/Fehler). */
 export function sttStop(timeoutMs = 10000) {
     return new Promise((resolve) => {
+        if (isAndroidHost()) {
+            resolve('');
+            return;
+        }
         if (!sidecarState.connected || !send({ type: 'stt_stop' })) {
             resolve('');
             return;
@@ -258,6 +271,7 @@ export function sttStop(timeoutMs = 10000) {
 
 /** Translator gemäß Einstellungen starten/stoppen (idempotent). */
 export function applyTranslator(settings) {
+    if (isAndroidHost()) return;
     const s = { ...DEFAULT_VOICE, ...(settings || {}) };
     if (!sidecarState.connected) return;
     if (s.voiceEnabled && s.translatorEnabled) {

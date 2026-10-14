@@ -401,6 +401,11 @@ export const useAuthStore = defineStore('Auth', () => {
             savedCredentials[user.id].user = user;
             savedCredentials[user.id].cookies = await webApiService.getCookies();
         }
+        if (window.VRCX_ANDROID && savedCredentials[user.id]) {
+            // Android remembers the Keystore-protected session, never a password.
+            savedCredentials[user.id].loginParams.password = '';
+            savedCredentials[user.id].cookies = await webApiService.getCookies();
+        }
         const jsonCredentialsArray = JSON.stringify(savedCredentials);
         await configRepository.setString('savedCredentials', jsonCredentialsArray);
         loginForm.value.lastUserLoggedIn = user.id;
@@ -508,12 +513,16 @@ export const useAuthStore = defineStore('Auth', () => {
 
             await authRequest.getConfig();
             try {
-                await authLogin({
-                    username: loginParams.username,
-                    password,
-                    endpoint: loginParams.endpoint,
-                    websocket: loginParams.websocket
-                });
+                if (window.VRCX_ANDROID && user.cookies) {
+                    const json = await request('auth/user', { method: 'GET' });
+                    handleCurrentUserUpdate(json);
+                } else
+                    await authLogin({
+                        username: loginParams.username,
+                        password,
+                        endpoint: loginParams.endpoint,
+                        websocket: loginParams.websocket
+                    });
             } catch (err) {
                 if (shouldTrackLoginNetworkIssueHint && shouldCountLoginFailureForNetworkHint(err)) {
                     maybeShowLoginNetworkIssueHint();

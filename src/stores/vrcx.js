@@ -671,6 +671,7 @@ export const useVrcxStore = defineStore('Vrcx', () => {
     }
 
     async function checkAutoBackupRestoreVrcRegistry() {
+        if (window.VRCX_ANDROID) return;
         if (!advancedSettingsStore.vrcRegistryAutoBackup || !advancedSettingsStore.vrcRegistryAskRestore) {
             return;
         }
@@ -702,6 +703,7 @@ export const useVrcxStore = defineStore('Vrcx', () => {
     }
 
     async function tryAutoBackupVrcRegistry() {
+        if (window.VRCX_ANDROID) return;
         if (!advancedSettingsStore.vrcRegistryAutoBackup) {
             return;
         }

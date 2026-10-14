@@ -174,7 +174,7 @@ export const useNotificationsSettingsStore = defineStore('NotificationsSettings'
         inventoryBundleNotifications.value = inventoryBundleNotificationsConfig;
         sharedFeedFilters.value = JSON.parse(sharedFeedFiltersConfig);
         notificationTTSVoice.value = Number(notificationTTSVoiceConfig);
-        TTSvoices.value = speechSynthesis.getVoices();
+        TTSvoices.value = typeof speechSynthesis === 'undefined' ? [] : speechSynthesis.getVoices();
         notificationPosition.value = notificationPositionConfig;
         notificationTimeout.value = Number(notificationTimeoutConfig);
 
@@ -340,6 +340,7 @@ export const useNotificationsSettingsStore = defineStore('NotificationsSettings'
     }
 
     function updateTTSVoices() {
+        if (typeof speechSynthesis === 'undefined') return;
         TTSvoices.value = speechSynthesis.getVoices();
         if (LINUX) {
             const voices = speechSynthesis.getVoices();
@@ -367,6 +368,7 @@ export const useNotificationsSettingsStore = defineStore('NotificationsSettings'
     }
 
     function speak(text) {
+        if (typeof speechSynthesis === 'undefined') return;
         const tts = new SpeechSynthesisUtterance();
         const voices = speechSynthesis.getVoices();
         if (voices.length === 0) {

@@ -1,11 +1,40 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
     DEFAULT_VOICE,
+    ensureSidecar,
     pickTtsVoice,
     reduceSidecarMessage,
     shouldTts,
+    sttStop,
     ttsTextFor
 } from '../sidecar';
+
+afterEach(() => {
+    delete window.VRCX_ANDROID;
+    delete window.AppApi;
+    vi.unstubAllGlobals();
+});
+
+describe('Android capability guard', () => {
+    it('does not start or connect desktop voice sidecar', async () => {
+        window.VRCX_ANDROID = true;
+        const start = vi.fn();
+        window.AppApi = { StartVoiceSidecar: start };
+        const socket = vi.fn();
+        vi.stubGlobal('WebSocket', socket);
+
+        await ensureSidecar({}, { voiceEnabled: true, voiceAutostart: true, sidecarPath: 'sidecar' });
+
+        expect(start).not.toHaveBeenCalled();
+        expect(socket).not.toHaveBeenCalled();
+    });
+
+    it('does not send a voice stop command', async () => {
+        window.VRCX_ANDROID = true;
+
+        await expect(sttStop()).resolves.toBe('');
+    });
+});
 
 const freshState = () => ({
     connected: false,
@@ -66,9 +95,7 @@ describe('shouldTts', () => {
         expect(shouldTts(s, 'invite')).toBe(true);
     });
     it('Defaults: alles aus', () => {
-        expect(shouldTts({ voiceEnabled: true }, 'global')).toBe(
-            DEFAULT_VOICE.ttsGlobal
-        );
+        expect(shouldTts({ voiceEnabled: true }, 'global')).toBe(DEFAULT_VOICE.ttsGlobal);
     });
 });
 

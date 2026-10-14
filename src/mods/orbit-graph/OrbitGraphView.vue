@@ -1,5 +1,8 @@
 <template>
-    <div ref="containerRef" class="og-container" :class="{ 'og-container--fullscreen': isFullscreen }">
+    <div
+        ref="containerRef"
+        class="og-container"
+        :class="{ 'og-container--fullscreen': isFullscreen, 'og-container--android': isAndroid }">
         <!-- Ambient glass background highlights -->
         <div class="og-bg-glow og-bg-glow--1"></div>
         <div class="og-bg-glow og-bg-glow--2"></div>
@@ -166,6 +169,10 @@
                 <i class="ri-radar-line og-empty-icon"></i>
                 <h3 class="og-empty-title">{{ isFreshInstall ? L.emptyFreshTitle : L.emptyFilterTitle }}</h3>
                 <p class="og-empty-text">{{ isFreshInstall ? L.emptyFreshText : L.emptyFilterText }}</p>
+                <p v-if="isAndroid && isFreshInstall" class="og-empty-text og-import-note">
+                    Diese Ansicht nutzt lokale VRCX-PC-Gamelogs. Wähle einen längeren Zeitraum oder importiere die
+                    PC-Datenbank.
+                </p>
                 <button v-if="!isFreshInstall" class="og-btn og-btn--primary" @click="relaxFilters">
                     <i class="ri-filter-off-line"></i>
                     <span>{{ L.relaxFilters }}</span>
@@ -200,9 +207,7 @@
                     <div class="og-inspector-body">
                         <div class="og-user-profile">
                             <div class="og-avatar-ring" :style="{ borderColor: nodeColor(selectedNode) }">
-                                <div
-                                    class="og-avatar-placeholder"
-                                    :style="{ background: nodeColor(selectedNode) }">
+                                <div class="og-avatar-placeholder" :style="{ background: nodeColor(selectedNode) }">
                                     {{ (selectedNode.displayName || '?').charAt(0).toUpperCase() }}
                                 </div>
                             </div>
@@ -310,8 +315,10 @@
         toEchartsGraph
     } from './engine';
     import { getCtx } from './runtime';
+    import { isAndroidHost } from '../platform';
 
     const { t, locale } = useI18n();
+    const isAndroid = isAndroidHost();
 
     // ------------------------------------------------------------- i18n ----
     const TEXTS = {
@@ -445,9 +452,9 @@
     const computedAt = ref('');
     const selectedNode = ref(null);
 
-    /** raw sweep result, kept so filter changes never touch the DB again */
+    /** Raw sweep result, kept so filter changes never touch the DB again */
     const accumulator = shallowRef(null);
-    /** filtered engine output */
+    /** Filtered engine output */
     const graph = shallowRef(null);
     /** ECharts series data */
     const series = shallowRef({ nodes: [], links: [], categories: [] });
@@ -459,7 +466,7 @@
      * filter is relaxed returns to the spot it used to hold.
      */
     const layoutPositions = new Map();
-    /** true → let the force simulation lay the graph out from scratch once */
+    /** True → let the force simulation lay the graph out from scratch once */
     let relayout = true;
 
     const stats = computed(
@@ -736,6 +743,10 @@
         if (!chartInstance.value) {
             return;
         }
+        if (series.value.nodes.length < 2) {
+            chartInstance.value.clear();
+            return;
+        }
         // Pick up drags / the settled simulation before rebuilding the option.
         captureLayout();
 
@@ -851,7 +862,14 @@
 
     function toggleFullscreen() {
         isFullscreen.value = !isFullscreen.value;
-        nextTick(() => chartInstance.value?.resize());
+        nextTick(resizeChart);
+    }
+
+    function resizeChart() {
+        const element = chartRef.value;
+        if (element?.isConnected && element.clientWidth > 0 && element.clientHeight > 0 && hasGraph.value) {
+            chartInstance.value?.resize();
+        }
     }
 
     // ----------------------------------------------------------- mount -----
@@ -861,7 +879,7 @@
         nextTick(() => {
             initChart();
             if (containerRef.value && typeof ResizeObserver !== 'undefined') {
-                resizeObserver = new ResizeObserver(() => chartInstance.value?.resize());
+                resizeObserver = new ResizeObserver(resizeChart);
                 resizeObserver.observe(containerRef.value);
             }
         });
@@ -1197,6 +1215,64 @@
         height: 100%;
     }
 
+    .og-import-note {
+        color: #cbd5e1;
+    }
+    .og-container--android {
+        gap: 10px;
+        padding: 12px;
+    }
+    .og-container--android .og-title-group {
+        gap: 9px;
+    }
+    .og-container--android .og-title {
+        font-size: 18px;
+    }
+    .og-container--android .og-subtitle {
+        font-size: 11px;
+    }
+    .og-container--android .og-header-controls {
+        width: 100%;
+    }
+    .og-container--android .og-search-box {
+        flex: 1 1 140px;
+        min-width: 0;
+    }
+    .og-container--android .og-search-input {
+        min-width: 0;
+        width: 100%;
+    }
+    .og-container--android .og-filters {
+        align-items: stretch;
+        gap: 9px;
+    }
+    .og-container--android .og-filter {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .og-container--android .og-seg {
+        max-width: 100%;
+        overflow-x: auto;
+    }
+    .og-container--android .og-seg-btn {
+        padding-inline: 8px;
+        white-space: nowrap;
+    }
+    .og-container--android .og-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+    .og-container--android .og-kpi-card {
+        padding: 9px;
+        min-width: 0;
+    }
+    .og-container--android .og-kpi-value {
+        font-size: 19px;
+    }
+    .og-container--android .og-viewport {
+        min-height: 340px;
+    }
+
     .og-legend {
         position: absolute;
         top: 12px;
@@ -1478,7 +1554,9 @@
     /* Transitions */
     .og-slide-enter-active,
     .og-slide-leave-active {
-        transition: transform 0.22s ease, opacity 0.22s ease;
+        transition:
+            transform 0.22s ease,
+            opacity 0.22s ease;
     }
     .og-slide-enter-from,
     .og-slide-leave-to {

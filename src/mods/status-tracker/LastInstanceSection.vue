@@ -1,6 +1,14 @@
 <template>
     <div style="display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0">
-        <div style="display: flex; gap: 10px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
+        <div
+            style="
+                display: flex;
+                gap: 10px;
+                margin-bottom: 12px;
+                font-size: 12px;
+                flex-wrap: wrap;
+                align-items: center;
+            ">
             <input v-model="search" placeholder="Suche…" class="st-search" type="text" />
             <span style="opacity: 0.65">{{ visibleEntries.length }} Einträge</span>
             <button
@@ -18,7 +26,8 @@
             <span v-if="loading" style="opacity: 0.6">…</span>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
+        <div
+            style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
             <button
                 v-for="s in statusFilters"
                 :key="s.key"
@@ -39,82 +48,128 @@
         </div>
 
         <div class="st-scroll">
-            <table class="st-table" style="min-width: 720px">
-                <thead>
-                    <tr>
-                        <th class="st-th-sort" style="text-align: left; min-width: 160px" @click="setSort('name')">
-                            Friend<span v-if="sortBy === 'name'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
-                        </th>
-                        <th class="st-th-sort" style="text-align: left" @click="setSort('status')">
-                            Status<span v-if="sortBy === 'status'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
-                        </th>
-                        <th class="st-th-sort" style="text-align: left" @click="setSort('world')">
-                            Welt<span v-if="sortBy === 'world'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
-                        </th>
-                        <th class="st-th-sort" style="text-align: left" @click="setSort('since')">
-                            Dort seit<span v-if="sortBy === 'since'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
-                        </th>
-                        <th class="st-th-sort" style="text-align: right" @click="setSort('occ')">
-                            Belegung<span v-if="sortBy === 'occ'" class="st-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
-                        </th>
-                        <th style="text-align: right"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="entry in visibleEntries" :key="entry.userId" :title="entry.userId">
-                        <td style="font-weight: 500">
-                            <a class="st-name-link" title="Profil öffnen" @click.stop="openUser(entry.userId)">
-                                {{ entry.displayName }}
-                            </a>
-                        </td>
-                        <td>
-                            <span
-                                :style="{ background: statusColor(entry.userId) }"
-                                class="st-dot"
-                                :title="statusText(entry.userId)"></span>
-                        </td>
-                        <td class="st-loc">
-                            <a
-                                class="st-world-link"
-                                :title="entry.location + ' — klicken für World-Dialog'"
-                                @click.stop="openWorld(entry.location)">
-                                {{ entry.worldName || entry.location }}
-                            </a>
-                        </td>
-                        <td style="white-space: nowrap">{{ formatAgo(entry.tsMs) }}</td>
-                        <td style="text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums">
-                            <template v-if="occOf(entry)">
-                                <span :style="occOf(entry).users === 0 ? 'opacity:.5' : ''">
-                                    {{ occOf(entry).users }}/{{ occOf(entry).capacity || '?' }}
-                                </span>
-                            </template>
-                            <span v-else-if="occErrorOf(entry)" title="Instanz nicht abfragbar (privat/geschlossen?)">?</span>
-                            <span v-else style="opacity: 0.4">–</span>
-                        </td>
-                        <td style="text-align: right">
-                            <button
-                                class="st-tool-btn"
-                                title="Eintrag entfernen (bleibt entfernt)"
-                                @click="dismiss(entry)">
-                                ✕
-                            </button>
-                        </td>
-                    </tr>
-                    <tr v-if="!loading && visibleEntries.length === 0">
-                        <td colspan="6" style="text-align: center; opacity: 0.6; padding: 24px">
-                            Keine bekannten Instanzen. (Einträge entstehen aus GPS-Feed-Ereignissen.)
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            <div v-if="isAndroid" class="st-instance-cards">
+                <article v-for="entry in visibleEntries" :key="entry.userId" class="st-instance-card">
+                    <div class="st-instance-head">
+                        <a class="st-name-link" title="Profil öffnen" @click.stop="openUser(entry.userId)">
+                            {{ entry.displayName }}
+                        </a>
+                        <button class="st-tool-btn" title="Eintrag entfernen (bleibt entfernt)" @click="dismiss(entry)">
+                            ✕
+                        </button>
+                    </div>
+                    <div class="st-instance-status">
+                        <span :style="{ background: statusColor(entry.userId) }" class="st-dot"></span>
+                        {{ statusText(entry.userId) }} · {{ formatAgo(entry.tsMs) }}
+                    </div>
+                    <a class="st-world-link" @click.stop="openWorld(entry.location)">
+                        {{ entry.worldName || entry.location }}
+                    </a>
+                    <div class="st-instance-occupancy">
+                        Belegung:
+                        <template v-if="occOf(entry)"
+                            >{{ occOf(entry).users }}/{{ occOf(entry).capacity || '?' }}</template
+                        >
+                        <span v-else-if="occErrorOf(entry)">nicht verfügbar</span>
+                        <span v-else>noch nicht geprüft</span>
+                    </div>
+                </article>
+                <p v-if="!loading && visibleEntries.length === 0" class="st-instance-empty">
+                    Keine bekannten Instanzen. Einträge entstehen aus GPS-Feed-Ereignissen.
+                </p>
+            </div>
+            <div v-else>
+                <table class="st-table" style="min-width: 720px">
+                    <thead>
+                        <tr>
+                            <th class="st-th-sort" style="text-align: left; min-width: 160px" @click="setSort('name')">
+                                Friend<span v-if="sortBy === 'name'" class="st-sort-arrow">{{
+                                    sortDir > 0 ? '▲' : '▼'
+                                }}</span>
+                            </th>
+                            <th class="st-th-sort" style="text-align: left" @click="setSort('status')">
+                                Status<span v-if="sortBy === 'status'" class="st-sort-arrow">{{
+                                    sortDir > 0 ? '▲' : '▼'
+                                }}</span>
+                            </th>
+                            <th class="st-th-sort" style="text-align: left" @click="setSort('world')">
+                                Welt<span v-if="sortBy === 'world'" class="st-sort-arrow">{{
+                                    sortDir > 0 ? '▲' : '▼'
+                                }}</span>
+                            </th>
+                            <th class="st-th-sort" style="text-align: left" @click="setSort('since')">
+                                Dort seit<span v-if="sortBy === 'since'" class="st-sort-arrow">{{
+                                    sortDir > 0 ? '▲' : '▼'
+                                }}</span>
+                            </th>
+                            <th class="st-th-sort" style="text-align: right" @click="setSort('occ')">
+                                Belegung<span v-if="sortBy === 'occ'" class="st-sort-arrow">{{
+                                    sortDir > 0 ? '▲' : '▼'
+                                }}</span>
+                            </th>
+                            <th style="text-align: right"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="entry in visibleEntries" :key="entry.userId" :title="entry.userId">
+                            <td style="font-weight: 500">
+                                <a class="st-name-link" title="Profil öffnen" @click.stop="openUser(entry.userId)">
+                                    {{ entry.displayName }}
+                                </a>
+                            </td>
+                            <td>
+                                <span
+                                    :style="{ background: statusColor(entry.userId) }"
+                                    class="st-dot"
+                                    :title="statusText(entry.userId)"></span>
+                            </td>
+                            <td class="st-loc">
+                                <a
+                                    class="st-world-link"
+                                    :title="entry.location + ' — klicken für World-Dialog'"
+                                    @click.stop="openWorld(entry.location)">
+                                    {{ entry.worldName || entry.location }}
+                                </a>
+                            </td>
+                            <td style="white-space: nowrap">{{ formatAgo(entry.tsMs) }}</td>
+                            <td style="text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums">
+                                <template v-if="occOf(entry)">
+                                    <span :style="occOf(entry).users === 0 ? 'opacity:.5' : ''">
+                                        {{ occOf(entry).users }}/{{ occOf(entry).capacity || '?' }}
+                                    </span>
+                                </template>
+                                <span
+                                    v-else-if="occErrorOf(entry)"
+                                    title="Instanz nicht abfragbar (privat/geschlossen?)"
+                                    >?</span
+                                >
+                                <span v-else style="opacity: 0.4">–</span>
+                            </td>
+                            <td style="text-align: right">
+                                <button
+                                    class="st-tool-btn"
+                                    title="Eintrag entfernen (bleibt entfernt)"
+                                    @click="dismiss(entry)">
+                                    ✕
+                                </button>
+                            </td>
+                        </tr>
+                        <tr v-if="!loading && visibleEntries.length === 0">
+                            <td colspan="6" style="text-align: center; opacity: 0.6; padding: 24px">
+                                Keine bekannten Instanzen. (Einträge entstehen aus GPS-Feed-Ereignissen.)
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div style="margin-top: 12px; font-size: 11px; opacity: 0.6; max-width: 720px">
-            Merkt sich pro Freund die letzte bekannte Instanz (auch nach Statuswechsel auf Orange/Rot oder
-            „Private"). Belegung wird automatisch geprüft: beim Öffnen des Tabs einmal komplett (0,5 s pro
-            Eintrag), danach jede Minute solange der Tab offen ist — dabei nur die sichtbaren/gefilterten
-            Einträge. Im Hintergrund alle 5 Minuten über alle Einträge (gedrosselt, 2 s pro Eintrag).
-            Einträge mit bestätigter Belegung 0 werden automatisch entfernt.
+            Merkt sich pro Freund die letzte bekannte Instanz (auch nach Statuswechsel auf Orange/Rot oder „Private").
+            Belegung wird automatisch geprüft: beim Öffnen des Tabs einmal komplett (0,5 s pro Eintrag), danach jede
+            Minute solange der Tab offen ist — dabei nur die sichtbaren/gefilterten Einträge. Im Hintergrund alle 5
+            Minuten über alle Einträge (gedrosselt, 2 s pro Eintrag). Einträge mit bestätigter Belegung 0 werden
+            automatisch entfernt.
         </div>
     </div>
 </template>
@@ -122,13 +177,9 @@
 <script setup>
     import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
 
-    import {
-        dismissInstance,
-        initDismissedTable,
-        loadDismissed,
-        loadLastGpsPerFriend
-    } from './db';
+    import { dismissInstance, initDismissedTable, loadDismissed, loadLastGpsPerFriend } from './db';
     import { getCtx } from './runtime';
+    import { isAndroidHost } from '../platform';
 
     const STATUS_COLORS = {
         'join me': '#42caff',
@@ -150,6 +201,7 @@
         // true while the "Letzte Instanz" sub-tab is the visible one
         active: { type: Boolean, default: true }
     });
+    const isAndroid = isAndroidHost();
 
     const loading = ref(false);
     const search = ref('');
@@ -246,15 +298,10 @@
         selectedStatuses.value = next;
     }
 
-    const baseEntries = computed(() =>
-        [...entries.value.values()].filter((entry) => !isOffline(entry.userId))
-    );
+    const baseEntries = computed(() => [...entries.value.values()].filter((entry) => !isOffline(entry.userId)));
 
     function statusCount(key) {
-        return baseEntries.value.reduce(
-            (n, entry) => (statusText(entry.userId) === key ? n + 1 : n),
-            0
-        );
+        return baseEntries.value.reduce((n, entry) => (statusText(entry.userId) === key ? n + 1 : n), 0);
     }
 
     const STATUS_ORDER = { 'join me': 0, active: 1, 'ask me': 2, busy: 3 };
@@ -282,8 +329,7 @@
         if (q) {
             list = list.filter(
                 (entry) =>
-                    entry.displayName.toLowerCase().includes(q) ||
-                    (entry.worldName || '').toLowerCase().includes(q)
+                    entry.displayName.toLowerCase().includes(q) || (entry.worldName || '').toLowerCase().includes(q)
             );
         }
         const dir = sortDir.value;
@@ -293,14 +339,12 @@
                     return a.displayName.localeCompare(b.displayName) * dir;
                 case 'status':
                     return (
-                        ((STATUS_ORDER[statusText(a.userId)] ?? 9) -
-                            (STATUS_ORDER[statusText(b.userId)] ?? 9)) *
-                            dir || a.displayName.localeCompare(b.displayName)
+                        ((STATUS_ORDER[statusText(a.userId)] ?? 9) - (STATUS_ORDER[statusText(b.userId)] ?? 9)) * dir ||
+                        a.displayName.localeCompare(b.displayName)
                     );
                 case 'world':
                     return (
-                        (a.worldName || a.location).localeCompare(b.worldName || b.location) * dir ||
-                        b.tsMs - a.tsMs
+                        (a.worldName || a.location).localeCompare(b.worldName || b.location) * dir || b.tsMs - a.tsMs
                     );
                 case 'occ':
                     return (occUsers(a) - occUsers(b)) * dir || b.tsMs - a.tsMs;
@@ -357,10 +401,7 @@
                 }
                 next.set(row.userId, {
                     userId: row.userId,
-                    displayName:
-                        friendStore.friends.get(row.userId)?.ref?.displayName ||
-                        row.displayName ||
-                        row.userId,
+                    displayName: friendStore.friends.get(row.userId)?.ref?.displayName || row.displayName || row.userId,
                     location: row.location,
                     worldName: row.worldName,
                     tsMs: new Date(row.lastDt).getTime()
@@ -569,6 +610,37 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow: auto;
+    }
+    .st-instance-cards {
+        display: block;
+    }
+    .st-instance-card {
+        border: 1px solid var(--border, #4443);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    .st-instance-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+    }
+    .st-instance-status,
+    .st-instance-occupancy {
+        margin-top: 7px;
+        font-size: 12px;
+        opacity: 0.8;
+    }
+    .st-world-link {
+        display: block;
+        margin-top: 7px;
+        overflow-wrap: anywhere;
+    }
+    .st-instance-empty {
+        text-align: center;
+        opacity: 0.7;
+        padding: 18px 8px;
     }
     .st-table thead th {
         position: sticky;

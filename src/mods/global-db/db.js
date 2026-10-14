@@ -5,24 +5,33 @@
 //    the local VRCX core database is never modified)
 // ============================================================================
 
+import { isAndroidHost } from '../platform';
+
 const kvTable = (ctx) => `${ctx.db.prefix()}_kv`;
 export const poolTable = (ctx, key) => `${ctx.db.prefix()}_p_${key}`;
+const androidKvKey = (ctx, key) => `${ctx.db.prefix()}_${key}`;
+
+function androidStorage() {
+    const storage = typeof window !== 'undefined' ? window.VRCXStorage : null;
+    if (!storage?.Get || !storage?.Set) {
+        throw new Error('Android secure settings storage is unavailable');
+    }
+    return storage;
+}
 
 // Mirrors of the server-side g_* tables (+ remote_id as sync cursor).
 export const POOL_TABLES = {
     status: 'created_at TEXT, user_id TEXT, status TEXT, status_description TEXT',
     bio: 'created_at TEXT, user_id TEXT, bio TEXT',
-    online_offline:
-        'created_at TEXT, user_id TEXT, type TEXT, location TEXT, world_name TEXT, time INTEGER',
+    online_offline: 'created_at TEXT, user_id TEXT, type TEXT, location TEXT, world_name TEXT, time INTEGER',
     gps: 'created_at TEXT, user_id TEXT, location TEXT, world_name TEXT, time INTEGER',
-    join_leave:
-        'created_at TEXT, user_id TEXT, display_name TEXT, type TEXT, location TEXT, time INTEGER'
+    join_leave: 'created_at TEXT, user_id TEXT, display_name TEXT, type TEXT, location TEXT, time INTEGER'
 };
 
 export async function initTables(ctx) {
-    await ctx.db.exec(
-        `CREATE TABLE IF NOT EXISTS ${kvTable(ctx)} (key TEXT PRIMARY KEY, value TEXT)`
-    );
+    if (!isAndroidHost()) {
+        await ctx.db.exec(`CREATE TABLE IF NOT EXISTS ${kvTable(ctx)} (key TEXT PRIMARY KEY, value TEXT)`);
+    }
     for (const [key, cols] of Object.entries(POOL_TABLES)) {
         await ctx.db.exec(
             `CREATE TABLE IF NOT EXISTS ${poolTable(ctx, key)} (
@@ -36,10 +45,16 @@ export async function initTables(ctx) {
 }
 
 export async function kvGet(ctx, key, fallback = null) {
-    const rows = await ctx.db.query(
-        `SELECT value FROM ${kvTable(ctx)} WHERE key = @key`,
-        { '@key': key }
-    );
+    if (isAndroidHost()) {
+        const value = await androidStorage().Get(androidKvKey(ctx, key));
+        if (!value) return fallback;
+        try {
+            return JSON.parse(value);
+        } catch {
+            return fallback;
+        }
+    }
+    const rows = await ctx.db.query(`SELECT value FROM ${kvTable(ctx)} WHERE key = @key`, { '@key': key });
     if (rows.length === 0 || rows[0][0] == null) return fallback;
     try {
         return JSON.parse(rows[0][0]);
@@ -49,10 +64,14 @@ export async function kvGet(ctx, key, fallback = null) {
 }
 
 export async function kvSet(ctx, key, value) {
-    await ctx.db.exec(
-        `INSERT OR REPLACE INTO ${kvTable(ctx)} (key, value) VALUES (@key, @value)`,
-        { '@key': key, '@value': JSON.stringify(value) }
-    );
+    if (isAndroidHost()) {
+        await androidStorage().Set(androidKvKey(ctx, key), JSON.stringify(value));
+        return;
+    }
+    await ctx.db.exec(`INSERT OR REPLACE INTO ${kvTable(ctx)} (key, value) VALUES (@key, @value)`, {
+        '@key': key,
+        '@value': JSON.stringify(value)
+    });
 }
 
 export async function poolCounts(ctx) {

@@ -1,0 +1,78 @@
+.vrcx-android {
+    color-scheme: dark;
+}
+.vrcx-android body {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.vrcx-android #x-app {
+    height: 100dvh;
+}
+.vrcx-android .android-main {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.vrcx-android .android-main-content {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+.vrcx-android .x-container {
+    height: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    padding: 12px;
+}
+.vrcx-android button:not([role='checkbox']):not([role='switch']),
+.vrcx-android [role='tab'],
+.vrcx-android select {
+    min-height: 44px;
+    touch-action: manipulation;
+}
+.vrcx-android input:not([type='checkbox']),
+.vrcx-android textarea {
+    font-size: 16px;
+}
+.vrcx-android .x-login-container {
+    overflow: auto;
+    padding: 64px 16px 24px;
+    width: 100%;
+}
+.vrcx-android .x-login {
+    width: 100%;
+    max-width: 480px;
+    margin: auto;
+}
+.vrcx-android .x-login-form-container {
+    flex-direction: column;
+    width: 100%;
+}
+.vrcx-android .x-login-form-container > div {
+    width: 100%;
+    min-width: 0;
+}
+.vrcx-android .x-vertical-divider {
+    display: none;
+}
+.vrcx-android [data-slot='dialog-content'],
+.vrcx-android [role='dialog'] {
+    max-width: calc(100vw - 16px);
+    max-height: calc(100dvh - 20px);
+    overflow: auto;
+}
+@media (max-width: 600px) {
+    .vrcx-android [data-slot='tabs-list'] {
+        flex-wrap: wrap;
+        height: auto;
+    }
+    .vrcx-android .x-login-container .x-login {
+        min-width: 0;
+    }
+    .vrcx-android table {
+        font-size: 13px;
+    }
+}

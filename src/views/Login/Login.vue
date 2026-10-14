@@ -1,7 +1,10 @@
 <template>
     <div class="x-login-container">
         <div class="m-1.5" style="position: absolute; top: 0; left: 0">
-            <LoginSettingsDialog />
+            <Button v-if="isAndroid" variant="ghost" @click="router.push({ name: 'android-phone' })"
+                >Phone settings</Button
+            >
+            <LoginSettingsDialog v-if="!isAndroid" />
             <TooltipWrapper v-if="!noUpdater" side="top" :content="t('view.login.updater')">
                 <Button class="rounded-full mr-2 text-xs" size="icon-sm" variant="ghost" @click="showVRCXUpdateDialog">
                     <span class="relative inline-flex items-center justify-center">
@@ -92,7 +95,7 @@
                         </FieldGroup>
                         <label class="inline-flex items-center gap-2 mr-2 mt-3 text-sm">
                             <Checkbox v-model="loginForm.saveCredentials" />
-                            <span>{{ t('view.login.field.saveCredentials') }}</span>
+                            <span>{{ isAndroid ? 'Remember account' : t('view.login.field.saveCredentials') }}</span>
                         </label>
 
                         <Field class="mt-4">
@@ -181,6 +184,7 @@
 </template>
 
 <script setup>
+    const isAndroid = window.VRCX_ANDROID === true;
     import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
     import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
     import {

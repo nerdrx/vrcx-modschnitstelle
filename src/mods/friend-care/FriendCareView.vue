@@ -7,10 +7,7 @@
                 {{ t('mods.friendcare.nav.mod-friend-care') }}
             </h2>
             <div class="fc-seg">
-                <button
-                    class="fc-tab-btn"
-                    :class="{ 'fc-tab-btn--active': tab === 'seen' }"
-                    @click="setTab('seen')">
+                <button class="fc-tab-btn" :class="{ 'fc-tab-btn--active': tab === 'seen' }" @click="setTab('seen')">
                     Zuletzt getroffen
                 </button>
                 <button
@@ -45,11 +42,9 @@
             <span v-if="loading" style="font-size: 12px; opacity: 0.6">…</span>
         </div>
 
-        <div style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
-            <button
-                class="fc-chip"
-                :class="{ 'fc-chip--active': filterCat === null }"
-                @click="filterCat = null">
+        <div
+            style="display: flex; gap: 8px; margin-bottom: 12px; font-size: 12px; flex-wrap: wrap; align-items: center">
+            <button class="fc-chip" :class="{ 'fc-chip--active': filterCat === null }" @click="filterCat = null">
                 Alle
             </button>
             <button
@@ -68,45 +63,95 @@
             <template v-if="tab === 'seen'">
                 <div class="fc-settings-row">
                     <strong>Zeiträume (Monate):</strong>
-                    <label>Frisch bis
-                        <input v-model.number="settings.seen.thresholds.fresh" type="number" min="0.1" step="0.5" class="fc-num" />
+                    <label
+                        >Frisch bis
+                        <input
+                            v-model.number="settings.seen.thresholds.fresh"
+                            type="number"
+                            min="0.1"
+                            step="0.5"
+                            class="fc-num" />
                     </label>
-                    <label>Grenzwertig ab
-                        <input v-model.number="settings.seen.thresholds.borderline" type="number" min="0.1" step="0.5" class="fc-num" />
+                    <label
+                        >Grenzwertig ab
+                        <input
+                            v-model.number="settings.seen.thresholds.borderline"
+                            type="number"
+                            min="0.1"
+                            step="0.5"
+                            class="fc-num" />
                     </label>
-                    <label>Überfällig ab
-                        <input v-model.number="settings.seen.thresholds.overdue" type="number" min="0.1" step="0.5" class="fc-num" />
+                    <label
+                        >Überfällig ab
+                        <input
+                            v-model.number="settings.seen.thresholds.overdue"
+                            type="number"
+                            min="0.1"
+                            step="0.5"
+                            class="fc-num" />
                     </label>
                 </div>
                 <div class="fc-settings-row">
                     <strong>Farben:</strong>
                     <label>Frisch <input v-model="settings.seen.colors.green" type="color" class="fc-color" /></label>
                     <label>Okay <input v-model="settings.seen.colors.neutral" type="color" class="fc-color" /></label>
-                    <label>Grenzwertig <input v-model="settings.seen.colors.orange" type="color" class="fc-color" /></label>
+                    <label
+                        >Grenzwertig <input v-model="settings.seen.colors.orange" type="color" class="fc-color"
+                    /></label>
                     <label>Überfällig <input v-model="settings.seen.colors.red" type="color" class="fc-color" /></label>
-                    <label>Nie gesehen <input v-model="settings.seen.colors.never" type="color" class="fc-color" /></label>
+                    <label
+                        >Nie gesehen <input v-model="settings.seen.colors.never" type="color" class="fc-color"
+                    /></label>
                 </div>
             </template>
             <template v-else>
                 <div class="fc-settings-row">
                     <strong>Zeiträume (Monate):</strong>
-                    <label>Inaktiv ab
-                        <input v-model.number="settings.inactivity.thresholds.quiet" type="number" min="0.1" step="0.5" class="fc-num" />
+                    <label
+                        >Inaktiv ab
+                        <input
+                            v-model.number="settings.inactivity.thresholds.quiet"
+                            type="number"
+                            min="0.1"
+                            step="0.5"
+                            class="fc-num" />
                     </label>
-                    <label>Lange weg ab
-                        <input v-model.number="settings.inactivity.thresholds.longGone" type="number" min="0.1" step="0.5" class="fc-num" />
+                    <label
+                        >Lange weg ab
+                        <input
+                            v-model.number="settings.inactivity.thresholds.longGone"
+                            type="number"
+                            min="0.1"
+                            step="0.5"
+                            class="fc-num" />
                     </label>
-                    <label>Verschollen ab
-                        <input v-model.number="settings.inactivity.thresholds.lost" type="number" min="0.1" step="0.5" class="fc-num" />
+                    <label
+                        >Verschollen ab
+                        <input
+                            v-model.number="settings.inactivity.thresholds.lost"
+                            type="number"
+                            min="0.1"
+                            step="0.5"
+                            class="fc-num" />
                     </label>
                 </div>
                 <div class="fc-settings-row">
                     <strong>Farben:</strong>
-                    <label>Aktiv <input v-model="settings.inactivity.colors.active" type="color" class="fc-color" /></label>
-                    <label>Inaktiv <input v-model="settings.inactivity.colors.green" type="color" class="fc-color" /></label>
-                    <label>Lange weg <input v-model="settings.inactivity.colors.orange" type="color" class="fc-color" /></label>
-                    <label>Verschollen <input v-model="settings.inactivity.colors.red" type="color" class="fc-color" /></label>
-                    <label>Keine Daten <input v-model="settings.inactivity.colors.nodata" type="color" class="fc-color" /></label>
+                    <label
+                        >Aktiv <input v-model="settings.inactivity.colors.active" type="color" class="fc-color"
+                    /></label>
+                    <label
+                        >Inaktiv <input v-model="settings.inactivity.colors.green" type="color" class="fc-color"
+                    /></label>
+                    <label
+                        >Lange weg <input v-model="settings.inactivity.colors.orange" type="color" class="fc-color"
+                    /></label>
+                    <label
+                        >Verschollen <input v-model="settings.inactivity.colors.red" type="color" class="fc-color"
+                    /></label>
+                    <label
+                        >Keine Daten <input v-model="settings.inactivity.colors.nodata" type="color" class="fc-color"
+                    /></label>
                 </div>
             </template>
             <div class="fc-settings-row">
@@ -115,62 +160,106 @@
             </div>
         </div>
 
+        <p v-if="isAndroid && !hasLocalHistory" class="fc-history-note">
+            Keine importierten PC-Logs. Importiere die VRCX-Datenbank für historische Analytics.
+        </p>
+
         <div class="fc-scroll">
-        <table class="fc-table" style="min-width: 700px">
-            <thead>
-                <tr>
-                    <th class="fc-th-sort" style="text-align: left; min-width: 180px" @click="setSort('name')">
-                        Friend<span v-if="sortBy === 'name'" class="fc-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
-                    </th>
-                    <th class="fc-th-sort" style="text-align: left" @click="setSort('date')">
-                        {{ tab === 'seen' ? 'Zuletzt in gemeinsamer Instanz' : 'Letzte Aktivität' }}
-                        <span v-if="sortBy === 'date'" class="fc-sort-arrow">{{ sortDir > 0 ? '▲' : '▼' }}</span>
-                    </th>
-                    <th style="text-align: left">Kategorie</th>
-                    <th v-if="tab === 'seen'" style="text-align: left">Ort (letztes Treffen)</th>
-                    <th v-else style="text-align: left">Quelle</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr
+            <div v-if="isAndroid" class="fc-cards">
+                <article
                     v-for="row in visibleRows"
                     :key="row.userId"
-                    :style="{ background: rowColor(row) }"
-                    :title="row.userId">
-                    <td style="font-weight: 500">
+                    class="fc-card"
+                    :style="{ borderColor: catMeta(row.category).color }">
+                    <div class="fc-card-head">
                         <a class="fc-name-link" title="Profil öffnen" @click.stop="openUser(row.userId)">
                             {{ row.displayName }}
                         </a>
-                    </td>
-                    <td>
-                        <template v-if="row.tsMs">
-                            {{ formatDate(row.tsMs) }}
-                            <span style="opacity: 0.7">· {{ formatAgo(row.days) }}</span>
-                        </template>
-                        <span v-else style="opacity: 0.6">—</span>
-                    </td>
-                    <td>
                         <span class="fc-badge" :style="{ borderColor: catMeta(row.category).color }">
                             {{ catMeta(row.category).label }}
                         </span>
-                    </td>
-                    <td v-if="tab === 'seen'" class="fc-loc">
-                        <a
-                            v-if="row.location"
-                            class="fc-world-link"
-                            :title="row.location + ' — klicken für World-Dialog'"
-                            @click.stop="openWorld(row.location)">
+                    </div>
+                    <div class="fc-card-detail">
+                        <template v-if="row.tsMs">
+                            {{ tab === 'seen' ? 'Zuletzt getroffen' : 'Letzte Aktivität' }}:
+                            {{ formatDate(row.tsMs) }} · {{ formatAgo(row.days) }}
+                        </template>
+                        <span v-else>{{
+                            tab === 'seen' ? 'Noch nie gemeinsam gesehen' : 'Keine Aktivitätsdaten'
+                        }}</span>
+                    </div>
+                    <div v-if="tab === 'seen'" class="fc-card-detail">
+                        Ort:
+                        <a v-if="row.location" class="fc-world-link" @click.stop="openWorld(row.location)">
                             {{ worldLabel(row.location) }}
                         </a>
                         <span v-else>—</span>
-                    </td>
-                    <td v-else style="opacity: 0.75">{{ sourceLabel(row.source) }}</td>
-                </tr>
-                <tr v-if="!loading && visibleRows.length === 0">
-                    <td colspan="4" style="text-align: center; opacity: 0.6; padding: 24px">Keine Einträge.</td>
-                </tr>
-            </tbody>
-        </table>
+                    </div>
+                    <div v-else class="fc-card-detail">Quelle: {{ sourceLabel(row.source) }}</div>
+                </article>
+                <p v-if="!loading && visibleRows.length === 0" class="fc-empty">Keine Einträge.</p>
+            </div>
+            <div v-else>
+                <table class="fc-table" style="min-width: 700px">
+                    <thead>
+                        <tr>
+                            <th class="fc-th-sort" style="text-align: left; min-width: 180px" @click="setSort('name')">
+                                Friend<span v-if="sortBy === 'name'" class="fc-sort-arrow">{{
+                                    sortDir > 0 ? '▲' : '▼'
+                                }}</span>
+                            </th>
+                            <th class="fc-th-sort" style="text-align: left" @click="setSort('date')">
+                                {{ tab === 'seen' ? 'Zuletzt in gemeinsamer Instanz' : 'Letzte Aktivität' }}
+                                <span v-if="sortBy === 'date'" class="fc-sort-arrow">{{
+                                    sortDir > 0 ? '▲' : '▼'
+                                }}</span>
+                            </th>
+                            <th style="text-align: left">Kategorie</th>
+                            <th v-if="tab === 'seen'" style="text-align: left">Ort (letztes Treffen)</th>
+                            <th v-else style="text-align: left">Quelle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in visibleRows"
+                            :key="row.userId"
+                            :style="{ background: rowColor(row) }"
+                            :title="row.userId">
+                            <td style="font-weight: 500">
+                                <a class="fc-name-link" title="Profil öffnen" @click.stop="openUser(row.userId)">
+                                    {{ row.displayName }}
+                                </a>
+                            </td>
+                            <td>
+                                <template v-if="row.tsMs">
+                                    {{ formatDate(row.tsMs) }}
+                                    <span style="opacity: 0.7">· {{ formatAgo(row.days) }}</span>
+                                </template>
+                                <span v-else style="opacity: 0.6">—</span>
+                            </td>
+                            <td>
+                                <span class="fc-badge" :style="{ borderColor: catMeta(row.category).color }">
+                                    {{ catMeta(row.category).label }}
+                                </span>
+                            </td>
+                            <td v-if="tab === 'seen'" class="fc-loc">
+                                <a
+                                    v-if="row.location"
+                                    class="fc-world-link"
+                                    :title="row.location + ' — klicken für World-Dialog'"
+                                    @click.stop="openWorld(row.location)">
+                                    {{ worldLabel(row.location) }}
+                                </a>
+                                <span v-else>—</span>
+                            </td>
+                            <td v-else style="opacity: 0.75">{{ sourceLabel(row.source) }}</td>
+                        </tr>
+                        <tr v-if="!loading && visibleRows.length === 0">
+                            <td colspan="4" style="text-align: center; opacity: 0.6; padding: 24px">Keine Einträge.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div style="margin-top: 14px; font-size: 11px; opacity: 0.65; display: flex; gap: 14px; flex-wrap: wrap">
@@ -185,20 +274,19 @@
     import { computed, onActivated, onMounted, ref } from 'vue';
     import { useI18n } from 'vue-i18n';
 
-    import {
-        daysBetween,
-        inactivityCategory,
-        matchLastSeen,
-        pickLastActive,
-        seenCategory
-    } from './engine';
+    import { daysBetween, inactivityCategory, matchLastSeen, pickLastActive, seenCategory } from './engine';
     import { getLastFeedActivity, getLastSeenRows, getWorldNames } from './db';
     import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings';
     import { getCtx } from './runtime';
+    import { isAndroidHost } from '../platform';
 
     const { t } = useI18n();
 
     const settings = ref(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)));
+    const isAndroid = isAndroidHost();
+    const hasSeenHistory = ref(false);
+    const hasActivityHistory = ref(false);
+    const hasLocalHistory = computed(() => (tab.value === 'seen' ? hasSeenHistory.value : hasActivityHistory.value));
     const showSettings = ref(false);
 
     const SEEN_LABELS = {
@@ -268,9 +356,7 @@
 
     const rows = computed(() => (tab.value === 'seen' ? seenRows.value : inactRows.value));
     const metaMap = computed(() => (tab.value === 'seen' ? seenMeta.value : inactMeta.value));
-    const categories = computed(() =>
-        Object.entries(metaMap.value).map(([key, m]) => ({ key, ...m }))
-    );
+    const categories = computed(() => Object.entries(metaMap.value).map(([key, m]) => ({ key, ...m })));
 
     function catMeta(key) {
         return metaMap.value[key] || { color: '#888', label: key, hint: '' };
@@ -424,6 +510,9 @@
             worldNames.value = dbNames;
 
             const gamelogRows = await getLastSeenRows(ctx);
+            const feedFallback = await getLastFeedActivity(ctx);
+            hasSeenHistory.value = gamelogRows.length > 0;
+            hasActivityHistory.value = feedFallback.size > 0;
             const seenHits = matchLastSeen(friends, gamelogRows);
             seenRows.value = friends.map((friend) => {
                 const hit = seenHits.get(friend.userId);
@@ -440,15 +529,13 @@
             });
 
             // ---- Tab 2: inactivity ----------------------------------------
-            const feedFallback = await getLastFeedActivity(ctx);
             inactRows.value = friends.map((friend) => {
                 const { tsMs, source } = pickLastActive({
                     lastActivityIso: friend.ref?.last_activity,
                     lastLoginIso: friend.ref?.last_login,
                     feedFallbackIso: feedFallback.get(friend.userId)?.lastDt
                 });
-                const realSource =
-                    source === 'feed' ? feedFallback.get(friend.userId)?.source : source;
+                const realSource = source === 'feed' ? feedFallback.get(friend.userId)?.source : source;
                 const days = daysBetween(tsMs, nowMs);
                 return {
                     userId: friend.userId,
@@ -640,6 +727,35 @@
         flex: 1 1 auto;
         min-height: 0;
         overflow: auto;
+    }
+    .fc-cards {
+        display: block;
+    }
+    .fc-card {
+        border: 1px solid var(--border, #4443);
+        border-left-width: 4px;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+    .fc-card-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+    .fc-card-detail {
+        font-size: 12px;
+        opacity: 0.85;
+        margin-top: 5px;
+        overflow-wrap: anywhere;
+    }
+    .fc-history-note,
+    .fc-empty {
+        text-align: center;
+        opacity: 0.7;
+        padding: 12px;
     }
     .fc-table thead th {
         position: sticky;
