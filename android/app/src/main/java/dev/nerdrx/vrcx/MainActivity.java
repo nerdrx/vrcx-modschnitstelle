@@ -51,6 +51,10 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         createNotificationChannel();
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBackNavigation);
+        }
 
         webView = new WebView(this);
         FrameLayout container = new FrameLayout(this);
@@ -370,8 +374,16 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) webView.goBack();
-        else super.onBackPressed();
+        handleBackNavigation();
+    }
+
+    private void handleBackNavigation() {
+        if (webView == null) { finish(); return; }
+        webView.evaluateJavascript("Boolean(window.__nxAndroidBack && window.__nxAndroidBack())", handled -> {
+            if ("true".equals(handled)) return;
+            if (webView.canGoBack()) webView.goBack();
+            else finish();
+        });
     }
 
     @Override

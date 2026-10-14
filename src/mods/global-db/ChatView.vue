@@ -1373,6 +1373,8 @@
     }
     .chat-root--android {
         min-width: 0;
+        padding: 12px !important;
+        gap: 10px;
     }
     .chat-root--android .chat-settings-summary {
         display: block;
@@ -1400,6 +1402,105 @@
     }
     .chat-root--android .chat-settings[open] .chat-toolbar {
         margin-top: 8px;
+    }
+    .chat-root--android .chat-settings-summary {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        touch-action: manipulation;
+    }
+    .chat-root--android .chat-toolbar {
+        align-items: stretch;
+        gap: 10px;
+        padding: 12px;
+        font-size: 14px;
+    }
+    .chat-root--android .chat-toolbar .tgl {
+        min-height: 40px;
+        font-size: 14px;
+    }
+    .chat-root--android .chat-body--android {
+        gap: 8px;
+        min-height: 0;
+        flex: 1 1 auto;
+    }
+    .chat-root--android .android-channel-select {
+        min-height: 46px;
+        font-size: 16px;
+        touch-action: manipulation;
+    }
+    .chat-root--android .chat-main {
+        min-width: 0;
+        gap: 8px;
+    }
+    .chat-root--android .msg-list {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        padding: 10px 8px;
+    }
+    .chat-root--android .msg {
+        max-width: 96%;
+        font-size: 14px;
+        line-height: 1.45;
+    }
+    .chat-root--android .quick-row {
+        gap: 8px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+    }
+    .chat-root--android .quick-row .btn {
+        flex-shrink: 0;
+    }
+    .chat-root--android .btn,
+    .chat-root--android .emoji-btn,
+    .chat-root--android .react-chip,
+    .chat-root--android .react-add {
+        min-height: 40px;
+        touch-action: manipulation;
+    }
+    .chat-root--android .emoji-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+    }
+    .chat-root--android .react-chip,
+    .chat-root--android .react-add {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding-inline: 9px;
+    }
+    .chat-root--android .react-add {
+        opacity: 0.8;
+    }
+    .chat-root--android .react-picker span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+        min-height: 40px;
+    }
+    .chat-root--android .msg-name {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        touch-action: manipulation;
+    }
+    .chat-root--android .input-row {
+        gap: 8px;
+        align-items: stretch;
+    }
+    .chat-root--android .chat-input {
+        min-width: 0;
+        font-size: 16px;
+    }
+    .chat-root--android .msg-media {
+        max-width: 100%;
+        height: auto;
+        object-fit: contain;
     }
     .chat-settings-summary {
         cursor: pointer;

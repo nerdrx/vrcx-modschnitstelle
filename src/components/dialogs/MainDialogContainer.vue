@@ -48,6 +48,7 @@
     const userStore = useUserStore();
     const worldStore = useWorldStore();
     const appearanceSettingsStore = useAppearanceSettingsStore();
+    const isAndroid = window.VRCX_ANDROID === true;
 
     const { previousInstancesInfoDialog, previousInstancesListDialog } = storeToRefs(instanceStore);
 
@@ -236,7 +237,23 @@
 
 <template>
     <Dialog v-if="isOpen" v-model:open="isOpen">
-        <DialogContent :class="dialogClass" style="top: 10vh" :show-close-button="false" :style="dialogStyle">
+        <DialogContent
+            :class="dialogClass"
+            :show-close-button="false"
+            :style="[
+                dialogStyle,
+                isAndroid
+                    ? {
+                          inset: '8px',
+                          width: 'auto',
+                          height: 'auto',
+                          maxWidth: 'none',
+                          maxHeight: 'none',
+                          translate: 'none',
+                          padding: '12px'
+                      }
+                    : { top: '10vh' }
+            ]">
             <Breadcrumb
                 v-if="shouldShowBreadcrumbs"
                 class="mb-2 flex-shrink-0 rounded-xl bg-(--profile-card) w-fit pr-4">

@@ -5,8 +5,8 @@
             :unmount-on-hide="false"
             aria-label="Search tabs"
             class="flex flex-col min-h-0 flex-1">
-            <div class="mt-0 mx-0 mb-2 flex items-center gap-5">
-                <TabsList>
+            <div class="search-toolbar mt-0 mx-0 mb-2 flex items-center gap-5">
+                <TabsList class="search-tabs-list">
                     <TabsTrigger value="user">{{ t('view.search.user.header') }}</TabsTrigger>
                     <TabsTrigger value="world">{{ t('view.search.world.header') }}</TabsTrigger>
                     <TabsTrigger value="avatar">{{ t('view.search.avatar.header') }}</TabsTrigger>
@@ -502,3 +502,28 @@
         }
     }
 </script>
+
+<style scoped>
+    @media (max-width: 600px) {
+        :global(.vrcx-android .search-toolbar) {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        :global(.vrcx-android .search-tabs-list) {
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        :global(.vrcx-android .search-tabs-list [role='tab']) {
+            flex: none;
+        }
+
+        :global(.vrcx-android .search-toolbar > div:last-child) {
+            width: 100%;
+        }
+    }
+</style>

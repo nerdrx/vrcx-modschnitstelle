@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const endpoint = process.argv[2] || 'http://127.0.0.1:19580';
 const assets = path.resolve(import.meta.dirname, '../build/android/frontend/assets');
@@ -49,13 +50,28 @@ async function evaluate(expression) {
     return result.result.value;
 }
 async function screenshot(name) {
-    const result = await call('Page.captureScreenshot', { format: 'png' });
+    const result = await call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
     fs.writeFileSync(path.join(output, `${name}.png`), Buffer.from(result.data, 'base64'));
+}
+async function tapButton(text) {
+    const point = await evaluate(`(() => {
+        const button = Array.from(document.querySelectorAll('button')).find(el => el.textContent.trim() === ${JSON.stringify(text)} && el.getClientRects().length);
+        if (!button) throw new Error('Missing button: ' + ${JSON.stringify(text)});
+        const r = button.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2;
+        if (r.width < 44 || r.height < 44) throw new Error('Small tap target: ' + ${JSON.stringify(text)});
+        if (!button.contains(document.elementFromPoint(x, y))) throw new Error('Covered button: ' + ${JSON.stringify(text)});
+        return {x, y};
+    })()`);
+    await call('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+    await call('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await pause();
 }
 const pause = () => new Promise((resolve) => setTimeout(resolve, 900));
 try {
     await call('Runtime.enable');
     await call('Page.enable');
+    await call('Emulation.setDeviceMetricsOverride', { width: 393, height: 760, deviceScaleFactor: 1, mobile: true });
+    await call('Emulation.setTouchEmulationEnabled', { enabled: true });
     const savedBeforeReload = await evaluate(`VRCXStorage.Get('config:savedcredentials')`);
     assert(['', '{}'].includes(savedBeforeReload), 'Refusing to use a WebView with saved accounts');
     await evaluate(`VRCXStorage.Remove('config:lastuserloggedin')`);
@@ -116,8 +132,8 @@ try {
         const state = (await import('/frontend/assets/${stateModule.filename}')).${stateModule.exported};
         if (state.isLoggedIn) throw new Error('Refusing to overwrite a logged-in session');
         const native = window.WebApi;
-        const me = {...$pinia.user.currentUser,id:'usr_android_smoke',displayName:'Phone Preview',status:'active',friends:['usr_smoke_friend'],onlineFriends:[],offlineFriends:['usr_smoke_friend'],activeFriends:[]};
-        const friend = {...me,id:'usr_smoke_friend',displayName:'Sample Friend',location:'offline',last_login:new Date().toISOString()};
+        const me = {...$pinia.user.currentUser,id:'usr_android_smoke',displayName:'Phone Preview',status:'active',friends:['usr_smoke_friend'],onlineFriends:['usr_smoke_friend'],offlineFriends:[],activeFriends:[]};
+        const friend = {...me,id:'usr_smoke_friend',displayName:'Sample Friend',location:'private',last_login:new Date().toISOString()};
         window.WebSocket = class extends EventTarget {
             static OPEN = 1;
             readyState = 1;
@@ -146,13 +162,24 @@ try {
         await VRCXStorage.Set('usrandroidsmoke_mod_globaldb_first_sync_done','true');
         Object.assign($pinia.user.currentUser, me);
         $pinia.user.cachedUsers.set(friend.id, friend);
-        $pinia.friend.friends.set(friend.id,{ref:friend,name:friend.displayName});
+        $pinia.friend.friends.set(friend.id,{id:friend.id,ref:friend,name:friend.displayName,state:'online'});
         state.isLoggedIn=true;
         state.isFriendsLoaded=true;
         return true;
     })()`);
     await pause();
+    await evaluate(`(() => {
+        const ref = $pinia.user.cachedUsers.get('usr_smoke_friend');
+        ref.name = ref.displayName;
+        $pinia.friend.friends.set(ref.id, {id:ref.id,ref,name:ref.displayName,state:'online',isVIP:false});
+        $pinia.friend.reindexSortedFriend(ref.id);
+    })()`);
     const views = [
+        ['feed', 'feed'],
+        ['friends-locations', 'friends'],
+        ['search', 'search'],
+        ['notification', 'invites'],
+        ['settings', 'settings'],
         ['mod-status-tracker', 'status-tracker'],
         ['mod-friend-care', 'friend-care'],
         ['mod-orbit-graph', 'orbit-graph'],
@@ -172,16 +199,96 @@ try {
         states.push(state);
         await screenshot(file);
     }
+    const interactionChecks = [];
+    await evaluate(`${routerExpression}.push({name:'friends-locations'})`);
+    await pause();
+    const friendPoint = await evaluate(
+        `(() => { const name = document.querySelector('.friend-card__name'); if (!name) throw new Error('No synthetic friend card'); const r = name.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; })()`
+    );
+    await call('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [friendPoint] });
+    await call('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await pause();
+    assert(await evaluate(`$pinia.user.userDialog.visible`), 'Friend card tap did not open the profile');
+    const dialog = await evaluate(
+        `(() => { const r = document.querySelector('[data-slot="dialog-content"][data-state="open"]').getBoundingClientRect(); return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}; })()`
+    );
+    assert(
+        dialog.left >= -1 && dialog.right <= 394 && dialog.top >= -1 && dialog.bottom <= 761,
+        'Friend profile clipped'
+    );
+    await screenshot('friend-profile');
+    await evaluate('window.__nxAndroidBack()');
+    await pause();
+    assert(!(await evaluate(`$pinia.user.userDialog.visible`)), 'Back did not dismiss the friend profile');
+    for (const [width, height] of [
+        [320, 640],
+        [393, 760],
+        [844, 390]
+    ]) {
+        await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: true });
+        await call('Emulation.setTouchEmulationEnabled', { enabled: true });
+        for (const [name] of views) {
+            await evaluate(`${routerExpression}.push({name:${JSON.stringify(name)}})`);
+            await pause();
+            assert(
+                await evaluate('document.documentElement.scrollWidth <= innerWidth + 2'),
+                `${name} overflows at ${width}px`
+            );
+            assert(
+                await evaluate(
+                    `(() => { const r = document.querySelector('.android-navigation').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight + 1; })()`
+                ),
+                `Navigation clipped on ${name} at ${width}px`
+            );
+        }
+        await tapButton('Menu');
+        const sheet = await evaluate(
+            `(() => { const el = document.querySelector('[data-slot="sheet-content"]'); const r = el.getBoundingClientRect(); return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,scrolls:el.scrollHeight>el.clientHeight}; })()`
+        );
+        assert(
+            sheet.left >= -1 && sheet.right <= width + 1 && sheet.top >= -1 && sheet.bottom <= height + 1,
+            `Menu clipped at ${width}px`
+        );
+        await screenshot(`menu-${width}`);
+        const routeBeforeBack = await evaluate(`${routerExpression}.currentRoute.value.name`);
+        if (process.env.ANDROID_SERIAL) {
+            assert(/^emulator-\d+$/.test(process.env.ANDROID_SERIAL), 'Refusing to send Back to a personal device');
+            execFileSync(process.env.ADB || 'adb', [
+                '-s',
+                process.env.ANDROID_SERIAL,
+                'shell',
+                'input',
+                'keyevent',
+                '4'
+            ]);
+        } else await evaluate('window.__nxAndroidBack()');
+        await pause();
+        assert(
+            !(await evaluate(`!!document.querySelector('[data-slot="sheet-content"][data-state="open"]')`)),
+            'Back did not dismiss the menu'
+        );
+        assert.equal(
+            await evaluate(`${routerExpression}.currentRoute.value.name`),
+            routeBeforeBack,
+            'Back navigated behind an open menu'
+        );
+        await tapButton('Feed');
+        assert.equal(await evaluate(`${routerExpression}.currentRoute.value.name`), 'feed');
+        interactionChecks.push({ width, height, nativeBack: !!process.env.ANDROID_SERIAL, sheet });
+    }
     const report = {
         exceptions,
         logs,
         states,
         publicApiProbe,
+        interactionChecks,
         fixture: 'Synthetic user and friend; no authenticated API calls'
     };
     fs.writeFileSync(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
     assert.equal(exceptions.length, 0, JSON.stringify(exceptions));
-    console.log(`Login, phone settings and all five mod routes passed. Screenshots: ${output}`);
+    console.log(
+        `Login, phone settings, core views and five mod routes passed; tap/menu/back checks at three viewport sizes. Screenshots: ${output}`
+    );
 } finally {
     socket.close();
 }

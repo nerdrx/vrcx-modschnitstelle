@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-1 min-h-0 min-w-0 flex flex-row">
+    <div class="android-entity-dialog flex-1 min-h-0 min-w-0 flex flex-row">
         <DialogHeader class="sr-only">
             <DialogTitle>{{ avatarDialog.ref?.name || t('dialog.avatar.info.header') }}</DialogTitle>
             <DialogDescription>
@@ -7,7 +7,7 @@
             </DialogDescription>
         </DialogHeader>
         <div class="contents">
-            <div class="flex-none w-77 pr-4 overflow-y-auto">
+            <div class="android-entity-summary flex-none w-77 pr-4 overflow-y-auto">
                 <div class="rounded-xl bg-(--profile-card) overflow-hidden flex flex-col">
                     <div class="relative aspect-4/3">
                         <img
@@ -179,7 +179,7 @@
                                 side="top"
                                 :content="t('dialog.avatar.actions.favorite_tooltip')">
                                 <Button
-                                    class="rounded-lg"
+                                    class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                     size="icon"
                                     @click="avatarDialogCommand('Add Favorite')"
                                     :ariaLabel="t('dialog.avatar.actions.favorite_tooltip')"
@@ -188,7 +188,7 @@
                             </TooltipWrapper>
                             <TooltipWrapper v-else side="top" :content="t('dialog.avatar.actions.favorite_tooltip')">
                                 <Button
-                                    class="rounded-lg"
+                                    class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                     size="icon"
                                     variant="outline"
                                     @click="avatarDialogCommand('Add Favorite')"
@@ -200,7 +200,7 @@
                             <DropdownMenu>
                                 <DropdownMenuTrigger as-child>
                                     <Button
-                                        class="rounded-lg"
+                                        class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                         :variant="avatarDialog.isBlocked ? 'destructive' : 'outline'"
                                         size="icon"
                                         :ariaLabel="t('nav_tooltip.manage')">
@@ -304,7 +304,7 @@
                                 side="top"
                                 :content="t('dialog.avatar.actions.delete_cache_tooltip')">
                                 <Button
-                                    class="rounded-lg"
+                                    class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                     size="icon"
                                     variant="outline"
                                     :disabled="isGameRunning && avatarDialog.cacheLocked"
@@ -318,7 +318,7 @@
                                 side="top"
                                 :content="t('dialog.avatar.actions.select')">
                                 <Button
-                                    class="rounded-lg"
+                                    class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                     size="icon"
                                     variant="outline"
                                     :disabled="currentUser.currentAvatar === avatarDialog.id"
@@ -419,7 +419,7 @@
                 </div>
             </div>
 
-            <div class="flex-1 min-w-0 flex flex-col min-h-0 pl-4">
+            <div class="android-entity-body flex-1 min-w-0 flex flex-col min-h-0 pl-4">
                 <TabsUnderline
                     v-model="avatarDialog.activeTab"
                     :background="true"

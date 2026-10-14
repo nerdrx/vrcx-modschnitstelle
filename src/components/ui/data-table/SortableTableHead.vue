@@ -48,12 +48,12 @@
             <div class="flex items-center">
                 <GripVertical
                     v-if="!disabled"
-                    class="size-3.5 shrink-0 text-muted-foreground/50 -ml-1 mr-0.5 hidden group-hover:block transition-opacity" />
+                    class="size-3.5 shrink-0 text-muted-foreground/50 -ml-1 mr-0.5 block transition-opacity [@media(hover:hover)]:hidden [@media(hover:hover)]:group-hover:block" />
                 <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
             </div>
             <div
                 v-if="header.column.getCanResize?.()"
-                class="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none opacity-0 transition-opacity group-hover:opacity-100"
+                class="absolute right-0 top-0 h-full w-3 cursor-col-resize touch-none select-none opacity-100 transition-opacity [@media(hover:hover)]:w-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                 @pointerdown.stop
                 @mousedown.stop="header.getResizeHandler?.()($event)"
                 @touchstart.stop="header.getResizeHandler?.()($event)">

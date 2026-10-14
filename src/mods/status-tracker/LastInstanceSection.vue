@@ -1,5 +1,8 @@
 <template>
-    <div style="display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0">
+    <div
+        class="st-instance-root"
+        :class="{ 'st-instance-root--android': isAndroid }"
+        style="display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0">
         <div
             style="
                 display: flex;
@@ -682,5 +685,47 @@
     .st-name-link:hover {
         color: var(--foreground, #fafafa);
         text-decoration: underline;
+    }
+    .st-instance-root--android > div:first-child {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+    }
+    .st-instance-root--android .st-search {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        min-height: 42px;
+        font-size: 16px;
+    }
+    .st-instance-root--android .st-chip,
+    .st-instance-root--android .st-tool-btn {
+        min-height: 40px;
+        padding: 8px 12px;
+        touch-action: manipulation;
+    }
+    .st-instance-root--android .st-instance-cards {
+        display: grid;
+        gap: 10px;
+    }
+    .st-instance-root--android .st-instance-card {
+        margin: 0;
+        padding: 14px;
+    }
+    .st-instance-root--android .st-instance-head {
+        align-items: center;
+    }
+    .st-instance-root--android .st-name-link,
+    .st-instance-root--android .st-world-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+    .st-instance-root--android .st-world-link {
+        overflow-wrap: anywhere;
+    }
+    .st-instance-root--android .st-scroll {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
     }
 </style>

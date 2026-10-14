@@ -18,7 +18,7 @@
                 if (!value) menu = '';
             }
         ">
-        <SheetContent side="bottom" class="max-h-[80dvh] overflow-auto rounded-t-2xl">
+        <SheetContent side="bottom" class="android-menu-sheet max-h-[80dvh] overflow-auto rounded-t-2xl">
             <SheetHeader>
                 <SheetTitle>{{ menu === 'mods' ? 'Our mods' : 'Explore VRCX' }}</SheetTitle>
                 <SheetDescription>{{
@@ -27,7 +27,7 @@
                         : 'Worlds, avatars, notifications and settings.'
                 }}</SheetDescription>
             </SheetHeader>
-            <div class="grid grid-cols-2 gap-2 p-3">
+            <div class="android-menu-grid grid grid-cols-2 gap-2 p-3">
                 <Button
                     v-if="menu === 'all'"
                     variant="outline"
@@ -107,9 +107,11 @@
         border-top: 1px solid var(--border);
         background: var(--sidebar);
         padding: 6px 4px max(6px, env(safe-area-inset-bottom));
+        min-height: var(--android-navigation-height);
     }
     .android-navigation button {
         flex: 1;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: 2px;
@@ -124,5 +126,21 @@
     .android-navigation [aria-current='page'] {
         color: var(--primary);
         background: var(--accent);
+    }
+    :global(.android-menu-sheet [data-slot='sheet-header']) {
+        padding-right: 56px;
+    }
+    :global(.android-menu-grid button) {
+        justify-content: flex-start;
+        min-height: 52px;
+        height: auto;
+        padding: 12px;
+        white-space: normal;
+        text-align: left;
+    }
+    @media (max-width: 360px) {
+        :global(.android-menu-grid) {
+            grid-template-columns: minmax(0, 1fr);
+        }
     }
 </style>

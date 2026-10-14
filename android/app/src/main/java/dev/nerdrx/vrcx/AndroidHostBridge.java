@@ -721,6 +721,8 @@ final class AndroidHostBridge {
             case "GetVRChatRegistryKeyString": return "";
             case "GetVRChatRegistryKey": return null;
             case "HasVRChatRegistryFolder": return false;
+            case "GetVRChatUserModeration": return 0; // No PC-local avatar preferences on a phone.
+            case "SetVRChatUserModeration": return false;
             case "SetUserAgent": case "IPCAnnounceStart": case "FlashWindow": case "CheckGameRunning": case "ChangeTheme":
             case "FocusWindow": case "SetTrayIconNotification": case "SetStartup": case "SetAppLauncherSettings":
             case "SetVR": case "SetZoom": case "RestartApplication": case "CancelUpdate":

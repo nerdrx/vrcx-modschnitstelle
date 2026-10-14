@@ -25,7 +25,7 @@ jobs:
       - run: npm ci --ignore-scripts
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      - run: npx vitest run src/mods src/platform/android/__tests__ src/services/__tests__/config.test.js src/stores/__tests__/authLoginFailureToast.test.js src/coordinators/__tests__/friendSyncCoordinator.test.js
+      - run: npx vitest run src/mods src/platform/android/__tests__ src/services/__tests__/config.test.js src/stores/__tests__/authLoginFailureToast.test.js src/coordinators/__tests__/friendSyncCoordinator.test.js src/components/ui/data-table/__tests__
       - run: npm run build:android
       - run: ./gradlew assembleDebug assembleDebugAndroidTest
         working-directory: android

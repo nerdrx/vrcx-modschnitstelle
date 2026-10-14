@@ -36,7 +36,7 @@
                                                             :props="header.getContext()" />
                                                         <div
                                                             v-if="header.column.getCanResize?.()"
-                                                            class="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none opacity-0 transition-opacity group-hover:opacity-100"
+                                                            class="absolute right-0 top-0 h-full w-3 cursor-col-resize touch-none select-none opacity-100 transition-opacity [@media(hover:hover)]:w-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                                                             @mousedown.stop="header.getResizeHandler?.()($event)"
                                                             @touchstart.stop="header.getResizeHandler?.()($event)">
                                                             <div
@@ -59,7 +59,7 @@
                                                     :props="header.getContext()" />
                                                 <div
                                                     v-if="header.column.getCanResize?.()"
-                                                    class="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none opacity-0 transition-opacity group-hover:opacity-100"
+                                                    class="absolute right-0 top-0 h-full w-3 cursor-col-resize touch-none select-none opacity-100 transition-opacity [@media(hover:hover)]:w-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                                                     @mousedown.stop="header.getResizeHandler?.()($event)"
                                                     @touchstart.stop="header.getResizeHandler?.()($event)">
                                                     <div
@@ -120,7 +120,7 @@
                                                             :props="header.getContext()" />
                                                         <div
                                                             v-if="header.column.getCanResize?.()"
-                                                            class="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none opacity-0 transition-opacity group-hover:opacity-100"
+                                                            class="absolute right-0 top-0 h-full w-3 cursor-col-resize touch-none select-none opacity-100 transition-opacity [@media(hover:hover)]:w-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                                                             @mousedown.stop="header.getResizeHandler?.()($event)"
                                                             @touchstart.stop="header.getResizeHandler?.()($event)">
                                                             <div
@@ -143,7 +143,7 @@
                                                     :props="header.getContext()" />
                                                 <div
                                                     v-if="header.column.getCanResize?.()"
-                                                    class="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none opacity-0 transition-opacity group-hover:opacity-100"
+                                                    class="absolute right-0 top-0 h-full w-3 cursor-col-resize touch-none select-none opacity-100 transition-opacity [@media(hover:hover)]:w-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                                                     @mousedown.stop="header.getResizeHandler?.()($event)"
                                                     @touchstart.stop="header.getResizeHandler?.()($event)">
                                                     <div
@@ -183,7 +183,7 @@
                                     <FlexRender :render="header.column.columnDef.header" :props="header.getContext()" />
                                     <div
                                         v-if="header.column.getCanResize?.()"
-                                        class="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none select-none opacity-0 transition-opacity group-hover:opacity-100"
+                                        class="absolute right-0 top-0 h-full w-3 cursor-col-resize touch-none select-none opacity-100 transition-opacity [@media(hover:hover)]:w-2 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
                                         @mousedown.stop="header.getResizeHandler?.()($event)"
                                         @touchstart.stop="header.getResizeHandler?.()($event)">
                                         <div

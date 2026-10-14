@@ -1,6 +1,7 @@
 <template>
     <div
         class="x-container"
+        :class="{ 'fc-root--android': isAndroid }"
         style="padding: 16px; height: 100%; display: flex; flex-direction: column; overflow: hidden">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap">
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
@@ -840,5 +841,85 @@
     .fc-name-link:hover {
         color: var(--foreground, #fafafa);
         text-decoration: underline;
+    }
+    .fc-root--android {
+        padding: 12px !important;
+    }
+    .fc-root--android > div:first-child {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+    }
+    .fc-root--android .fc-seg {
+        max-width: 100%;
+    }
+    .fc-root--android .fc-tab-btn,
+    .fc-root--android .fc-tool-btn,
+    .fc-root--android .fc-chip {
+        min-height: 40px;
+        padding: 8px 12px;
+        touch-action: manipulation;
+    }
+    .fc-root--android .fc-tab-btn {
+        white-space: nowrap;
+    }
+    .fc-root--android .fc-search {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        min-height: 42px;
+        font-size: 16px;
+    }
+    .fc-root--android .fc-cards {
+        display: grid;
+        gap: 10px;
+    }
+    .fc-root--android .fc-card {
+        margin: 0;
+        padding: 14px;
+    }
+    .fc-root--android .fc-card-head {
+        align-items: center;
+        flex-wrap: wrap;
+        font-size: 15px;
+    }
+    .fc-root--android .fc-card-detail {
+        font-size: 14px;
+        line-height: 1.45;
+    }
+    .fc-root--android .fc-name-link,
+    .fc-root--android .fc-world-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        touch-action: manipulation;
+    }
+    .fc-root--android .fc-badge {
+        font-size: 12px;
+        padding: 4px 9px;
+    }
+    .fc-root--android .fc-settings {
+        padding: 12px;
+    }
+    .fc-root--android .fc-settings-row {
+        gap: 10px;
+        align-items: stretch;
+    }
+    .fc-root--android .fc-settings-row label {
+        min-height: 40px;
+    }
+    .fc-root--android .fc-num {
+        width: 72px;
+        min-height: 40px;
+        font-size: 16px;
+    }
+    .fc-root--android .fc-color {
+        width: 42px;
+        height: 40px;
+    }
+    .fc-root--android .fc-scroll {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
     }
 </style>

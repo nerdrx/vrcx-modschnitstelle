@@ -45,6 +45,8 @@ export function installAndroidBridge(host, target = window) {
         for (const callback of listeners.get(event) || []) callback();
     };
 
+    target.__nxAndroidBack = () => dismissAndroidOverlay(target);
+
     function on(event, callback) {
         const callbacks = listeners.get(event) || new Set();
         callbacks.add(callback);
@@ -79,4 +81,18 @@ export function installAndroidBridge(host, target = window) {
     };
 
     return { call };
+}
+
+export function dismissAndroidOverlay(target = window) {
+    const layers = target.document.querySelectorAll(
+        '[data-state="open"][role="dialog"], [data-state="open"][role="menu"], [data-state="open"][role="listbox"]'
+    );
+    const top = Array.from(layers)
+        .reverse()
+        .find((layer) => layer.getClientRects().length);
+    if (!top) return false;
+    top.dispatchEvent(
+        new target.KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })
+    );
+    return true;
 }

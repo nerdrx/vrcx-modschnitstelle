@@ -1221,6 +1221,7 @@
     .og-container--android {
         gap: 10px;
         padding: 12px;
+        min-height: 0;
     }
     .og-container--android .og-title-group {
         gap: 9px;
@@ -1233,6 +1234,7 @@
     }
     .og-container--android .og-header-controls {
         width: 100%;
+        gap: 8px;
     }
     .og-container--android .og-search-box {
         flex: 1 1 140px;
@@ -1255,8 +1257,10 @@
         overflow-x: auto;
     }
     .og-container--android .og-seg-btn {
-        padding-inline: 8px;
+        min-height: 40px;
+        padding-inline: 12px;
         white-space: nowrap;
+        touch-action: manipulation;
     }
     .og-container--android .og-kpi-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1270,7 +1274,37 @@
         font-size: 19px;
     }
     .og-container--android .og-viewport {
-        min-height: 340px;
+        min-height: min(340px, 42vh);
+        flex: 1 1 240px;
+    }
+    .og-container--android .og-filter-label {
+        font-size: 13px;
+    }
+    .og-container--android .og-select,
+    .og-container--android .og-btn {
+        min-height: 42px;
+        font-size: 14px;
+        touch-action: manipulation;
+    }
+    .og-container--android .og-kpi-header,
+    .og-container--android .og-kpi-subtext {
+        font-size: 12px;
+    }
+    .og-container--android .og-legend {
+        left: 10px;
+        right: 76px;
+        top: 10px;
+        gap: 8px;
+        font-size: 11px;
+    }
+    .og-container--android .og-toolbar {
+        right: 8px;
+        top: 8px;
+    }
+    .og-container--android .og-tool-btn {
+        min-width: 40px;
+        min-height: 40px;
+        touch-action: manipulation;
     }
 
     .og-legend {

@@ -2,12 +2,15 @@
     <component
         :is="toggle ? 'label' : 'div'"
         class="-mx-2 flex min-h-8 items-center justify-between gap-6 rounded-md p-2 transition-colors has-[[data-slot=switch]:disabled]:cursor-not-allowed"
-        :class="{ 'cursor-pointer hover:bg-accent': toggle }">
+        :class="{
+            'cursor-pointer hover:bg-accent settings-item--toggle': toggle,
+            'settings-item--stacked': !toggle
+        }">
         <div class="flex flex-col gap-0.5 min-w-0 flex-1">
             <span class="text-sm leading-snug text-foreground">{{ label }}</span>
             <span v-if="description" class="text-xs leading-tight text-muted-foreground">{{ description }}</span>
         </div>
-        <div class="flex items-center gap-2 shrink-0">
+        <div class="settings-item-control flex items-center gap-2 shrink-0">
             <slot />
         </div>
     </component>
@@ -20,3 +23,27 @@
         toggle: { type: Boolean, default: false }
     });
 </script>
+
+<style scoped>
+    @media (max-width: 600px) {
+        :global(.vrcx-android .settings-item--toggle) {
+            min-height: 44px;
+        }
+
+        :global(.vrcx-android .settings-item--stacked) {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        :global(.vrcx-android .settings-item--stacked > .settings-item-control) {
+            width: 100%;
+        }
+
+        :global(.vrcx-android .settings-item--stacked > .settings-item-control button),
+        :global(.vrcx-android .settings-item--stacked > .settings-item-control [data-slot='select-trigger']) {
+            max-width: 100%;
+            width: 100%;
+        }
+    }
+</style>

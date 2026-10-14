@@ -12,8 +12,8 @@
                 :on-page-size-change="handlePageSizeChange"
                 :on-row-click="handleRowClick">
                 <template #toolbar>
-                    <div class="mb-2 flex items-center justify-between">
-                        <div class="flex flex-none mr-2 items-center">
+                    <div class="friends-toolbar mb-2 flex items-center justify-between">
+                        <div class="friends-filters flex flex-none mr-2 items-center">
                             <TooltipWrapper side="bottom" :content="t('view.friend_list.favorites_only_tooltip')">
                                 <div>
                                     <Toggle
@@ -62,11 +62,11 @@
                                 v-model="friendsListSearch"
                                 :placeholder="t('view.friend_list.search_placeholder')"
                                 clearable
-                                class="w-[250px]"
+                                class="friends-search w-[250px]"
                                 @input="scheduleFriendsListSearchChange"
                                 @change="friendsListSearchChange" />
                         </div>
-                        <div class="flex items-center">
+                        <div class="friends-actions flex items-center">
                             <div v-if="friendsListBulkUnfriendMode" class="inline-block mr-2">
                                 <Button variant="outline" @click="showBulkUnfriendSelectionConfirm">
                                     {{ t('view.friend_list.bulk_unfriend_selection') }}
@@ -593,3 +593,41 @@
         friendsListSearchChange();
     }
 </script>
+
+<style scoped>
+    @media (max-width: 600px) {
+        :global(.vrcx-android .friends-toolbar) {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        :global(.vrcx-android .friends-filters) {
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-right: 0;
+        }
+
+        :global(.vrcx-android .friends-search) {
+            flex: 1 1 100%;
+            width: 100%;
+        }
+
+        :global(.vrcx-android .friends-actions) {
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        :global(.vrcx-android .friends-actions > div:last-child) {
+            display: flex;
+            flex: 1 1 100%;
+            justify-content: flex-end;
+        }
+
+        :global(.vrcx-android .friends-actions > div:last-child button) {
+            flex: 1;
+            margin-right: 0;
+        }
+    }
+</style>

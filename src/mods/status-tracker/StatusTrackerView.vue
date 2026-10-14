@@ -1,6 +1,7 @@
 <template>
     <div
         class="x-container"
+        :class="{ 'st-root--android': isAndroid }"
         style="padding: 16px; height: 100%; display: flex; flex-direction: column; overflow: hidden">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap">
             <h2 style="margin: 0; font-size: 18px; font-weight: 600">
@@ -478,5 +479,61 @@
         overflow: hidden;
         background: #4441;
         min-width: 120px;
+    }
+    .st-root--android {
+        padding: 12px !important;
+    }
+    .st-root--android > div:first-child {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+    }
+    .st-root--android .st-seg {
+        max-width: 100%;
+        overflow-x: auto;
+        flex: 0 1 auto;
+    }
+    .st-root--android .st-range-btn,
+    .st-root--android .st-chip {
+        min-height: 40px;
+        padding: 8px 12px;
+        white-space: nowrap;
+        touch-action: manipulation;
+    }
+    .st-root--android .st-search {
+        flex: 1 1 100%;
+        width: 100%;
+        min-width: 0;
+        min-height: 42px;
+        font-size: 16px;
+    }
+    .st-root--android .st-cards {
+        display: grid;
+        gap: 10px;
+    }
+    .st-root--android .st-card {
+        margin: 0;
+        padding: 14px;
+    }
+    .st-root--android .st-card-head {
+        align-items: center;
+        font-size: 15px;
+    }
+    .st-root--android .st-card-values {
+        font-size: 13px;
+    }
+    .st-root--android .st-card-values > span {
+        font-size: 12px;
+    }
+    .st-root--android .st-name-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        touch-action: manipulation;
+    }
+    .st-root--android .st-scroll {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
     }
 </style>

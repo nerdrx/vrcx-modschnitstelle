@@ -1,5 +1,28 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installAndroidBridge } from '../bridge';
+import { dismissAndroidOverlay, installAndroidBridge } from '../bridge';
+
+describe('Android Back', () => {
+    it('dismisses only the top visible overlay before navigating away', () => {
+        const root = document.createElement('div');
+        root.innerHTML = '<div role="dialog" data-state="open"></div><div role="menu" data-state="open"></div>';
+        const [dialog, menu] = root.children;
+        dialog.getClientRects = menu.getClientRects = () => [1];
+        const dialogEscape = vi.fn();
+        const menuEscape = vi.fn();
+        dialog.addEventListener('keydown', dialogEscape);
+        menu.addEventListener('keydown', menuEscape);
+        const target = { document: root, KeyboardEvent: window.KeyboardEvent };
+        expect(dismissAndroidOverlay(target)).toBe(true);
+        expect(menuEscape).toHaveBeenCalledOnce();
+        expect(menuEscape.mock.calls[0][0].key).toBe('Escape');
+        expect(dialogEscape).not.toHaveBeenCalled();
+        menu.getClientRects = () => [];
+        expect(dismissAndroidOverlay(target)).toBe(true);
+        expect(dialogEscape).toHaveBeenCalledOnce();
+        dialog.getClientRects = () => [];
+        expect(dismissAndroidOverlay(target)).toBe(false);
+    });
+});
 
 describe('Android IPC contract', () => {
     afterEach(() => vi.useRealTimers());

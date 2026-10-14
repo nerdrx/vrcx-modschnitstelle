@@ -575,6 +575,17 @@
     .gdb-root--android {
         padding: 12px !important;
     }
+    .gdb-root--android > div:first-child {
+        gap: 8px !important;
+        margin-bottom: 10px !important;
+    }
+    .gdb-root--android .gdb-section {
+        padding: 14px 12px;
+    }
+    .gdb-root--android .gdb-section p {
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
     .gdb-root--android .gdb-row > label:first-child {
         width: auto;
         flex-basis: 100%;
@@ -583,8 +594,31 @@
         max-width: 100%;
     }
     .gdb-root--android .gdb-input--wide {
-        min-width: min(320px, 100%);
+        min-width: 0;
         width: 100%;
+        min-height: 42px;
+        font-size: 16px;
+    }
+    .gdb-root--android .gdb-row {
+        gap: 8px;
+    }
+    .gdb-root--android .gdb-btn {
+        min-height: 44px;
+        padding: 9px 14px;
+        font-size: 14px;
+        touch-action: manipulation;
+    }
+    .gdb-root--android .gdb-details summary {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+    .gdb-root--android .gdb-badge,
+    .gdb-root--android .gdb-stat,
+    .gdb-root--android .gdb-member {
+        max-width: 100%;
+        overflow-wrap: anywhere;
     }
     .gdb-btn {
         padding: 5px 12px;

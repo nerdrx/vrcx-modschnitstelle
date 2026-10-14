@@ -32,7 +32,7 @@
             </p>
         </section>
         <section class="space-y-2 text-sm text-muted-foreground">
-            <p>VRCX with Mods for Android · 0.1.0 alpha</p>
+            <p>{{ appVersion || 'VRCX with Mods for Android' }}</p>
             <p>
                 Standalone VRChat login and pool chat. Status Tracker records events received by this phone;
                 desktop-history import is manual.
@@ -44,12 +44,16 @@
 </template>
 
 <script setup>
-    import { ref } from 'vue';
+    import { onMounted, ref } from 'vue';
     import { Button } from '../../components/ui/button';
     const importing = ref(false);
     const result = ref('');
     const error = ref('');
     const notificationPermission = ref(window.Notification.permission);
+    const appVersion = ref('');
+    onMounted(async () => {
+        appVersion.value = await AppApi.GetVersion();
+    });
     function openSource() {
         AppApi.OpenLink('https://github.com/nerdrx/vrcx-modschnitstelle');
     }
