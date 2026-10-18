@@ -143,6 +143,14 @@ export const router = createRouter({
 });
 
 export function initRouter(app) {
+    if (window.VRCX_ANDROID) {
+        router.addRoute({
+            path: '/phone',
+            name: 'android-phone',
+            meta: { public: true },
+            component: () => import('../platform/android/PhoneSettings.vue')
+        });
+    }
     app.use(router);
 }
 

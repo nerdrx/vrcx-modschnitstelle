@@ -21,7 +21,7 @@ initRouter(app);
 await initSentry(app);
 
 // MOD-FIX: Polyfill standard Notification API for mods
-if (window.electron && window.electron.desktopNotification) {
+if (window.electron && window.electron.desktopNotification && !window.VRCX_ANDROID) {
     window.Notification = function (title, options) {
         window.electron.desktopNotification(title, options?.body || '', options?.icon || '');
         return {

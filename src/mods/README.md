@@ -9,13 +9,13 @@ zusätzlich Renderer- und nativen Overlay-Code.
 Beim Rebase können Änderungen an diesen Stellen Konflikte oder Anpassungen
 erfordern:
 
-| Datei | Änderung |
-|---|---|
-| `src/app.js` | Mod-Loader-Aufruf und Notification-Polyfill |
-| `src/plugins/router.js`, `src/shared/constants/ui.js` | Benannte Layout-Route und reaktive Nav-Einträge für Mod-Views |
-| `src/shared/constants/settings.js` | Stable- und Nightly-Updater verweisen auf `nerdrx/vrcx-modschnitstelle` |
-| `Dotnet/Overlay*`, `Dotnet/AppApi/*`, `src/public/vr-chat.html` | VR-Chat-Panel, Overlay-Nachrichten und Voice-Sidecar |
-| `src-electron/`, `build-scripts/download-dotnet-runtime.js` | Markierte Launcher- und Runtime-Download-Fixes |
+| Datei                                                           | Änderung                                                                |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `src/app.js`                                                    | Mod-Loader-Aufruf und Notification-Polyfill                             |
+| `src/plugins/router.js`, `src/shared/constants/ui.js`           | Benannte Layout-Route und reaktive Nav-Einträge für Mod-Views           |
+| `src/shared/constants/settings.js`                              | Stable- und Nightly-Updater verweisen auf `nerdrx/vrcx-modschnitstelle` |
+| `Dotnet/Overlay*`, `Dotnet/AppApi/*`, `src/public/vr-chat.html` | VR-Chat-Panel, Overlay-Nachrichten und Voice-Sidecar                    |
+| `src-electron/`, `build-scripts/download-dotnet-runtime.js`     | Markierte Launcher- und Runtime-Download-Fixes                          |
 
 Nach einem Rebase alle Integrationsmarkierungen prüfen, nicht nur die Loader-
 und Router-Hooks. Die Mod-Bridge in `src/mods/api.js` greift auf VRCX-Stores,
@@ -45,15 +45,15 @@ ein grüner Mod-Test allein deckt diese Integration nicht ab.
 ```js
 // src/mods/my-mod/index.js
 export default {
-    id: 'mymod',            // [a-z0-9], eindeutig
-    name: 'My Mod',
-    version: '1.0.0',
-    async setup(ctx) {
-        ctx.on('feed:Status', (feed) => ctx.log(feed.displayName, feed.status));
-        ctx.onLogin(async () => {
-            await ctx.db.exec(`CREATE TABLE IF NOT EXISTS ${ctx.db.prefix()}_stuff (...)`);
-        });
-    }
+  id: 'mymod', // [a-z0-9], eindeutig
+  name: 'My Mod',
+  version: '1.0.0',
+  async setup(ctx) {
+    ctx.on('feed:Status', (feed) => ctx.log(feed.displayName, feed.status));
+    ctx.onLogin(async () => {
+      await ctx.db.exec(`CREATE TABLE IF NOT EXISTS ${ctx.db.prefix()}_stuff (...)`);
+    });
+  }
 };
 ```
 
@@ -63,7 +63,7 @@ Dann in `src/mods/registry.js` registrieren.
 
 - **Events**: `ctx.on(event, handler)` → `'feed'`, `'feed:Status'`, `'feed:Online'`,
   `'feed:Offline'`, `'feed:GPS'`, `'feed:Avatar'`, `'feed:Bio'`, `'login'`, `'logout'`.
-  Feed-Events feuern für *jedes* Ereignis, unabhängig von UI-Filtern.
+  Feed-Events feuern für _jedes_ Ereignis, unabhängig von UI-Filtern.
   `ctx.onLogin(handler)` feuert auch sofort, wenn schon eingeloggt.
 - **DB**: `ctx.db.query(sql, args)` (SELECT, Rows als Arrays),
   `ctx.db.exec(sql, args)` (DDL/DML), `ctx.db.prefix()` (eigener Tabellen-Präfix

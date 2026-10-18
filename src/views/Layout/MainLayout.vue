@@ -1,6 +1,14 @@
 <template>
     <template v-if="watchState.isLoggedIn">
-        <div class="flex flex-col flex-1 h-full min-h-0 min-w-0 overflow-hidden">
+        <div v-if="isAndroid" class="android-main flex-1">
+            <div class="android-main-content">
+                <RouterView v-slot="{ Component }">
+                    <KeepAlive exclude="ChartsInstance, ChartsMutual"><component :is="Component" /></KeepAlive>
+                </RouterView>
+            </div>
+            <AndroidNavigation />
+        </div>
+        <div v-else class="flex flex-col flex-1 h-full min-h-0 min-w-0 overflow-hidden">
             <SidebarProvider
                 :open="sidebarOpen"
                 :width="navWidth"
@@ -80,8 +88,8 @@
         <ModerationReportDialog />
         <GlobalToolsDialogs />
         <ChangelogDialog />
-        <WhatsNewDialog />
-        <SpotlightDialog />
+        <WhatsNewDialog v-if="!isAndroid" />
+        <SpotlightDialog v-if="!isAndroid" />
     </template>
 </template>
 
@@ -118,12 +126,14 @@
     import SendBoopDialog from '../../components/dialogs/SendBoopDialog.vue';
     import Sidebar from '../Sidebar/Sidebar.vue';
     import StatusBar from '../../components/StatusBar.vue';
+    import AndroidNavigation from '../../platform/android/AndroidNavigation.vue';
     import VRChatConfigDialog from '../Settings/dialogs/VRChatConfigDialog.vue';
     import WorldImportDialog from '../Favorites/dialogs/WorldImportDialog.vue';
     import WhatsNewDialog from '../../components/onboarding/WhatsNewDialog.vue';
     import SpotlightDialog from '../../components/onboarding/SpotlightDialog.vue';
 
     const router = useRouter();
+    const isAndroid = window.VRCX_ANDROID === true;
     const { t } = useI18n();
 
     const appearanceSettingsStore = useAppearanceSettingsStore();

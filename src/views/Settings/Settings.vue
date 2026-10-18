@@ -6,7 +6,8 @@
             </div>
             <TabsUnderline default-value="system" :items="settingsTabs" :unmount-on-hide="false" fill>
                 <template #system>
-                    <SystemTab />
+                    <PhoneSettingsPanel v-if="isAndroid" />
+                    <SystemTab v-else />
                 </template>
                 <template #interface>
                     <InterfaceTab />
@@ -47,18 +48,23 @@
     import SocialTab from './components/Tabs/SocialTab.vue';
     import SystemTab from './components/Tabs/SystemTab.vue';
     import VrTab from './components/Tabs/VrTab.vue';
+    import PhoneSettingsPanel from '../../platform/android/PhoneSettingsPanel.vue';
+
+    const isAndroid = window.VRCX_ANDROID === true;
 
     const { t } = useI18n();
-    const settingsTabs = computed(() => [
-        { value: 'system', label: t('view.settings.category.system') },
-        { value: 'interface', label: t('view.settings.category.interface') },
-        { value: 'social', label: t('view.settings.category.social') },
-        { value: 'notifications', label: t('view.settings.category.notifications') },
-        { value: 'vr', label: t('view.settings.category.vr') },
-        { value: 'media', label: t('view.settings.category.media') },
-        { value: 'integrations', label: t('view.settings.category.integrations') },
-        { value: 'advanced', label: t('view.settings.category.advanced') }
-    ]);
+    const settingsTabs = computed(() =>
+        [
+            { value: 'system', label: t('view.settings.category.system') },
+            { value: 'interface', label: t('view.settings.category.interface') },
+            { value: 'social', label: t('view.settings.category.social') },
+            { value: 'notifications', label: t('view.settings.category.notifications') },
+            { value: 'vr', label: t('view.settings.category.vr') },
+            { value: 'media', label: t('view.settings.category.media') },
+            { value: 'integrations', label: t('view.settings.category.integrations') },
+            { value: 'advanced', label: t('view.settings.category.advanced') }
+        ].filter((tab) => !isAndroid || ['system', 'interface', 'social'].includes(tab.value))
+    );
 
     onBeforeMount(() => {
         const menuItem = document.querySelector('li[role="menuitem"].is-active');

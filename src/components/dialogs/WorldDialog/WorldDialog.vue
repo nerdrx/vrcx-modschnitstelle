@@ -1,5 +1,5 @@
 <template>
-    <div class="flex-1 min-h-0 min-w-0 flex flex-row">
+    <div class="android-entity-dialog flex-1 min-h-0 min-w-0 flex flex-row">
         <DialogHeader class="sr-only">
             <DialogTitle>{{ worldDialog.ref?.name }}</DialogTitle>
             <DialogDescription>
@@ -7,7 +7,7 @@
             </DialogDescription>
         </DialogHeader>
         <!-- Summary and info rail -->
-        <div class="flex-none w-77 pr-4 overflow-y-auto">
+        <div class="android-entity-summary flex-none w-77 pr-4 overflow-y-auto">
             <div class="rounded-xl bg-(--profile-card) overflow-hidden flex flex-col">
                 <div class="relative aspect-4/3">
                     <img
@@ -56,7 +56,7 @@
                                     side="top"
                                     :content="t('dialog.world.actions.favorites_tooltip')">
                                     <Button
-                                        class="rounded-lg"
+                                        class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                         size="icon"
                                         @click="worldDialogCommand('Add Favorite')"
                                         :ariaLabel="t('dialog.world.actions.favorites_tooltip')"
@@ -68,7 +68,7 @@
                                     side="top"
                                     :content="t('dialog.world.actions.favorites_tooltip')">
                                     <Button
-                                        class="rounded-lg"
+                                        class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11"
                                         size="icon"
                                         variant="outline"
                                         :ariaLabel="t('dialog.world.actions.favorites_tooltip')"
@@ -78,7 +78,10 @@
                                 </TooltipWrapper>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger as-child>
-                                        <Button variant="outline" size="icon" class="rounded-lg">
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            class="rounded-lg [@media(hover:none)]:min-h-11 [@media(hover:none)]:min-w-11">
                                             <Ellipsis />
                                         </Button>
                                     </DropdownMenuTrigger>
@@ -324,7 +327,7 @@
         </div>
 
         <!-- Right side tabs -->
-        <div class="flex-1 min-w-0 flex flex-col min-h-0 pl-4">
+        <div class="android-entity-body flex-1 min-w-0 flex flex-col min-h-0 pl-4">
             <TabsUnderline
                 v-model="worldDialog.activeTab"
                 :background="true"

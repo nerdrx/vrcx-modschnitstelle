@@ -1,6 +1,7 @@
 import { toast } from 'vue-sonner';
 
 import { AppDebug } from '../services/appConfig';
+import { i18n } from '../plugins/i18n';
 import { migrateMemos } from './memoCoordinator';
 import { syncFriendSearchIndex } from './searchIndexCoordinator';
 import { reconnectWebSocket } from '../services/websocket';
@@ -20,6 +21,11 @@ export async function runRefreshFriendsListFlow() {
     const updateLoopStore = useUpdateLoopStore();
     const friendStore = useFriendStore();
 
+    if (window.VRCX_ANDROID && !watchState.isFriendsLoaded) {
+        await runInitFriendsListFlow(i18n.global.t);
+        return;
+    }
+
     // If we just got user less then 2 min before code call, don't call it again
     if (updateLoopStore.nextCurrentUserRefresh < 300) {
         await getCurrentUser();
@@ -34,6 +40,7 @@ export async function runRefreshFriendsListFlow() {
  * @param t
  */
 export async function runInitFriendsListFlow(t) {
+    const isAndroid = Boolean(window.VRCX_ANDROID);
     const userStore = useUserStore();
     const friendStore = useFriendStore();
     const authStore = useAuthStore();
@@ -51,10 +58,22 @@ export async function runInitFriendsListFlow(t) {
             await friendStore.initFriendLog(currentUser);
         }
     } catch (err) {
+        if (isAndroid) {
+            watchState.isFriendsLoaded = false;
+            toast.error(t('message.friend.load_failed'));
+            if (err?.status === 401) {
+                authStore.handleLogoutEvent();
+            }
+            return;
+        }
         if (!AppDebug.dontLogMeOut) {
             toast.error(t('message.friend.load_failed'));
             authStore.handleLogoutEvent();
             throw err;
+        }
+    } finally {
+        if (isAndroid) {
+            friendStore.setIsRefreshFriendsLoading(false);
         }
     }
 

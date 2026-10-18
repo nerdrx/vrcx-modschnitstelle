@@ -116,14 +116,14 @@ export const useUpdateLoopStore = defineStore('UpdateLoop', () => {
                     state.nextAutoStateChange = 3;
                     updateAutoStateChange();
                 }
-                if (LINUX && --state.nextGetLogCheck <= 0) {
+                if (LINUX && !window.VRCX_ANDROID && --state.nextGetLogCheck <= 0) {
                     state.nextGetLogCheck = 0.5;
                     const logLines = await LogWatcher.GetLogLines();
                     if (logLines) {
                         await Promise.all(logLines.map((logLine) => addGameLogEvent(logLine)));
                     }
                 }
-                if (LINUX && --state.nextGameRunningCheck <= 0) {
+                if (LINUX && !window.VRCX_ANDROID && --state.nextGameRunningCheck <= 0) {
                     state.nextGameRunningCheck = 1;
                     await runUpdateIsGameRunningFlow(await AppApi.IsGameRunning(), await AppApi.IsSteamVRRunning());
                     vrStore.vrInit(); // TODO: make this event based

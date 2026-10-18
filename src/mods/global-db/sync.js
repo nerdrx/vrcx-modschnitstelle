@@ -8,6 +8,7 @@
 import { reactive } from 'vue';
 
 import { POOL_TABLES, kvGet, kvSet, poolTable } from './db';
+import { isAndroidHost } from '../platform';
 
 // Reaktiver Sync-Zustand — auch der unsichtbare Auto-Sync wird damit im
 // Dashboard sichtbar ("Synchronisiere…" + Zähler).
@@ -40,9 +41,30 @@ export function toObjects(rows, cols) {
 }
 
 // ------------------------------------------------------------------- api ---
+export async function poolFetch(url, options = {}) {
+    if (!isAndroidHost()) return fetch(url, options);
+
+    const response = JSON.parse(
+        await WebApi.ExecuteJson(
+            JSON.stringify({
+                url,
+                method: options.method || 'GET',
+                headers: options.headers,
+                body: options.body
+            })
+        )
+    );
+    if (response.status === -1) throw new Error(response.message || 'Pool request failed');
+    return {
+        status: response.status,
+        ok: response.status >= 200 && response.status < 300,
+        json: async () => (response.message ? JSON.parse(response.message) : null)
+    };
+}
+
 export async function apiFetch(settings, pathname, opts = {}) {
     const base = (settings.serverUrl || DEFAULT_SERVER).replace(/\/$/, '');
-    const res = await fetch(`${base}/${pathname}`, {
+    const res = await poolFetch(`${base}/${pathname}`, {
         ...opts,
         headers: {
             Authorization: `Bearer ${settings.token || ''}`,
@@ -187,7 +209,9 @@ export async function uploadDeltas(ctx, settings, members, onProgress = () => {}
                     }
                     // Diagnose: Server hat Zeilen verworfen (rejected > client-gefiltert 0)
                     if ((resp.rejected || 0) > 0) {
-                        ctx.log(`server-rejected ${key}: ${resp.rejected} von ${allowed.length}${resp.rowError ? ' — ' + resp.rowError : ''}`);
+                        ctx.log(
+                            `server-rejected ${key}: ${resp.rejected} von ${allowed.length}${resp.rowError ? ' — ' + resp.rowError : ''}`
+                        );
                     }
                 }
                 onProgress(`Upload ${key}: bis ${newest}`, result);
@@ -215,28 +239,28 @@ export async function downloadDeltas(ctx, settings, onProgress = () => {}, opts 
         const table = poolTable(ctx, key);
         const cols = UPLOAD[key].cols;
         try {
-        for (;;) {
-            await gate();
-            const cur = await ctx.db.query(`SELECT COALESCE(MAX(remote_id),0) FROM ${table}`);
-            const cursor = cur[0][0];
-            const data = await apiFetch(settings, `v1/sync?table=${key}&cursor=${cursor}&limit=${batch}`);
-            for (const row of data.rows) {
-                const colNames = ['remote_id', ...cols, 'contributed_by'];
-                const args = {};
-                args['@remote_id'] = row.id;
-                for (const c of cols) args[`@${c}`] = row[c] ?? null;
-                args['@contributed_by'] = row.contributed_by ?? null;
-                await ctx.db.exec(
-                    `INSERT OR IGNORE INTO ${table} (${colNames.join(',')})
+            for (;;) {
+                await gate();
+                const cur = await ctx.db.query(`SELECT COALESCE(MAX(remote_id),0) FROM ${table}`);
+                const cursor = cur[0][0];
+                const data = await apiFetch(settings, `v1/sync?table=${key}&cursor=${cursor}&limit=${batch}`);
+                for (const row of data.rows) {
+                    const colNames = ['remote_id', ...cols, 'contributed_by'];
+                    const args = {};
+                    args['@remote_id'] = row.id;
+                    for (const c of cols) args[`@${c}`] = row[c] ?? null;
+                    args['@contributed_by'] = row.contributed_by ?? null;
+                    await ctx.db.exec(
+                        `INSERT OR IGNORE INTO ${table} (${colNames.join(',')})
                      VALUES (${colNames.map((c) => `@${c}`).join(',')})`,
-                    args
-                );
+                        args
+                    );
+                }
+                result.downloaded += data.rows.length;
+                if (data.rows.length) onProgress(`Download ${key}: ${result.downloaded}`, result);
+                if (data.done) break;
+                if (throttleMs > 0) await sleep(throttleMs);
             }
-            result.downloaded += data.rows.length;
-            if (data.rows.length) onProgress(`Download ${key}: ${result.downloaded}`, result);
-            if (data.done) break;
-            if (throttleMs > 0) await sleep(throttleMs);
-        }
         } catch (err) {
             result.errors[key] = String(err.message || err);
             onProgress(`Download ${key} fehlgeschlagen: ${result.errors[key]} — weiter mit nächster Tabelle`, result);
@@ -288,17 +312,15 @@ const UPLOAD_SRC = {
 
 /**
  * Soll/Ist-Abgleich mit dem Server:
- *  - down: exakter Rückstand (Server-MAX(id) minus lokales MAX(remote_id))
- *  - up: geschätzter Rückstand (lokale Zeilen neuer als Cursor, VOR Filterung
- *    — überschätzt also; 0 heißt sicher fertig)
+ *
+ * - Down: exakter Rückstand (Server-MAX(id) minus lokales MAX(remote_id))
+ * - Up: geschätzter Rückstand (lokale Zeilen neuer als Cursor, VOR Filterung — überschätzt also; 0 heißt sicher fertig)
  */
 export async function computeSyncGap(ctx, settings) {
     const data = await apiFetch(settings, 'v1/heads');
     const gap = { down: 0, up: 0, tables: {} };
     for (const key of Object.keys(POOL_TABLES)) {
-        const rows = await ctx.db.query(
-            `SELECT COALESCE(MAX(remote_id),0) FROM ${poolTable(ctx, key)}`
-        );
+        const rows = await ctx.db.query(`SELECT COALESCE(MAX(remote_id),0) FROM ${poolTable(ctx, key)}`);
         const local = rows[0]?.[0] || 0;
         const head = data.heads?.[key] || 0;
         const d = Math.max(0, head - local);
@@ -311,10 +333,9 @@ export async function computeSyncGap(ctx, settings) {
     for (const key of Object.keys(UPLOAD_SRC)) {
         try {
             const cursor = await kvGet(ctx, `up_cursor_${key}`, '');
-            const rows = await ctx.db.query(
-                `SELECT COUNT(*) FROM ${UPLOAD_SRC[key](core)} WHERE created_at > @c`,
-                { '@c': cursor || '' }
-            );
+            const rows = await ctx.db.query(`SELECT COUNT(*) FROM ${UPLOAD_SRC[key](core)} WHERE created_at > @c`, {
+                '@c': cursor || ''
+            });
             const u = rows[0]?.[0] || 0;
             if (u) {
                 gap.up += u;

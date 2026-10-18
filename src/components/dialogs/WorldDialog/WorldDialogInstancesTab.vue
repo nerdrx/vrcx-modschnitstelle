@@ -50,7 +50,7 @@
                             style="margin: 8px 0; max-height: unset">
                             <div
                                 v-if="room.$location.userId"
-                                class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-[167px] hover:rounded-[25px_5px_5px_25px]"
+                                class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-full max-w-[167px] min-w-0 hover:rounded-[25px_5px_5px_25px]"
                                 @click="showUserDialog(room.$location.userId)">
                                 <template v-if="room.$location.user">
                                     <div
@@ -81,7 +81,7 @@
                             <div
                                 v-for="user in room.users"
                                 :key="user.id"
-                                class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-[167px] hover:rounded-[25px_5px_5px_25px]"
+                                class="box-border flex items-center p-1.5 text-[13px] cursor-pointer w-full max-w-[167px] min-w-0 hover:rounded-[25px_5px_5px_25px]"
                                 @click="showUserDialog(user.id)">
                                 <div
                                     class="relative inline-block flex-none size-9 mr-2.5"

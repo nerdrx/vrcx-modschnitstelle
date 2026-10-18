@@ -48,6 +48,9 @@ keep the existing `upstream` remote to `Arikazei/vrcx-modschnitstelle`. See the
 
 ## Building
 
+The Android alpha shares this frontend and all four mods. See [Android build,
+history import and current limitations](android/README.md).
+
 Same as upstream VRCX (Windows):
 
 ```bash

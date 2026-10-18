@@ -134,8 +134,9 @@ export function installEventBridge({ router }) {
 
 /**
  * Create the per-mod context object (the "API" a mod codes against).
- * @param {object} mod       Mod definition ({ id, name, version, setup }).
- * @param {object} host      { app, router, pinia }
+ *
+ * @param {object} mod Mod definition ({ id, name, version, setup }).
+ * @param {object} host { app, router, pinia }
  */
 export function createModContext(mod, host) {
     const modId = mod.id.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -154,8 +155,9 @@ export function createModContext(mod, host) {
         /**
          * Subscribe to a mod event.
          * Events: 'feed', 'feed:Status', 'feed:Online', 'feed:Offline',
-         *         'feed:GPS', 'feed:Avatar', 'feed:Bio', 'login', 'logout'.
-         * @returns {function} unsubscribe
+         * 'feed:GPS', 'feed:Avatar', 'feed:Bio', 'login', 'logout'.
+         *
+         * @returns {function} Unsubscribe
          */
         on(eventName, handler) {
             let set = listeners.get(eventName);
@@ -196,7 +198,8 @@ export function createModContext(mod, host) {
             },
             /**
              * Run a SELECT. Rows arrive as positional arrays.
-             * @returns {Promise<Array>} collected rows
+             *
+             * @returns {Promise<Array>} Collected rows
              */
             async query(sql, args = null) {
                 const rows = [];
@@ -235,7 +238,8 @@ export function createModContext(mod, host) {
         api: {
             /**
              * Resolve a world/instance tag to the world name via the API.
-             * @param {string} location e.g. 'wrld_xxx' or 'wrld_xxx:1234~...'
+             *
+             * @param {string} location E.g. 'wrld_xxx' or 'wrld_xxx:1234~...'
              * @returns {Promise<string>} '' when not resolvable
              */
             getWorldName(location) {
@@ -245,7 +249,8 @@ export function createModContext(mod, host) {
             /**
              * Fetch live instance data (occupancy etc.) for a full instance
              * tag like 'wrld_xxx:12345~region(eu)'.
-             * @returns {Promise<object|null>} raw instance JSON or null
+             *
+             * @returns {Promise<object | null>} Raw instance JSON or null
              */
             async getInstance(location) {
                 const sep = (location || '').indexOf(':');
@@ -280,20 +285,22 @@ export function createModContext(mod, host) {
              * pipeline as VRCX notys): Windows toast, XSOverlay UDP and the
              * VRCX VR overlay. Callers decide *when* to notify (DND etc.).
              * No-op outside the CEF build.
+             *
              * @param {object} n
              * @param {string} n.title
              * @param {string} [n.body]
-             * @param {string} [n.image]   local file path for the toast
-             * @param {boolean} [n.desktop=true]
-             * @param {boolean} [n.xs=true]
-             * @param {boolean} [n.ovrt=true]  OVR Toolkit HUD notification
-             * @param {boolean} [n.vr=true]
+             * @param {string} [n.image] Local file path for the toast
+             * @param {boolean} [n.desktop=true] Default is `true`
+             * @param {boolean} [n.xs=true] Default is `true`
+             * @param {boolean} [n.ovrt=true] OVR Toolkit HUD notification. Default is `true`
+             * @param {boolean} [n.vr=true] Default is `true`
              */
             async notify({
                 title,
                 body = '',
                 image = '',
                 desktop = true,
+                android = false,
                 xs = true,
                 ovrt = true,
                 vr = true
@@ -302,22 +309,22 @@ export function createModContext(mod, host) {
                     return;
                 }
                 const text = body ? `${title}: ${body}` : title;
-                if (desktop) {
+                if (desktop || (android && window.VRCX_ANDROID)) {
                     try {
                         await AppApi.DesktopNotification(title, body, image);
                     } catch {}
                 }
-                if (xs) {
+                if (xs && !window.VRCX_ANDROID) {
                     try {
                         AppApi.XSNotification('VRCX', text, 5, 1, image);
                     } catch {}
                 }
-                if (ovrt) {
+                if (ovrt && !window.VRCX_ANDROID) {
                     try {
                         AppApi.OVRTNotification(true, false, 'VRCX', text, 5, 1, image);
                     } catch {}
                 }
-                if (vr) {
+                if (vr && !window.VRCX_ANDROID) {
                     try {
                         AppApi.ExecuteVrOverlayFunction(
                             'playNoty',
@@ -337,11 +344,12 @@ export function createModContext(mod, host) {
 
             /**
              * Register a view reachable from the nav menu.
+             *
              * @param {object} def
-             * @param {string} def.key        unique route/nav key, e.g. 'mod-status-tracker'
-             * @param {object} def.component  Vue component
-             * @param {string} def.icon       remixicon class, e.g. 'ri-donut-chart-line'
-             * @param {object} def.label      { en: '...', de: '...' } plain labels
+             * @param {string} def.key Unique route/nav key, e.g. 'mod-status-tracker'
+             * @param {object} def.component Vue component
+             * @param {string} def.icon Remixicon class, e.g. 'ri-donut-chart-line'
+             * @param {object} def.label { en: '...', de: '...' } plain labels
              */
             addNavView({ key, component, icon, label }) {
                 // Idempotent: safe to call again after re-login.

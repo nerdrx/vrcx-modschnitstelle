@@ -8,7 +8,7 @@
             :total-items="totalItems"
             :on-page-size-change="handlePageSizeChange">
             <template #toolbar>
-                <div class="mb-2 flex justify-between items-center gap-2">
+                <div class="notification-toolbar mb-2 flex justify-between items-center gap-2">
                     <Select
                         multiple
                         :model-value="
@@ -56,12 +56,12 @@
                             </SelectGroup>
                         </SelectContent>
                     </Select>
-                    <div class="flex flex-row justify-end">
+                    <div class="notification-search flex flex-row justify-end">
                         <InputGroupField
                             v-model="notificationTable.filters[1].value"
                             :placeholder="t('view.notification.search_placeholder')"
                             clearable
-                            class="flex-[0.4] my-0 mx-2 min-w-50" />
+                            class="notification-query flex-[0.4] my-0 mx-2 min-w-50" />
                         <TooltipWrapper side="bottom" :content="t('view.notification.refresh_tooltip')">
                             <Button
                                 class="rounded-full"
@@ -317,3 +317,35 @@
         markAllAsSeen();
     });
 </script>
+
+<style scoped>
+    @media (max-width: 600px) {
+        :global(.vrcx-android .notification-toolbar) {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        :global(.vrcx-android .notification-toolbar [data-slot='select-trigger']) {
+            max-width: none;
+            min-width: 0;
+            width: 100%;
+        }
+
+        :global(.vrcx-android .notification-search) {
+            align-items: center;
+            width: 100%;
+        }
+
+        :global(.vrcx-android .notification-search input) {
+            flex: 1;
+            min-width: 0;
+        }
+
+        :global(.vrcx-android .notification-query) {
+            flex: 1 1 auto !important;
+            min-width: 0 !important;
+            margin-left: 0;
+            margin-right: 8px;
+        }
+    }
+</style>

@@ -25,7 +25,7 @@
                                     <Settings />
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent side="bottom" class="w-87.5">
+                            <PopoverContent side="bottom" class="friend-view__settings-popover w-87.5">
                                 <div class="friend-view__settings">
                                     <Field orientation="horizontal" class="friend-view__settings-row">
                                         <FieldLabel class="friend-view__settings-label">{{
@@ -174,6 +174,7 @@
     import configRepository from '../../services/config.js';
 
     const { t } = useI18n();
+    const isAndroid = window.VRCX_ANDROID === true;
 
     const friendStore = useFriendStore();
     const {
@@ -620,7 +621,7 @@
     });
 
     const computeGridLayout = (count = 1, options = {}) => {
-        const baseWidth = 220;
+        const baseWidth = isAndroid ? 180 : 220;
         const baseGap = 14;
         const scale = cardScale.value;
         const spacing = cardSpacing.value;
@@ -1132,6 +1133,81 @@
         min-height: 240px;
         font-size: 15px;
         letter-spacing: 0.5px;
+    }
+
+    @media (max-width: 600px) {
+        :global(.vrcx-android .friend-view__toolbar) {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 8px;
+            padding: 0;
+        }
+
+        :global(.vrcx-android .friend-view__tabs) {
+            min-width: 0;
+            width: 100%;
+        }
+
+        :global(.vrcx-android .friend-view__tabs [data-slot='tabs-list']) {
+            flex-wrap: nowrap;
+            justify-content: flex-start;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        :global(.vrcx-android .friend-view__tabs [role='tab']) {
+            flex: none;
+        }
+
+        :global(.vrcx-android .friend-view__actions) {
+            flex-wrap: nowrap;
+            gap: 8px;
+            justify-content: flex-start;
+            min-width: 0;
+            width: 100%;
+        }
+
+        :global(.vrcx-android .friend-view__search) {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: auto;
+        }
+
+        :global(.vrcx-android .friend-view__actions > div) {
+            flex: none;
+        }
+
+        :global(.vrcx-android .friend-view__actions .rounded-full) {
+            margin-right: 0;
+        }
+
+        :global(.vrcx-android .friend-view__settings-popover) {
+            box-sizing: border-box;
+            max-width: calc(100vw - 24px);
+            width: min(350px, calc(100vw - 24px));
+        }
+
+        :global(.vrcx-android .friend-view__settings-row) {
+            align-items: stretch;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        :global(.vrcx-android .friend-view__settings-label) {
+            margin-right: 0;
+        }
+
+        :global(.vrcx-android .friend-view__scale-control) {
+            flex: 1;
+            min-width: 0;
+            width: 100%;
+        }
+
+        :global(.vrcx-android .friend-view__slider) {
+            flex: 1;
+            min-width: 0;
+            width: auto;
+        }
     }
 
     .friend-view__loading-icon {

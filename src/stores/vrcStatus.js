@@ -115,11 +115,11 @@ export const useVrcStatusStore = defineStore('VrcStatus', () => {
      * @returns {void}
      */
     function init() {
-        getVrcStatus();
+        getVrcStatus().catch(console.warn);
         workerTimers.setInterval(() => {
             const interval = vrcxStore.isBrowserFocused ? pollingInterval.value : slowPollingInterval.value;
             if (Date.now() - lastTimeFetched.value > interval) {
-                getVrcStatus();
+                getVrcStatus().catch(console.warn);
             }
         }, fastPollingInterval.value);
     }
